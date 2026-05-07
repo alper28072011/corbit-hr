@@ -1,0 +1,271 @@
+import { useState, useEffect } from "react";
+import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert } from "lucide-react";
+import { useStore } from "../store/useStore";
+import { cn } from "../lib/utils";
+import { PERMISSIONS, hasPermission } from "../lib/permissions";
+
+export default function RoomManagement() {
+  const { hotels, facilities, rooms, addRoom, addRoomsBulk, deleteRoom, currentUser } = useStore();
+
+  const [selectedHotelId, setSelectedHotelId] = useState<string>('');
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
+
+  const canEdit = hasPermission(currentUser?.role, PERMISSIONS.edit_room_management);
+
+  useEffect(() => {
+    if (currentUser?.role === 'facility_manager') {
+      const facility = facilities.find(f => f.id === currentUser.assignedFacilityId);
+      if (facility) {
+        setSelectedHotelId(facility.hotelId);
+        setSelectedFacilityId(facility.id);
+      }
+    }
+  }, [currentUser, facilities]);
+
+  const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
+
+  // Single Room State
+  const [newRoom, setNewRoom] = useState({
+    roomNumber: '', bedCount: 1, genderType: 'male' as const
+  });
+
+  // Bulk Room State
+  const [bulkConfig, setBulkConfig] = useState({
+    prefix: '', startNo: 1, count: 10, bedCount: 2, genderType: 'male' as const
+  });
+
+  if (!hasPermission(currentUser?.role, PERMISSIONS.view_room_management)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
+
+  const hotelFacilities = currentUser?.role === 'facility_manager' 
+    ? facilities.filter(f => f.id === currentUser.assignedFacilityId)
+    : facilities.filter(f => f.hotelId === selectedHotelId);
+    
+  const facilityRooms = rooms.filter(r => r.facilityId === selectedFacilityId);
+
+  const handleAddSingleRoom = (e: import('react').FormEvent) => {
+    e.preventDefault();
+    if (!selectedFacilityId || !newRoom.roomNumber || !canEdit) return;
+    addRoom({
+      facilityId: selectedFacilityId,
+      roomNumber: newRoom.roomNumber,
+      bedCount: Number(newRoom.bedCount),
+      genderType: newRoom.genderType,
+      status: 'active'
+    });
+    setNewRoom({ ...newRoom, roomNumber: '' });
+  };
+
+  const handleAddBulkRooms = (e: import('react').FormEvent) => {
+    e.preventDefault();
+    if (!selectedFacilityId || bulkConfig.count <= 0 || !canEdit) return;
+
+    const newRooms = [];
+    for (let i = 0; i < bulkConfig.count; i++) {
+      newRooms.push({
+        facilityId: selectedFacilityId,
+        roomNumber: `${bulkConfig.prefix}${bulkConfig.startNo + i}`,
+        bedCount: Number(bulkConfig.bedCount),
+        genderType: bulkConfig.genderType,
+        status: 'active' as const
+      });
+    }
+    addRoomsBulk(newRooms);
+    setBulkConfig({ ...bulkConfig, startNo: bulkConfig.startNo + bulkConfig.count });
+  };
+
+  return (
+    <div className="space-y-8 pb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-[#E8E6E1] pb-4">
+        <div>
+          <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Oda Yönetimi</h2>
+          <p className="text-stone-500 mt-1">Oda tipleri, yatak kapasiteleri ve oda durumları burada yönetilecek.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Sidebar - Selection */}
+        <div className="lg:col-span-4 bg-white p-6 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col min-h-[500px]">
+          <h3 className="text-lg font-bold text-[#1A1C18] flex items-center gap-2 mb-6">
+            <Building className="w-5 h-5 text-[#7C8363]" />
+            Tesis Seçimi
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-stone-500 uppercase mb-2">Otel Seçin</label>
+              <select 
+                value={selectedHotelId}
+                onChange={(e) => {
+                  setSelectedHotelId(e.target.value);
+                  setSelectedFacilityId('');
+                }}
+                disabled={currentUser?.role === 'facility_manager'}
+                className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#FDFCFB] disabled:opacity-50"
+              >
+                <option value="">Otel Seçiniz...</option>
+                {hotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-500 uppercase mb-2">Lojman Seçin</label>
+              <select 
+                value={selectedFacilityId}
+                onChange={(e) => setSelectedFacilityId(e.target.value)}
+                disabled={!selectedHotelId || currentUser?.role === 'facility_manager'}
+                className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#FDFCFB] disabled:opacity-50"
+              >
+                <option value="">Lojman Seçiniz...</option>
+                {hotelFacilities.map(f => <option key={f.id} value={f.id}>{f.name} (Kapasite: {f.capacity})</option>)}
+              </select>
+            </div>
+          </div>
+
+          {selectedFacilityId && canEdit && (
+            <div className="mt-8 pt-6 border-t border-stone-100">
+              <h4 className="font-bold text-[#2D332D] mb-4">Oda Ekleme İşlemleri</h4>
+              
+              <div className="flex bg-stone-100 p-1 rounded-xl mb-4">
+                <button 
+                  onClick={() => setActiveTab('single')}
+                  className={cn("flex-1 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'single' ? "bg-white shadow-sm text-[#2D332D]" : "text-stone-500 hover:text-[#2D332D]")}
+                >Tekli Ekle</button>
+                <button 
+                  onClick={() => setActiveTab('bulk')}
+                  className={cn("flex-1 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'bulk' ? "bg-white shadow-sm text-[#2D332D]" : "text-stone-500 hover:text-[#2D332D]")}
+                >Toplu Ekle</button>
+              </div>
+
+              {activeTab === 'single' ? (
+                <form onSubmit={handleAddSingleRoom} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Oda No</label>
+                      <input required type="text" value={newRoom.roomNumber} onChange={e => setNewRoom({...newRoom, roomNumber: e.target.value})} placeholder="Örn: 101" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Yatak Sayısı</label>
+                      <input required type="number" min="1" value={newRoom.bedCount} onChange={e => setNewRoom({...newRoom, bedCount: parseInt(e.target.value) || 1})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Cinsiyet</label>
+                      <select value={newRoom.genderType} onChange={e => setNewRoom({...newRoom, genderType: e.target.value as any})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                        <option value="male">Erkek</option>
+                        <option value="female">Kadın</option>
+                        <option value="mixed">Karma</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full py-2.5 bg-[#7C8363] text-white rounded-xl text-sm font-semibold hover:bg-[#6A7152] transition-colors flex justify-center items-center gap-2">
+                    <Plus className="w-4 h-4" /> Odayı Ekle
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleAddBulkRooms} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Ön Ek (İsteğe Bağlı)</label>
+                      <input type="text" value={bulkConfig.prefix} onChange={e => setBulkConfig({...bulkConfig, prefix: e.target.value})} placeholder="Örn: A-" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Başlangıç No</label>
+                      <input required type="number" value={bulkConfig.startNo} onChange={e => setBulkConfig({...bulkConfig, startNo: parseInt(e.target.value) || 1})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Adet</label>
+                      <input required type="number" min="1" value={bulkConfig.count} onChange={e => setBulkConfig({...bulkConfig, count: parseInt(e.target.value) || 1})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Yatak / Oda</label>
+                      <input required type="number" min="1" value={bulkConfig.bedCount} onChange={e => setBulkConfig({...bulkConfig, bedCount: parseInt(e.target.value) || 1})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] font-semibold text-stone-500 uppercase mb-1">Cinsiyet</label>
+                      <select value={bulkConfig.genderType} onChange={e => setBulkConfig({...bulkConfig, genderType: e.target.value as any})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                        <option value="male">Erkek</option>
+                        <option value="female">Kadın</option>
+                        <option value="mixed">Karma</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full py-2.5 bg-[#2D332D] text-white rounded-xl text-sm font-semibold hover:bg-[#1A1C18] transition-colors flex justify-center items-center gap-2">
+                    <Copy className="w-4 h-4" /> Toplu Oluştur ({bulkConfig.count} Oda)
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Content - Room List */}
+        <div className="lg:col-span-8 bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm min-h-[500px]">
+          {!selectedFacilityId ? (
+            <div className="flex flex-col items-center justify-center h-full text-center max-w-sm mx-auto text-stone-400">
+              <BedDouble className="w-12 h-12 mb-4 opacity-30" />
+              <h3 className="text-xl font-bold text-[#2D332D] mb-2">Lojman Seçimi Bekleniyor</h3>
+              <p className="text-sm">Odaları görüntülemek veya yeni oda eklemek için sol taraftan bir otel ve lojman seçin.</p>
+            </div>
+          ) : (
+            <div>
+              <div className="flex justify-between items-end mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-[#2D332D] flex items-center gap-2">
+                    {facilities.find(f => f.id === selectedFacilityId)?.name} Odaları
+                  </h3>
+                  <p className="text-sm text-stone-500 mt-1">Toplam {facilityRooms.length} oda bulundu.</p>
+                </div>
+              </div>
+
+              {facilityRooms.length === 0 ? (
+                <div className="p-12 text-center border-2 border-dashed border-[#E8E6E1] rounded-3xl">
+                  <p className="text-stone-500">Bu lojmanda henüz oda kaydı yok.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {facilityRooms.map(room => (
+                    <div key={room.id} className="relative group bg-[#FDFCFB] border border-[#E8E6E1] rounded-2xl p-4 hover:border-[#7C8363] hover:shadow-md transition-all">
+                      <div className="flex justify-between items-start mb-3">
+                        <span className="font-mono font-bold text-lg text-[#2D332D]">{room.roomNumber}</span>
+                        <div className={cn("w-2 h-2 rounded-full mt-2", room.status === 'active' ? "bg-green-500" : room.status === 'maintenance' ? "bg-orange-500" : "bg-red-500")} />
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <p className="text-xs text-stone-500 flex justify-between">
+                          <span>Yatak:</span> <span className="font-bold text-[#1A1C18]">{room.bedCount}</span>
+                        </p>
+                        <p className="text-xs text-stone-500 flex justify-between">
+                          <span>Tür:</span> <span className="font-bold text-[#1A1C18]">
+                            {room.genderType === 'male' ? 'Erkek' : room.genderType === 'female' ? 'Kadın' : 'Karma'}
+                          </span>
+                        </p>
+                      </div>
+
+                      {canEdit && (
+                        <div className="absolute inset-0 bg-[#2D332D]/90 rounded-2xl opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
+                          <button className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors" title="Düzenle">
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => deleteRoom(room.id)} className="p-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg text-red-200 transition-colors" title="Sil">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
