@@ -2,11 +2,11 @@ import { useState, useMemo } from "react";
 import { Users, UserPlus, Filter, DoorOpen, DoorClosed, LogOut, ShieldAlert } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
-import { PERMISSIONS, hasPermission } from "../lib/permissions";
+import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 
 export default function StaffManagement() {
-  const { hotels, facilities, rooms, staff, accommodations, addStaff, placeStaff, checkoutStaff, currentUser } = useStore();
-  const [activeTab, setActiveTab] = useState<'pending' | 'placed'>('pending');
+  const { hotels, facilities, rooms, staff, accommodations, addStaff, placeStaff, checkoutStaff, undoCheckoutStaff, currentUser, roles } = useStore();
+  const [activeTab, setActiveTab] = useState<'pending' | 'placed' | 'left'>('pending');
 
   // Form states
   const [showAddStaffForm, setShowAddStaffForm] = useState(false);
@@ -24,7 +24,13 @@ export default function StaffManagement() {
   const [filterGender, setFilterGender] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
 
-  if (!hasPermission(currentUser?.role, PERMISSIONS.view_staff_management)) {
+  // Column search states
+  const [searchName, setSearchName] = useState('');
+  const [filterFacility, setFilterFacility] = useState('');
+  const [searchRoom, setSearchRoom] = useState('');
+  const [searchCheckInDate, setSearchCheckInDate] = useState('');
+
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -34,20 +40,40 @@ export default function StaffManagement() {
     );
   }
 
-  const canAddStaff = hasPermission(currentUser?.role, PERMISSIONS.add_staff_request);
-  const canPlaceStaff = hasPermission(currentUser?.role, PERMISSIONS.place_staff);
+  const canAddStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.add_staff_request, roles);
+  const canPlaceStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.place_staff, roles);
 
   // Derived filtered data based on role
   // hotel_hr_manager sees only staff from their hotel
   // facility_manager nominally places staff, so they need to see pending staff. Placed staff should be filtered by their facility.
   
-  const pendingStaff = useMemo(() => {
+  const pendingStaffData = useMemo(() => {
     let base = staff.filter(s => s.status === 'pending_placement');
-    if (currentUser?.role === 'hotel_hr_manager' && currentUser.assignedHotelId) {
-      return base.filter(s => s.hotelId === currentUser.assignedHotelId);
-    }
-    return base;
-  }, [staff, currentUser]);
+    return base
+      .map(s => {
+        const h = hotels.find(x => x.id === s.hotelId);
+        return { staff: s, hotel: h };
+      })
+      .filter(item => {
+        if (!item.staff) return false;
+        
+        // Role based filtering
+        if (currentUser?.role === 'hotel_hr_manager' && item.hotel?.id !== currentUser.assignedHotelId) return false;
+
+        // UI filtering
+        if (filterHotel && item.hotel?.id !== filterHotel) return false;
+        if (filterGender && item.staff.gender !== filterGender) return false;
+        if (filterDepartment && item.staff.department !== filterDepartment) return false;
+
+        // Search filtering
+        if (searchName && !item.staff.fullName.toLowerCase().includes(searchName.toLowerCase())) return false;
+        if (filterFacility) return false; // Pending staff have no facility 
+        if (searchRoom) return false; // Pending staff have no room
+        if (searchCheckInDate) return false; // Pending staff have no check-in date
+
+        return true;
+      });
+  }, [staff, hotels, filterHotel, filterGender, filterDepartment, searchName, filterFacility, searchRoom, searchCheckInDate, currentUser]);
   
   const placedStaffData = useMemo(() => {
     return accommodations
@@ -70,9 +96,66 @@ export default function StaffManagement() {
         if (filterHotel && item.hotel?.id !== filterHotel) return false;
         if (filterGender && item.staff.gender !== filterGender) return false;
         if (filterDepartment && item.staff.department !== filterDepartment) return false;
+
+        // Search filtering
+        if (searchName && !item.staff.fullName.toLowerCase().includes(searchName.toLowerCase())) return false;
+        if (filterFacility && item.facility?.id !== filterFacility) return false;
+        if (searchRoom && !(item.room?.roomNumber || '').toLowerCase().includes(searchRoom.toLowerCase())) return false;
+        if (searchCheckInDate && item.acc.checkInDate !== searchCheckInDate) return false;
+
         return true;
+      })
+      .sort((a, b) => {
+        const facA = a.facility?.name || '';
+        const facB = b.facility?.name || '';
+        if (facA !== facB) return facA.localeCompare(facB);
+        
+        const roomA = a.room?.roomNumber || '';
+        const roomB = b.room?.roomNumber || '';
+        return roomA.localeCompare(roomB, undefined, { numeric: true });
       });
-  }, [accommodations, staff, facilities, rooms, hotels, filterHotel, filterGender, filterDepartment, currentUser]);
+  }, [accommodations, staff, facilities, rooms, hotels, filterHotel, filterGender, filterDepartment, searchName, filterFacility, searchRoom, searchCheckInDate, currentUser]);
+
+  const leftStaffData = useMemo(() => {
+    return accommodations
+      .filter(a => a.status === 'checked_out')
+      .map(acc => {
+        const s = staff.find(x => x.id === acc.staffId);
+        const f = facilities.find(x => x.id === acc.facilityId);
+        const r = rooms.find(x => x.id === acc.roomId);
+        const h = hotels.find(x => x.id === s?.hotelId);
+        return { acc, staff: s, facility: f, room: r, hotel: h };
+      })
+      .filter(item => {
+        if (!item.staff) return false;
+        
+        // Role based filtering
+        if (currentUser?.role === 'hotel_hr_manager' && item.hotel?.id !== currentUser.assignedHotelId) return false;
+        if (currentUser?.role === 'facility_manager' && item.facility?.id !== currentUser.assignedFacilityId) return false;
+
+        // UI filtering
+        if (filterHotel && item.hotel?.id !== filterHotel) return false;
+        if (filterGender && item.staff.gender !== filterGender) return false;
+        if (filterDepartment && item.staff.department !== filterDepartment) return false;
+
+        // Search filtering
+        if (searchName && !item.staff.fullName.toLowerCase().includes(searchName.toLowerCase())) return false;
+        if (filterFacility && item.facility?.id !== filterFacility) return false;
+        if (searchRoom && !(item.room?.roomNumber || '').toLowerCase().includes(searchRoom.toLowerCase())) return false;
+        if (searchCheckInDate && item.acc.checkInDate !== searchCheckInDate) return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        const facA = a.facility?.name || '';
+        const facB = b.facility?.name || '';
+        if (facA !== facB) return facA.localeCompare(facB);
+        
+        const roomA = a.room?.roomNumber || '';
+        const roomB = b.room?.roomNumber || '';
+        return roomA.localeCompare(roomB, undefined, { numeric: true });
+      });
+  }, [accommodations, staff, facilities, rooms, hotels, filterHotel, filterGender, filterDepartment, searchName, filterFacility, searchRoom, searchCheckInDate, currentUser]);
 
   const departments = Array.from(new Set(staff.map(s => s.department).filter(Boolean)));
 
@@ -236,114 +319,312 @@ export default function StaffManagement() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-4 border-b border-[#E8E6E1]">
+      <div className="flex gap-4 border-b border-[#E8E6E1] overflow-x-auto">
         <button 
           onClick={() => setActiveTab('pending')}
-          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors", activeTab === 'pending' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
+          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'pending' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
         >
-          Yerleşim Bekleyenler ({pendingStaff.length})
+          Yerleşim Bekleyenler ({staff.filter(s => s.status === 'pending_placement').length})
         </button>
         <button 
           onClick={() => setActiveTab('placed')}
-          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors", activeTab === 'placed' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
+          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'placed' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
         >
-          Mevcut Konaklayanlar ({accommodations.filter(a => a.status === 'active').length})
+          Konaklayanlar ({accommodations.filter(a => a.status === 'active').length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('left')}
+          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'left' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
+        >
+          Ayrılanlar ({accommodations.filter(a => a.status === 'checked_out').length})
         </button>
       </div>
 
       {/* Tab Content */}
       <div className="bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm min-h-[400px]">
         {activeTab === 'pending' && (
-          <div>
-            {pendingStaff.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-12 text-stone-400">
-                <DoorOpen className="w-12 h-12 mb-4 opacity-20" />
-                <p>Şu anda yerleşim bekleyen personel bulunmuyor.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {pendingStaff.map(staff => (
-                  <div key={staff.id} className="p-5 border border-[#E8E6E1] rounded-2xl bg-[#FDFCFB] flex flex-col">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-[#2D332D]">{staff.fullName}</h4>
-                      <span className="text-[10px] bg-orange-100 text-orange-800 font-bold px-2 py-1 rounded-full uppercase">Bekliyor</span>
-                    </div>
-                    <p className="text-sm text-stone-500 mb-1">{staff.department} - {staff.position}</p>
-                    <p className="text-xs text-stone-400 mb-4 font-semibold">Otel: <span className="font-normal text-stone-600">{hotels.find(h => h.id === staff.hotelId)?.name || 'Bilinmiyor'}</span></p>
-                    <div className="mt-auto pt-4 border-t border-stone-100">
-                      {canPlaceStaff && (
-                        <button 
-                          onClick={() => setSelectedStaffIdToPlace(staff.id)}
-                          className="w-full py-2 bg-stone-900 text-white rounded-lg text-sm font-semibold hover:bg-stone-800 transition-colors"
+          <div className="space-y-6">
+            <div className="overflow-x-auto rounded-xl border border-[#E8E6E1]">
+              <table className="min-w-full text-left">
+                <thead>
+                  <tr className="text-xs text-stone-400 uppercase tracking-widest border-b border-stone-100 bg-[#FDFCFB]">
+                    <th className="py-4 px-6 font-semibold align-top w-48">
+                      <div className="flex flex-col gap-2">
+                        <span>Lojman</span>
+                        <select
+                           value={filterFacility}
+                           onChange={e => setFilterFacility(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                           disabled
                         >
-                          Oda Seç & Yerleştir
-                        </button>
-                      )}
-                      {!canPlaceStaff && (
-                        <div className="w-full text-center py-2 text-stone-400 text-sm font-semibold">
-                          Lojman Sorumlusu Bekleniyor
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                           <option value="">Seçilemez</option>
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top w-28">
+                      <div className="flex flex-col gap-2">
+                        <span>Oda</span>
+                        <input
+                          type="text"
+                          placeholder="Oda No"
+                          value={searchRoom}
+                          onChange={e => setSearchRoom(e.target.value)}
+                          className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] placeholder-stone-400 w-full"
+                          disabled
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Personel</span>
+                        <input
+                          type="text"
+                          placeholder="İsim Ara..."
+                          value={searchName}
+                          onChange={e => setSearchName(e.target.value)}
+                          className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] placeholder-stone-400 w-full"
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Cinsiyet</span>
+                        <select
+                           value={filterGender}
+                           onChange={e => setFilterGender(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           <option value="male">Erkek</option>
+                           <option value="female">Kadın</option>
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Otel</span>
+                        <select
+                           value={filterHotel}
+                           onChange={e => setFilterHotel(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {hotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Departman</span>
+                        <select
+                           value={filterDepartment}
+                           onChange={e => setFilterDepartment(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top w-36">
+                      <div className="flex flex-col gap-2">
+                        <span>Kayıt Tarihi</span>
+                        <input
+                          type="date"
+                          value={searchCheckInDate}
+                          onChange={e => setSearchCheckInDate(e.target.value)}
+                          className="px-2 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                          disabled
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top text-right">
+                      <div className="flex flex-col gap-2 h-full justify-start pt-1">
+                        <span>İşlemler</span>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm text-[#1A1C18] divide-y divide-[#E8E6E1]">
+                  {pendingStaffData.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-stone-500">Yerleşim bekleyen personel bulunamadı.</td>
+                    </tr>
+                  ) : (
+                    pendingStaffData.map(({ staff: s, hotel: h }) => (
+                      <tr key={s.id} className="hover:bg-stone-50/50 transition-colors">
+                        <td className="py-4 px-6">
+                          <p className="font-semibold text-stone-400">Bekliyor</p>
+                        </td>
+                        <td className="py-4 px-6 font-mono font-medium text-stone-400">
+                          -
+                        </td>
+                        <td className="py-4 px-6">
+                          <p className="font-bold text-[#2D332D]">{s?.fullName}</p>
+                          <p className="text-[11px] text-stone-500 mt-0.5">{s?.tcNo}</p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${s?.gender === 'female' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>
+                            {s?.gender === 'female' ? 'Kadın' : 'Erkek'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-stone-600">{h?.name}</td>
+                        <td className="py-4 px-6">
+                          <p className="font-semibold text-stone-600">{s?.department}</p>
+                          <p className="text-xs text-stone-500 mt-0.5">{s?.position}</p>
+                        </td>
+                        <td className="py-4 px-6 text-stone-500">-</td>
+                        <td className="py-4 px-6 text-right">
+                          {canPlaceStaff ? (
+                            <button 
+                              onClick={() => setSelectedStaffIdToPlace(s.id)}
+                              className="inline-flex bg-[#7C8363] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#6A7152] transition-colors items-center gap-1.5 border border-[#6A7152]"
+                            >
+                              Yerleştir
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-stone-400 font-semibold p-2">Lojman Sorumlusu Bekleniyor</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {activeTab === 'placed' && (
           <div className="space-y-6">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-4 items-end bg-stone-50 p-4 rounded-xl border border-[#E8E6E1]">
-              <div className="flex items-center gap-2 text-stone-500">
-                <Filter className="w-4 h-4" />
-                <span className="text-sm font-bold uppercase tracking-wider">Filtreler</span>
-              </div>
-              <select value={filterHotel} onChange={e => setFilterHotel(e.target.value)} className="px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-[#7C8363]">
-                 <option value="">Tüm Oteller</option>
-                 {hotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-              </select>
-              <select value={filterDepartment} onChange={e => setFilterDepartment(e.target.value)} className="px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-[#7C8363]">
-                 <option value="">Tüm Departmanlar</option>
-                 {departments.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-               <select value={filterGender} onChange={e => setFilterGender(e.target.value)} className="px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-[#7C8363]">
-                 <option value="">Tüm Cinsiyetler</option>
-                 <option value="male">Erkek</option>
-                 <option value="female">Kadın</option>
-              </select>
-            </div>
-
             <div className="overflow-x-auto rounded-xl border border-[#E8E6E1]">
               <table className="min-w-full text-left">
                 <thead>
                   <tr className="text-xs text-stone-400 uppercase tracking-widest border-b border-stone-100 bg-[#FDFCFB]">
-                    <th className="py-4 px-6 font-semibold">Personel</th>
-                    <th className="py-4 px-6 font-semibold">Otel</th>
-                    <th className="py-4 px-6 font-semibold">Lojman / Oda</th>
-                    <th className="py-4 px-6 font-semibold">Giriş Tarihi</th>
-                    <th className="py-4 px-6 font-semibold text-right">İşlemler</th>
+                    <th className="py-4 px-6 font-semibold align-top w-48">
+                      <div className="flex flex-col gap-2">
+                        <span>Lojman</span>
+                        <select
+                           value={filterFacility}
+                           onChange={e => setFilterFacility(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top w-28">
+                      <div className="flex flex-col gap-2">
+                        <span>Oda</span>
+                        <input
+                          type="text"
+                          placeholder="Oda No"
+                          value={searchRoom}
+                          onChange={e => setSearchRoom(e.target.value)}
+                          className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] placeholder-stone-400 w-full"
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Personel</span>
+                        <input
+                          type="text"
+                          placeholder="İsim Ara..."
+                          value={searchName}
+                          onChange={e => setSearchName(e.target.value)}
+                          className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] placeholder-stone-400 w-full"
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Cinsiyet</span>
+                        <select
+                           value={filterGender}
+                           onChange={e => setFilterGender(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           <option value="male">Erkek</option>
+                           <option value="female">Kadın</option>
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Otel</span>
+                        <select
+                           value={filterHotel}
+                           onChange={e => setFilterHotel(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {hotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Departman</span>
+                        <select
+                           value={filterDepartment}
+                           onChange={e => setFilterDepartment(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top w-36">
+                      <div className="flex flex-col gap-2">
+                        <span>Giriş Tarihi</span>
+                        <input
+                          type="date"
+                          value={searchCheckInDate}
+                          onChange={e => setSearchCheckInDate(e.target.value)}
+                          className="px-2 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top text-right">
+                      <div className="flex flex-col gap-2 h-full justify-start pt-1">
+                        <span>İşlemler</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="text-sm text-[#1A1C18] divide-y divide-[#E8E6E1]">
                   {placedStaffData.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-stone-500">Kayıtlı yerleşim bulunamadı. Filtreleri temizlemeyi deneyin.</td>
+                      <td colSpan={7} className="py-12 text-center text-stone-500">Kayıtlı yerleşim bulunamadı. Filtreleri temizlemeyi deneyin.</td>
                     </tr>
                   ) : (
                     placedStaffData.map(({ acc, staff: s, facility: f, room: r, hotel: h }) => (
                       <tr key={acc.id} className="hover:bg-stone-50/50 transition-colors">
                         <td className="py-4 px-6">
+                          <p className="font-semibold text-[#7C8363]">{f?.name || 'Bilinmiyor'}</p>
+                        </td>
+                        <td className="py-4 px-6 font-mono font-medium text-stone-600">
+                          {r?.roomNumber || 'Bilinmiyor'}
+                        </td>
+                        <td className="py-4 px-6">
                           <p className="font-bold text-[#2D332D]">{s?.fullName}</p>
-                          <p className="text-[11px] text-stone-500 mt-0.5">{s?.department} / {s?.position}</p>
+                          <p className="text-[11px] text-stone-500 mt-0.5">{s?.tcNo}</p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${s?.gender === 'female' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>
+                            {s?.gender === 'female' ? 'Kadın' : 'Erkek'}
+                          </span>
                         </td>
                         <td className="py-4 px-6 text-stone-600">{h?.name}</td>
                         <td className="py-4 px-6">
-                          <p className="font-semibold text-[#7C8363]">{f?.name || 'Bilinmiyor'}</p>
-                          <p className="text-xs font-mono text-stone-500 mt-0.5">Oda: {r?.roomNumber || 'Bilinmiyor'}</p>
+                          <p className="font-semibold text-stone-600">{s?.department}</p>
+                          <p className="text-xs text-stone-500 mt-0.5">{s?.position}</p>
                         </td>
-                        <td className="py-4 px-6 text-stone-500">{new Date(acc.checkInDate).toLocaleDateString('tr-TR')}</td>
+                        <td className="py-4 px-6 text-stone-500">{acc.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}</td>
                         <td className="py-4 px-6 text-right">
                           {canPlaceStaff && (
                             <button 
@@ -356,6 +637,155 @@ export default function StaffManagement() {
                             >
                               <LogOut className="w-3.5 h-3.5" />
                               Çıkış Yap
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {activeTab === 'left' && (
+          <div className="space-y-6">
+            <div className="overflow-x-auto rounded-xl border border-[#E8E6E1]">
+              <table className="min-w-full text-left">
+                <thead>
+                   <tr className="text-xs text-stone-400 uppercase tracking-widest border-b border-stone-100 bg-[#FDFCFB]">
+                    <th className="py-4 px-6 font-semibold align-top w-48">
+                      <div className="flex flex-col gap-2">
+                        <span>Lojman</span>
+                        <select
+                           value={filterFacility}
+                           onChange={e => setFilterFacility(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top w-28">
+                      <div className="flex flex-col gap-2">
+                        <span>Oda</span>
+                        <input
+                          type="text"
+                          placeholder="Oda No"
+                          value={searchRoom}
+                          onChange={e => setSearchRoom(e.target.value)}
+                          className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] placeholder-stone-400 w-full"
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Personel</span>
+                        <input
+                          type="text"
+                          placeholder="İsim Ara..."
+                          value={searchName}
+                          onChange={e => setSearchName(e.target.value)}
+                          className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] placeholder-stone-400 w-full"
+                        />
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Cinsiyet</span>
+                        <select
+                           value={filterGender}
+                           onChange={e => setFilterGender(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           <option value="male">Erkek</option>
+                           <option value="female">Kadın</option>
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Otel</span>
+                        <select
+                           value={filterHotel}
+                           onChange={e => setFilterHotel(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {hotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top">
+                      <div className="flex flex-col gap-2">
+                        <span>Departman</span>
+                        <select
+                           value={filterDepartment}
+                           onChange={e => setFilterDepartment(e.target.value)}
+                           className="px-3 py-1.5 border border-stone-200 rounded-md text-xs font-medium normal-case tracking-normal text-stone-700 bg-white focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] w-full"
+                        >
+                           <option value="">Tümü</option>
+                           {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top w-36">
+                      <div className="flex flex-col gap-2">
+                        <span>Giriş / Çıkış Tarihleri</span>
+                      </div>
+                    </th>
+                    <th className="py-4 px-6 font-semibold align-top text-right">
+                      <div className="flex flex-col gap-2 h-full justify-start pt-1">
+                        <span>İşlemler</span>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm text-[#1A1C18] divide-y divide-[#E8E6E1]">
+                  {leftStaffData.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-stone-500">Ayrılan personel kaydı bulunamadı.</td>
+                    </tr>
+                  ) : (
+                    leftStaffData.map(({ acc, staff: s, facility: f, room: r, hotel: h }) => (
+                      <tr key={acc.id} className="hover:bg-stone-50/50 transition-colors">
+                        <td className="py-4 px-6">
+                          <p className="font-semibold text-[#7C8363]">{f?.name || 'Bilinmiyor'}</p>
+                        </td>
+                        <td className="py-4 px-6 font-mono font-medium text-stone-600">
+                          {r?.roomNumber || 'Bilinmiyor'}
+                        </td>
+                        <td className="py-4 px-6">
+                          <p className="font-bold text-[#2D332D]">{s?.fullName}</p>
+                          <p className="text-[11px] text-stone-500 mt-0.5">{s?.tcNo}</p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${s?.gender === 'female' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>
+                            {s?.gender === 'female' ? 'Kadın' : 'Erkek'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-stone-600">{h?.name}</td>
+                        <td className="py-4 px-6">
+                          <p className="font-semibold text-stone-600">{s?.department}</p>
+                          <p className="text-xs text-stone-500 mt-0.5">{s?.position}</p>
+                        </td>
+                        <td className="py-4 px-6">
+                           <p className="text-stone-500">G: {acc.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}</p>
+                           <p className="text-red-500 font-medium">Ç: {acc.checkOutDate ? new Date(acc.checkOutDate).toLocaleDateString('tr-TR') : '-'}</p>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          {canPlaceStaff && (
+                            <button 
+                              onClick={() => {
+                                if(confirm(`${s?.fullName} isimli personelin lojmana geri dönüşünü (C/OUT İptali) onaylıyor musunuz?`)) {
+                                  undoCheckoutStaff(acc.id);
+                                }
+                              }}
+                              className="inline-flex bg-stone-100 text-stone-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-stone-200 transition-colors items-center gap-1.5 border border-stone-200"
+                            >
+                              Geri Al
                             </button>
                           )}
                         </td>

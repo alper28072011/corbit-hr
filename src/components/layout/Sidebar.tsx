@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useStore } from "../../store/useStore";
-import { PERMISSIONS, hasPermission } from "../../lib/permissions";
+import { PERMISSION_KEYS, hasPermission } from "../../lib/permissions";
 
 interface SidebarProps {
   open: boolean;
@@ -19,14 +19,15 @@ interface SidebarProps {
 
 export default function Sidebar({ open, setOpen }: SidebarProps) {
   const currentUser = useStore(state => state.currentUser);
+  const roles = useStore(state => state.roles);
 
   const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    hasPermission(currentUser?.role, PERMISSIONS.view_hotel_management) && { name: "Tesis Yönetimi", href: "/facilities", icon: Building2 },
-    hasPermission(currentUser?.role, PERMISSIONS.view_room_management) && { name: "Oda Yönetimi", href: "/rooms", icon: BedDouble },
-    hasPermission(currentUser?.role, PERMISSIONS.view_staff_management) && { name: "Personel Yönetimi", href: "/staff", icon: Users },
-    hasPermission(currentUser?.role, PERMISSIONS.view_maintenance) && { name: "Arıza ve Bakım", href: "/maintenance", icon: Wrench },
-    hasPermission(currentUser?.role, PERMISSIONS.view_settings) && { name: "Ayarlar", href: "/settings", icon: Settings },
+    hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles) && { name: "Tesis Yönetimi", href: "/facilities", icon: Building2 },
+    hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles) && { name: "Oda Yönetimi", href: "/rooms", icon: BedDouble },
+    hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles) && { name: "Personel Yönetimi", href: "/staff", icon: Users },
+    hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles) && { name: "Arıza ve Bakım", href: "/maintenance", icon: Wrench },
+    hasPermission(currentUser?.role, PERMISSION_KEYS.view_settings, roles) && { name: "Ayarlar", href: "/settings", icon: Settings },
   ].filter(Boolean) as { name: string, href: string, icon: any }[];
 
   return (

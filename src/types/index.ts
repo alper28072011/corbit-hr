@@ -21,6 +21,7 @@ export interface RoleConfig {
   id: string;
   name: string;
   key: string;
+  permissions?: string[];
 }
 
 export interface User {

@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Plus, Hotel as HotelIcon, Building, Trash2, Edit2, ChevronRight, Inbox, ShieldAlert } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
-import { PERMISSIONS, hasPermission } from "../lib/permissions";
+import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 
 export default function FacilityManagement() {
-  const { hotels, facilities, addHotel, deleteHotel, addFacility, deleteFacility, currentUser } = useStore();
+  const { hotels, facilities, addHotel, deleteHotel, addFacility, updateFacility, deleteFacility, currentUser, roles } = useStore();
   
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
   
@@ -18,7 +18,11 @@ export default function FacilityManagement() {
   const [facilityData, setFacilityData] = useState({ name: "", capacity: 0 });
   const [facilityError, setFacilityError] = useState("");
 
-  if (!hasPermission(currentUser?.role, PERMISSIONS.view_hotel_management)) {
+  // Edit Facility State
+  const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
+  const [editFacilityData, setEditFacilityData] = useState({ name: "", capacity: 0, status: 'active' });
+
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -28,7 +32,7 @@ export default function FacilityManagement() {
     );
   }
 
-  const canManage = hasPermission(currentUser?.role, PERMISSIONS.edit_hotel_management);
+  const canManage = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_hotel_management, roles);
 
   const handleAddHotel = (e: import('react').FormEvent) => {
     e.preventDefault();
@@ -62,6 +66,16 @@ export default function FacilityManagement() {
     setFacilityData({ name: "", capacity: 0 });
     setShowFacilityForm(false);
     setFacilityError("");
+  };
+
+  const submitEditFacility = (id: string) => {
+    if (!editFacilityData.name.trim() || editFacilityData.capacity <= 0) return;
+    updateFacility(id, {
+      name: editFacilityData.name.trim(),
+      capacity: Number(editFacilityData.capacity),
+      status: editFacilityData.status as 'active' | 'passive'
+    });
+    setEditingFacilityId(null);
   };
 
   const selectedHotelFacilities = facilities.filter(f => f.hotelId === selectedHotelId);
@@ -217,36 +231,85 @@ export default function FacilityManagement() {
                      <p className="text-sm">Bu otele ait henüz lojman tanımlanmamış.</p>
                    </div>
                 ) : (
-                  selectedHotelFacilities.map(facility => (
-                    <div key={facility.id} className="group relative bg-[#FDFCFB] p-6 rounded-2xl border border-[#E8E6E1] hover:shadow-md hover:border-[#7C8363] transition-all flex flex-col">
-                      <div className="flex justify-between items-start mb-4">
-                        <h4 className="font-bold text-[#2D332D] text-lg">{facility.name}</h4>
-                        <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", facility.status === 'active' ? "bg-green-100 text-green-800" : "bg-stone-200 text-stone-600")}>
-                          {facility.status === 'active' ? 'AKTİF' : 'PASİF'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-6 mt-2 mb-4">
-                        <div>
-                          <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Kapasite</p>
-                          <p className="text-lg font-mono font-semibold text-[#1A1C18]">{facility.capacity} <span className="text-sm font-sans text-stone-500 font-normal">Kişi</span></p>
+                  selectedHotelFacilities.map(facility => {
+                    if (editingFacilityId === facility.id) {
+                      return (
+                        <div key={facility.id} className="bg-[#FDFCFB] p-5 rounded-2xl border-2 border-[#7C8363] shadow-sm flex flex-col gap-3">
+                           <input
+                             value={editFacilityData.name}
+                             onChange={(e) => setEditFacilityData({...editFacilityData, name: e.target.value})}
+                             placeholder="Lojman Adı"
+                             className="w-full px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
+                           />
+                           <div className="flex gap-2">
+                             <input
+                               type="number"
+                               value={editFacilityData.capacity || ""}
+                               onChange={(e) => setEditFacilityData({...editFacilityData, capacity: parseInt(e.target.value) || 0})}
+                               placeholder="Kapasite"
+                               className="w-1/2 px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
+                             />
+                             <select
+                               value={editFacilityData.status}
+                               onChange={(e) => setEditFacilityData({...editFacilityData, status: e.target.value as 'active' | 'passive'})}
+                               className="w-1/2 px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
+                             >
+                                <option value="active">Aktif</option>
+                                <option value="passive">Pasif</option>
+                             </select>
+                           </div>
+                           <div className="flex justify-end gap-2 mt-2">
+                              <button onClick={() => setEditingFacilityId(null)} className="px-3 py-1.5 border border-[#E8E6E1] text-stone-600 rounded-lg text-xs font-semibold hover:bg-stone-50 transition-colors">İptal</button>
+                              <button onClick={() => submitEditFacility(facility.id)} className="px-3 py-1.5 bg-[#7C8363] text-white rounded-lg text-xs font-semibold hover:bg-[#6A7152] transition-colors">Kaydet</button>
+                           </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={facility.id} className="group relative bg-[#FDFCFB] p-6 rounded-2xl border border-[#E8E6E1] hover:shadow-md hover:border-[#7C8363] transition-all flex flex-col">
+                        <div className="flex items-start justify-between mb-4">
+                          <h4 className="font-bold text-[#2D332D] text-lg pr-4">{facility.name}</h4>
+                          <div className="flex flex-col items-end gap-2 shrink-0">
+                            <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", facility.status === 'active' ? "bg-green-100 text-green-800" : "bg-stone-200 text-stone-600")}>
+                              {facility.status === 'active' ? 'AKTİF' : 'PASİF'}
+                            </span>
+                            {canManage && (
+                              <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  onClick={() => {
+                                    setEditFacilityData({ name: facility.name, capacity: facility.capacity, status: facility.status });
+                                    setEditingFacilityId(facility.id);
+                                  }}
+                                  className="p-1.5 bg-white border border-[#E8E6E1] text-stone-600 rounded-lg hover:border-[#7C8363] hover:text-[#7C8363] transition-colors shadow-sm"
+                                  title="Düzenle"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    if(confirm('Lojmanı silmek istediğinize emin misiniz?')) {
+                                      deleteFacility(facility.id);
+                                    }
+                                  }}
+                                  className="p-1.5 bg-white border border-[#E8E6E1] text-red-500 rounded-lg hover:border-red-500 hover:bg-red-50 transition-colors shadow-sm"
+                                  title="Sil"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6 mt-auto pt-4 border-t border-[#E8E6E1] border-dashed">
+                          <div>
+                            <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Kapasite</p>
+                            <p className="text-lg font-mono font-semibold text-[#1A1C18]">{facility.capacity} <span className="text-sm font-sans text-stone-500 font-normal">Kişi</span></p>
+                          </div>
                         </div>
                       </div>
-                      
-                      {canManage && (
-                        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                          <button className="p-2 bg-white border border-[#E8E6E1] text-stone-600 rounded-lg hover:border-[#7C8363] hover:text-[#7C8363] transition-colors shadow-sm">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button 
-                            onClick={() => deleteFacility(facility.id)}
-                            className="p-2 bg-white border border-[#E8E6E1] text-red-500 rounded-lg hover:border-red-500 hover:bg-red-50 transition-colors shadow-sm"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </>

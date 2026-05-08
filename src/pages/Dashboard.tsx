@@ -24,13 +24,13 @@ import {
   Legend
 } from "recharts";
 import { useStore } from "../store/useStore";
-import { hasPermission, PERMISSIONS } from "../lib/permissions";
+import { hasPermission, PERMISSION_KEYS } from "../lib/permissions";
 
 const COLORS = ['#7C8363', '#2D332D', '#D9D3C1', '#F5F2ED', '#A4A895'];
 const GENDER_COLORS = { male: '#7C8363', female: '#D9D3C1' };
 
 export default function Dashboard() {
-  const { facilities, rooms, accommodations, staff, maintenanceRequests, currentUser, hotels } = useStore();
+  const { facilities, rooms, accommodations, staff, maintenanceRequests, currentUser, hotels, roles } = useStore();
 
   const authorizedFacilities = useMemo(() => {
     if (!currentUser) return [];
@@ -139,13 +139,13 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-3">
-          {hasPermission(currentUser?.role, PERMISSIONS.add_staff_request) && (
+          {hasPermission(currentUser?.role, PERMISSION_KEYS.add_staff_request, roles) && (
             <Link to="/staff" className="px-4 py-2 border border-[#E8E6E1] rounded-xl bg-white hover:bg-stone-50 text-sm font-semibold transition-colors flex items-center gap-2">
               <UserPlus className="w-4 h-4" />
               Yeni Talep
             </Link>
           )}
-          {hasPermission(currentUser?.role, PERMISSIONS.place_staff) && (
+          {hasPermission(currentUser?.role, PERMISSION_KEYS.place_staff, roles) && (
             <Link to="/staff" className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2">
               <BedDouble className="w-4 h-4" />
               Yerleşim Yap

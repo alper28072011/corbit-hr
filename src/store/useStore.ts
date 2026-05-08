@@ -50,6 +50,7 @@ interface AppState {
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
   placeStaff: (staffId: string, facilityId: string, roomId: string) => Promise<void>;
   checkoutStaff: (accommodationId: string, checkoutDate: string) => Promise<void>;
+  undoCheckoutStaff: (accommodationId: string) => Promise<void>;
 
   addMaintenanceRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status' | 'resolvedAt'>) => Promise<void>;
   updateMaintenanceStatus: (id: string, status: MaintenanceRequest['status']) => Promise<void>;
@@ -251,7 +252,23 @@ export const useStore = create<AppState>((set, get) => ({
              status: 'checked_out', 
              checkOutDate: checkoutDate 
            });
-           await updateDoc(doc(db, "staff", acc.staffId), { status: 'pending_placement' });
+           await updateDoc(doc(db, "staff", acc.staffId), { status: 'left' });
+         } catch (error) {
+           handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
+         }
+      },
+
+      undoCheckoutStaff: async (accommodationId) => {
+         try {
+           const state = get();
+           const acc = state.accommodations.find(a => a.id === accommodationId);
+           if (!acc) return;
+
+           await updateDoc(doc(db, "accommodations", accommodationId), { 
+             status: 'active', 
+             checkOutDate: null 
+           });
+           await updateDoc(doc(db, "staff", acc.staffId), { status: 'placed' });
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }

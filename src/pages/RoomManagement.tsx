@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
-import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert } from "lucide-react";
+import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
-import { PERMISSIONS, hasPermission } from "../lib/permissions";
+import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 
 export default function RoomManagement() {
-  const { hotels, facilities, rooms, addRoom, addRoomsBulk, deleteRoom, currentUser } = useStore();
+  const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, currentUser, roles } = useStore();
 
   const [selectedHotelId, setSelectedHotelId] = useState<string>('');
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
 
-  const canEdit = hasPermission(currentUser?.role, PERMISSIONS.edit_room_management);
+  const canEdit = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_room_management, roles);
 
   useEffect(() => {
     if (currentUser?.role === 'facility_manager') {
@@ -34,7 +34,32 @@ export default function RoomManagement() {
     prefix: '', startNo: 1, count: 10, bedCount: 2, genderType: 'male' as const
   });
 
-  if (!hasPermission(currentUser?.role, PERMISSIONS.view_room_management)) {
+  // Edit Room State
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editRoomData, setEditRoomData] = useState<{ roomNumber?: string, bedCount?: number, genderType?: any, status?: any }>({});
+
+  const handleStartEdit = (room: any) => {
+    setEditingRoomId(room.id);
+    setEditRoomData({
+      roomNumber: room.roomNumber,
+      bedCount: room.bedCount,
+      genderType: room.genderType,
+      status: room.status
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (editingRoomId && editRoomData) {
+      updateRoom(editingRoomId, editRoomData);
+      setEditingRoomId(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRoomId(null);
+  };
+
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -231,6 +256,42 @@ export default function RoomManagement() {
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {facilityRooms.map(room => (
+                    editingRoomId === room.id ? (
+                      <div key={room.id} className="bg-[#FDFCFB] border-2 border-[#7C8363] rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+                        <div className="flex flex-col gap-1">
+                           <label className="text-[10px] uppercase font-bold text-stone-500">Oda No</label>
+                           <input type="text" value={editRoomData.roomNumber || ''} onChange={e => setEditRoomData({...editRoomData, roomNumber: e.target.value})} className="px-2 py-1 text-sm border rounded focus:outline-none focus:border-[#7C8363]" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                           <label className="text-[10px] uppercase font-bold text-stone-500">Yatak Sayısı</label>
+                           <input type="number" min="1" value={editRoomData.bedCount || 1} onChange={e => setEditRoomData({...editRoomData, bedCount: parseInt(e.target.value) || 1})} className="px-2 py-1 text-sm border rounded focus:outline-none focus:border-[#7C8363]" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                           <label className="text-[10px] uppercase font-bold text-stone-500">Tür</label>
+                           <select value={editRoomData.genderType} onChange={e => setEditRoomData({...editRoomData, genderType: e.target.value})} className="px-2 py-1 text-sm border rounded focus:outline-none focus:border-[#7C8363]">
+                             <option value="male">Erkek</option>
+                             <option value="female">Kadın</option>
+                             <option value="mixed">Karma</option>
+                           </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                           <label className="text-[10px] uppercase font-bold text-stone-500">Durum</label>
+                           <select value={editRoomData.status} onChange={e => setEditRoomData({...editRoomData, status: e.target.value})} className="px-2 py-1 text-sm border rounded focus:outline-none focus:border-[#7C8363]">
+                             <option value="active">Aktif</option>
+                             <option value="maintenance">Bakımda</option>
+                             <option value="inactive">Pasif</option>
+                           </select>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                           <button onClick={handleSaveEdit} className="flex-1 py-1.5 bg-[#7C8363] hover:bg-[#6A7152] transition-colors text-white rounded-lg flex items-center justify-center" title="Kaydet">
+                             <Check className="w-4 h-4" />
+                           </button>
+                           <button onClick={handleCancelEdit} className="flex-1 py-1.5 bg-stone-200 hover:bg-stone-300 transition-colors text-stone-700 rounded-lg flex items-center justify-center" title="İptal">
+                             <X className="w-4 h-4" />
+                           </button>
+                        </div>
+                      </div>
+                    ) : (
                     <div key={room.id} className="relative group bg-[#FDFCFB] border border-[#E8E6E1] rounded-2xl p-4 hover:border-[#7C8363] hover:shadow-md transition-all">
                       <div className="flex justify-between items-start mb-3">
                         <span className="font-mono font-bold text-lg text-[#2D332D]">{room.roomNumber}</span>
@@ -250,7 +311,7 @@ export default function RoomManagement() {
 
                       {canEdit && (
                         <div className="absolute inset-0 bg-[#2D332D]/90 rounded-2xl opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
-                          <button className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors" title="Düzenle">
+                          <button onClick={() => handleStartEdit(room)} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors" title="Düzenle">
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button onClick={() => deleteRoom(room.id)} className="p-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg text-red-200 transition-colors" title="Sil">
@@ -259,6 +320,7 @@ export default function RoomManagement() {
                         </div>
                       )}
                     </div>
+                    )
                   ))}
                 </div>
               )}

@@ -3,7 +3,7 @@ import { Plus, Wrench, Clock, CheckCircle2, AlertCircle, MapPin, Trash2, Chevron
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { MaintenanceStatus } from "../types";
-import { PERMISSIONS, hasPermission } from "../lib/permissions";
+import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 import { ShieldAlert } from "lucide-react";
 
 function formatTimeAgo(dateString: string) {
@@ -21,7 +21,7 @@ function formatTimeAgo(dateString: string) {
 }
 
 export default function Maintenance() {
-  const { hotels, facilities, rooms, maintenanceRequests, addMaintenanceRequest, updateMaintenanceStatus, deleteMaintenanceRequest, currentUser } = useStore();
+  const { hotels, facilities, rooms, maintenanceRequests, addMaintenanceRequest, updateMaintenanceStatus, deleteMaintenanceRequest, currentUser, roles } = useStore();
   
   const [showForm, setShowForm] = useState(false);
   const [newRequest, setNewRequest] = useState({
@@ -31,7 +31,7 @@ export default function Maintenance() {
     description: ''
   });
 
-  if (!hasPermission(currentUser?.role, PERMISSIONS.view_maintenance)) {
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -41,7 +41,7 @@ export default function Maintenance() {
     );
   }
 
-  const canManage = hasPermission(currentUser?.role, PERMISSIONS.manage_maintenance);
+  const canManage = hasPermission(currentUser?.role, PERMISSION_KEYS.manage_maintenance, roles);
 
   const handleAddRequest = (e: import('react').FormEvent) => {
     e.preventDefault();
