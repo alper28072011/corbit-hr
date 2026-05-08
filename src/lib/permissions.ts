@@ -13,6 +13,8 @@ export const PERMISSION_KEYS = {
   checkout_staff: 'checkout_staff',
   edit_staff: 'edit_staff',
   delete_staff: 'delete_staff',
+  change_room: 'change_room',
+  view_document: 'view_document',
   
   view_maintenance: 'view_maintenance',
   manage_maintenance: 'manage_maintenance',
@@ -21,6 +23,24 @@ export const PERMISSION_KEYS = {
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSION_KEYS;
+
+export const PERMISSION_LABELS: Record<PermissionKey, string> = {
+  view_hotel_management: 'Tesisleri Görüntüle',
+  edit_hotel_management: 'Tesis Düzenle / Sil',
+  view_room_management: 'Odaları Görüntüle',
+  edit_room_management: 'Odaları Düzenle / Ekle',
+  view_staff_management: 'Personeli Görüntüle',
+  add_staff_request: 'Personel Talep Et',
+  place_staff: 'Personel Yerleştir',
+  checkout_staff: 'Personel Çıkış Yap',
+  edit_staff: 'Personel Düzenle',
+  delete_staff: 'Personel Kaydı Sil',
+  change_room: 'Oda Değiştir',
+  view_document: 'Belge Görüntüle',
+  view_maintenance: 'Arızaları Görüntüle',
+  manage_maintenance: 'Arıza Kapat / Yönet',
+  view_settings: 'Ayarları Görüntüle',
+};
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   super_admin: Object.values(PERMISSION_KEYS) as PermissionKey[],

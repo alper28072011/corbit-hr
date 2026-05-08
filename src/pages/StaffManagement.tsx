@@ -1,11 +1,53 @@
-import { useState, useMemo } from "react";
-import { Users, UserPlus, Filter, DoorOpen, DoorClosed, LogOut, ShieldAlert } from "lucide-react";
+import { useState, useMemo, ReactNode, useRef } from "react";
+import { Users, UserPlus, Filter, DoorOpen, DoorClosed, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, BedDouble, Replace } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 
+const ActionMenu = ({ children }: { children: ReactNode }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState({ top: 0, right: 0 });
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.bottom + 8, // slight offset
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <div className="relative inline-block text-left">
+      <button 
+        ref={buttonRef}
+        onClick={handleToggle} 
+        className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+      >
+        <MoreVertical className="w-5 h-5" />
+      </button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}></div>
+          <div 
+            className="fixed w-56 rounded-xl shadow-[0_4px_24px_-4px_rgba(0,0,0,0.1)] bg-white border border-stone-100 z-[70] py-1 overflow-hidden" 
+            style={{ top: position.top, right: position.right }}
+            onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
+          >
+            {children}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 export default function StaffManagement() {
-  const { hotels, facilities, rooms, staff, accommodations, addStaff, placeStaff, checkoutStaff, undoCheckoutStaff, currentUser, roles } = useStore();
+  const { hotels, facilities, rooms, staff, accommodations, addStaff, placeStaff, checkoutStaff, undoCheckoutStaff, deleteStaff, currentUser, roles } = useStore();
   const [activeTab, setActiveTab] = useState<'pending' | 'placed' | 'left'>('pending');
 
   // Form states
@@ -42,6 +84,11 @@ export default function StaffManagement() {
 
   const canAddStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.add_staff_request, roles);
   const canPlaceStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.place_staff, roles);
+  const canCheckoutStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.checkout_staff, roles);
+  const canEditStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_staff, roles);
+  const canDeleteStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.delete_staff, roles);
+  const canChangeRoom = hasPermission(currentUser?.role, PERMISSION_KEYS.change_room, roles);
+  const canViewDoc = hasPermission(currentUser?.role, PERMISSION_KEYS.view_document, roles);
 
   // Derived filtered data based on role
   // hotel_hr_manager sees only staff from their hotel
@@ -319,25 +366,30 @@ export default function StaffManagement() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-4 border-b border-[#E8E6E1] overflow-x-auto">
-        <button 
-          onClick={() => setActiveTab('pending')}
-          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'pending' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
-        >
-          Yerleşim Bekleyenler ({staff.filter(s => s.status === 'pending_placement').length})
-        </button>
-        <button 
-          onClick={() => setActiveTab('placed')}
-          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'placed' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
-        >
-          Konaklayanlar ({accommodations.filter(a => a.status === 'active').length})
-        </button>
-        <button 
-          onClick={() => setActiveTab('left')}
-          className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'left' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
-        >
-          Ayrılanlar ({accommodations.filter(a => a.status === 'checked_out').length})
-        </button>
+      <div className="flex items-center justify-between border-b border-[#E8E6E1]">
+        <div className="flex gap-4 overflow-x-auto">
+          <button 
+            onClick={() => setActiveTab('pending')}
+            className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'pending' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
+          >
+            Yerleşim Bekleyenler
+          </button>
+          <button 
+            onClick={() => setActiveTab('placed')}
+            className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'placed' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
+          >
+            Konaklayanlar
+          </button>
+          <button 
+            onClick={() => setActiveTab('left')}
+            className={cn("pb-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap", activeTab === 'left' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600")}
+          >
+            Ayrılanlar
+          </button>
+        </div>
+        <div className="text-sm font-medium text-stone-500 pb-3 whitespace-nowrap pr-2">
+          Toplam: <span className="font-bold text-stone-700">{activeTab === 'pending' ? pendingStaffData.length : activeTab === 'placed' ? placedStaffData.length : leftStaffData.length}</span>
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -475,16 +527,40 @@ export default function StaffManagement() {
                         </td>
                         <td className="py-4 px-6 text-stone-500">-</td>
                         <td className="py-4 px-6 text-right">
-                          {canPlaceStaff ? (
-                            <button 
-                              onClick={() => setSelectedStaffIdToPlace(s.id)}
-                              className="inline-flex bg-[#7C8363] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#6A7152] transition-colors items-center gap-1.5 border border-[#6A7152]"
-                            >
-                              Yerleştir
-                            </button>
-                          ) : (
-                            <span className="text-[11px] text-stone-400 font-semibold p-2">Lojman Sorumlusu Bekleniyor</span>
-                          )}
+                          <ActionMenu>
+                            {canPlaceStaff && (
+                              <button 
+                                onClick={() => setSelectedStaffIdToPlace(s.id)}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <CheckCircle className="w-4 h-4 text-[#7C8363]" /> Yerleştir
+                              </button>
+                            )}
+                            {canEditStaff && (
+                              <button 
+                                onClick={() => alert("Personel düzenleme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <Edit2 className="w-4 h-4" /> Düzenle
+                              </button>
+                            )}
+                            {canViewDoc && (
+                              <button 
+                                onClick={() => alert("Belge görüntüleme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <FileText className="w-4 h-4" /> Belge Görüntüle
+                              </button>
+                            )}
+                            {canDeleteStaff && (
+                              <button 
+                                onClick={() => { if(confirm(`${s?.fullName} isimli personelin kaydını tamamen silmek istediğinize emin misiniz?`)) deleteStaff(s.id); }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100"
+                              >
+                                <Trash2 className="w-4 h-4" /> Kaydı Sil
+                              </button>
+                            )}
+                          </ActionMenu>
                         </td>
                       </tr>
                     ))
@@ -626,19 +702,52 @@ export default function StaffManagement() {
                         </td>
                         <td className="py-4 px-6 text-stone-500">{acc.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}</td>
                         <td className="py-4 px-6 text-right">
-                          {canPlaceStaff && (
-                            <button 
-                              onClick={() => {
-                                if(confirm(`${s?.fullName} isimli personelin lojmandan çıkışını yapmak istediğinize emin misiniz?`)) {
-                                  checkoutStaff(acc.id, new Date().toISOString().split('T')[0]);
-                                }
-                              }}
-                              className="inline-flex bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors items-center gap-1.5 border border-red-100"
-                            >
-                              <LogOut className="w-3.5 h-3.5" />
-                              Çıkış Yap
-                            </button>
-                          )}
+                          <ActionMenu>
+                            {canCheckoutStaff && (
+                              <button 
+                                onClick={() => {
+                                  if(confirm(`${s?.fullName} isimli personelin lojmandan çıkışını yapmak istediğinize emin misiniz?`)) {
+                                    checkoutStaff(acc.id, new Date().toISOString().split('T')[0]);
+                                  }
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <LogOut className="w-4 h-4" /> Çıkış Yap
+                              </button>
+                            )}
+                            {canChangeRoom && (
+                              <button 
+                                onClick={() => alert("Oda değiştirme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <Replace className="w-4 h-4" /> Oda Değiştir
+                              </button>
+                            )}
+                            {canEditStaff && (
+                              <button 
+                                onClick={() => alert("Personel düzenleme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <Edit2 className="w-4 h-4" /> Düzenle
+                              </button>
+                            )}
+                            {canViewDoc && (
+                              <button 
+                                onClick={() => alert("Belge görüntüleme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <FileText className="w-4 h-4" /> Belge Görüntüle
+                              </button>
+                            )}
+                            {canDeleteStaff && (
+                              <button 
+                                onClick={() => { if(confirm(`${s?.fullName} isimli personelin kaydını tamamen silmek istediğinize emin misiniz?`)) deleteStaff(s.id); }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100"
+                              >
+                                <Trash2 className="w-4 h-4" /> Kaydı Sil
+                              </button>
+                            )}
+                          </ActionMenu>
                         </td>
                       </tr>
                     ))
@@ -776,18 +885,44 @@ export default function StaffManagement() {
                            <p className="text-red-500 font-medium">Ç: {acc.checkOutDate ? new Date(acc.checkOutDate).toLocaleDateString('tr-TR') : '-'}</p>
                         </td>
                         <td className="py-4 px-6 text-right">
-                          {canPlaceStaff && (
-                            <button 
-                              onClick={() => {
-                                if(confirm(`${s?.fullName} isimli personelin lojmana geri dönüşünü (C/OUT İptali) onaylıyor musunuz?`)) {
-                                  undoCheckoutStaff(acc.id);
-                                }
-                              }}
-                              className="inline-flex bg-stone-100 text-stone-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-stone-200 transition-colors items-center gap-1.5 border border-stone-200"
-                            >
-                              Geri Al
-                            </button>
-                          )}
+                          <ActionMenu>
+                            {canPlaceStaff && (
+                              <button 
+                                onClick={() => {
+                                  if(confirm(`${s?.fullName} isimli personelin lojmana geri dönüşünü (C/OUT İptali) onaylıyor musunuz?`)) {
+                                    undoCheckoutStaff(acc.id);
+                                  }
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <CheckCircle className="w-4 h-4" /> Geri Al
+                              </button>
+                            )}
+                            {canEditStaff && (
+                              <button 
+                                onClick={() => alert("Personel düzenleme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <Edit2 className="w-4 h-4" /> Düzenle
+                              </button>
+                            )}
+                            {canViewDoc && (
+                              <button 
+                                onClick={() => alert("Belge görüntüleme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <FileText className="w-4 h-4" /> Belge Görüntüle
+                              </button>
+                            )}
+                            {canDeleteStaff && (
+                              <button 
+                                onClick={() => { if(confirm(`${s?.fullName} isimli personelin kaydını tamamen silmek istediğinize emin misiniz?`)) deleteStaff(s.id); }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100"
+                              >
+                                <Trash2 className="w-4 h-4" /> Kaydı Sil
+                              </button>
+                            )}
+                          </ActionMenu>
                         </td>
                       </tr>
                     ))

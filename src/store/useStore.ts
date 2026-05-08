@@ -48,7 +48,9 @@ interface AppState {
 
   addStaff: (staffData: Omit<Staff, 'id'>) => Promise<void>;
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
+  deleteStaff: (id: string) => Promise<void>;
   placeStaff: (staffId: string, facilityId: string, roomId: string) => Promise<void>;
+  changeRoom: (accommodationId: string, newFacilityId: string, newRoomId: string) => Promise<void>;
   checkoutStaff: (accommodationId: string, checkoutDate: string) => Promise<void>;
   undoCheckoutStaff: (accommodationId: string) => Promise<void>;
 
@@ -225,6 +227,15 @@ export const useStore = create<AppState>((set, get) => ({
            handleFirestoreError(error, OperationType.UPDATE, `staff/${id}`);
          }
       },
+      
+      deleteStaff: async (id) => {
+         try {
+           await deleteDoc(doc(db, "staff", id));
+           // Optional: you could also delete or cleanup related accommodations
+         } catch (error) {
+           handleFirestoreError(error, OperationType.DELETE, `staff/${id}`);
+         }
+      },
         
       placeStaff: async (staffId, facilityId, roomId) => {
          try {
@@ -269,6 +280,17 @@ export const useStore = create<AppState>((set, get) => ({
              checkOutDate: null 
            });
            await updateDoc(doc(db, "staff", acc.staffId), { status: 'placed' });
+         } catch (error) {
+           handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
+         }
+      },
+
+      changeRoom: async (accommodationId, newFacilityId, newRoomId) => {
+         try {
+           await updateDoc(doc(db, "accommodations", accommodationId), {
+             facilityId: newFacilityId,
+             roomId: newRoomId
+           });
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }
