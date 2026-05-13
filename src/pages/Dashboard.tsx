@@ -3,34 +3,52 @@ import { Link } from "react-router-dom";
 import { 
   Building2, 
   Users, 
-  Wrench, 
   BedDouble, 
-  AlertCircle,
-  TrendingUp,
   Activity,
-  UserPlus
+  UserPlus,
+  PieChart as PieChartIcon,
+  BarChart3,
+  ListVideo,
+  DoorOpen,
+  LogOut,
+  Building
 } from "lucide-react";
 import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
 } from "recharts";
 import { useStore } from "../store/useStore";
 import { hasPermission, PERMISSION_KEYS } from "../lib/permissions";
+import { cn } from "../lib/utils";
 
-const COLORS = ['#7C8363', '#2D332D', '#D9D3C1', '#F5F2ED', '#A4A895'];
+const COLORS = ['#7C8363', '#2D332D', '#D9D3C1', '#C6CDB0', '#A4A895', '#F5F5F0'];
 const GENDER_COLORS = { male: '#7C8363', female: '#D9D3C1' };
 
+// --- Modular Card Components ---
+function Card({ className = "", children }: { className?: string, children: React.ReactNode }) {
+  return <div className={`bg-white rounded-xl border border-[#E8E6E1] shadow-sm flex flex-col ${className}`}>{children}</div>;
+}
+
+function CardHeader({ className = "", children }: { className?: string, children: React.ReactNode }) {
+  return <div className={`p-6 pb-4 flex flex-col gap-1 ${className}`}>{children}</div>;
+}
+
+function CardTitle({ className = "", children, icon: Icon }: { className?: string, children: React.ReactNode, icon?: any }) {
+  return (
+    <div className="flex items-center justify-between mb-1">
+      <h3 className={`font-semibold text-stone-700 ${className}`}>{children}</h3>
+      {Icon && <Icon className="w-5 h-5 text-stone-400" />}
+    </div>
+  );
+}
+
+function CardContent({ className = "", children }: { className?: string, children: React.ReactNode }) {
+  return <div className={`p-6 pt-0 flex-1 ${className}`}>{children}</div>;
+}
+// -------------------------------
+
 export default function Dashboard() {
-  const { facilities, rooms, accommodations, staff, maintenanceRequests, currentUser, hotels, roles } = useStore();
+  const { facilities, rooms, accommodations, staff, hotels, roles, currentUser } = useStore();
 
   const authorizedFacilities = useMemo(() => {
     if (!currentUser) return [];
@@ -45,72 +63,118 @@ export default function Dashboard() {
     return facilities;
   }, [facilities, currentUser]);
 
-  const facilityIds = authorizedFacilities.map(f => f.id);
+  const authorizedFacilityIds = authorizedFacilities.map(f => f.id);
 
-  // Capacity & Occupancy
-  const metrics = useMemo(() => {
-    let totalCapacity = 0;
-    let occupiedBeds = 0;
+  const {
+    totalCapacity,
+    activeStaffCount,
+    occupancyRate,
+    emptyBeds,
+    genderData,
+    hotelDistributionData,
+    facilityOccupancyList,
+    departmentDistributionList,
+    departedStaffCount,
+    departedStaffByDepartment
+  } = useMemo(() => {
+    // 1. Capacity
+    const activeRooms = rooms.filter(r => r.status === 'active' && authorizedFacilityIds.includes(r.facilityId));
+    const totalCapacity = activeRooms.reduce((sum, room) => sum + room.bedCount, 0);
+
+    // 2. Active Staff via Accommodations
+    const activeAccs = accommodations.filter(a => a.status === 'active' && authorizedFacilityIds.includes(a.facilityId));
+    const activeStaffIds = new Set(activeAccs.map(a => a.staffId));
+    const activeStaff = staff.filter(s => s.status === 'placed' && activeStaffIds.has(s.id));
     
-    const activeAccommodations = accommodations.filter(a => a.status === 'active' && facilityIds.includes(a.facilityId));
-    occupiedBeds = activeAccommodations.length;
+    const activeStaffCount = activeStaff.length;
 
-    const authorizedRooms = rooms.filter(r => r.status === 'active' && facilityIds.includes(r.facilityId));
-    authorizedRooms.forEach(room => {
-      totalCapacity += room.bedCount;
+    // 3. Occupancy Rate & Empty Beds
+    const occupancyRate = totalCapacity > 0 ? (activeStaffCount / totalCapacity) * 100 : 0;
+    const emptyBeds = Math.max(0, totalCapacity - activeStaffCount);
+
+    // Gender Distribution (Pie Chart)
+    const males = activeStaff.filter(s => s.gender === 'male').length;
+    const females = activeStaff.filter(s => s.gender === 'female').length;
+    const genderData = [
+      { name: 'Erkek', value: males },
+      { name: 'Kadın', value: females }
+    ].filter(d => d.value > 0);
+
+    // Otele Göre Konaklama (Bar Chart)
+    const hotelCounts: Record<string, number> = {};
+    activeStaff.forEach(s => {
+      const hName = hotels.find(h => h.id === s.hotelId)?.name || 'Bilinmeyen';
+      hotelCounts[hName] = (hotelCounts[hName] || 0) + 1;
     });
+    const hotelDistributionData = Object.entries(hotelCounts).map(([name, count]) => ({
+      name,
+      Kişi: count
+    }));
 
-    const occupancyRate = totalCapacity > 0 ? (occupiedBeds / totalCapacity) * 100 : 0;
-
-    // Gender Distribution
-    let maleCount = 0;
-    let femaleCount = 0;
-    activeAccommodations.forEach(acc => {
-      const person = staff.find(s => s.id === acc.staffId);
-      if (person?.gender === 'male') maleCount++;
-      if (person?.gender === 'female') femaleCount++;
-    });
-
-    // Facility Occupancy Data for Bar Chart
-    const facilityOccupancyData = authorizedFacilities.map(fac => {
-      const facRooms = rooms.filter(r => r.status === 'active' && r.facilityId === fac.id);
+    // Facility-based Occupancy (Progress bar list)
+    const facilityOccupancyList = authorizedFacilities.map(fac => {
+      const facRooms = activeRooms.filter(r => r.facilityId === fac.id);
       const cap = facRooms.reduce((sum, r) => sum + r.bedCount, 0);
-      const occ = accommodations.filter(a => a.status === 'active' && a.facilityId === fac.id).length;
+      const occ = activeAccs.filter(a => a.facilityId === fac.id).length;
       return {
+        id: fac.id,
         name: fac.name,
-        Doluluk: cap > 0 ? Math.round((occ / cap) * 100) : 0,
+        capacity: cap,
         occupied: occ,
-        capacity: cap
+        rate: cap > 0 ? (occ / cap) * 100 : 0
       };
+    }).sort((a, b) => b.rate - a.rate);
+
+    // Department Distribution (List)
+    const deptCounts: Record<string, number> = {};
+    activeStaff.forEach(s => {
+      const dept = s.department || 'Bilinmeyen';
+      deptCounts[dept] = (deptCounts[dept] || 0) + 1;
     });
+    const departmentDistributionList = Object.entries(deptCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Departed Staff
+    let departedStaffIdSet: Set<string>;
+    if (currentUser?.role === 'hotel_hr_manager') {
+       const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+       const leftStaff = staff.filter(s => s.status === 'left' && hotelIds.includes(s.hotelId));
+       departedStaffIdSet = new Set(leftStaff.map(s => s.id));
+    } else if (currentUser?.role === 'facility_manager') {
+       const pastAccs = accommodations.filter(a => a.status === 'checked_out' && authorizedFacilityIds.includes(a.facilityId));
+       departedStaffIdSet = new Set(pastAccs.map(a => a.staffId));
+    } else {
+       departedStaffIdSet = new Set(staff.filter(s => s.status === 'left').map(s => s.id));
+    }
+    
+    const departedStaff = staff.filter(s => departedStaffIdSet.has(s.id));
+    const departedStaffCount = departedStaff.length;
+
+    const departedDeptCounts: Record<string, number> = {};
+    departedStaff.forEach(s => {
+      const dept = s.department || 'Bilinmeyen';
+      departedDeptCounts[dept] = (departedDeptCounts[dept] || 0) + 1;
+    });
+    const departedStaffByDepartment = Object.entries(departedDeptCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // top 5
 
     return {
       totalCapacity,
-      occupiedBeds,
-      emptyBeds: totalCapacity - occupiedBeds,
-      occupancyRate: occupancyRate.toFixed(1),
-      genderData: [
-        { name: 'Erkek', value: maleCount },
-        { name: 'Kadın', value: femaleCount }
-      ].filter(d => d.value > 0),
-      facilityOccupancyData
+      activeStaffCount,
+      occupancyRate,
+      emptyBeds,
+      genderData,
+      hotelDistributionData,
+      facilityOccupancyList,
+      departmentDistributionList,
+      departedStaffCount,
+      departedStaffByDepartment
     };
-  }, [authorizedFacilities, facilityIds, accommodations, rooms, staff]);
 
-  // Open Maintenance
-  const openMaintenanceCount = useMemo(() => {
-    return maintenanceRequests.filter(req => req.status === 'open' && facilityIds.includes(req.facilityId)).length;
-  }, [maintenanceRequests, facilityIds]);
-
-  // Pending Staff
-  const pendingStaffCount = useMemo(() => {
-    let pending = staff.filter(s => s.status === 'pending_placement');
-    if (currentUser?.role === 'hotel_hr_manager') {
-      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
-      pending = pending.filter(s => hotelIds.includes(s.hotelId));
-    }
-    return pending.length;
-  }, [staff, currentUser]);
+  }, [rooms, accommodations, authorizedFacilityIds, staff, authorizedFacilities, hotels, currentUser]);
 
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -118,12 +182,9 @@ export default function Dashboard() {
       return (
         <div className="bg-white p-3 border border-[#E8E6E1] shadow-lg rounded-xl">
           <p className="font-bold text-[#2D332D] mb-1">{label}</p>
-          <p className="text-sm text-stone-600">Doluluk Oranı: <span className="font-bold">{payload[0].value}%</span></p>
-          {payload[0].payload.capacity && (
-            <p className="text-xs text-stone-400 mt-1">
-              {payload[0].payload.occupied} / {payload[0].payload.capacity} Yatak
-            </p>
-          )}
+          <p className="text-sm text-stone-600">
+            {payload[0].name === "Kişi" ? "Kişi Sayısı:" : "Değer:"} <span className="font-bold">{payload[0].value}</span>
+          </p>
         </div>
       );
     }
@@ -131,14 +192,16 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 pb-8">
+    <div className="space-y-8 pb-12 w-full max-w-7xl mx-auto">
+      
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Dashboard</h2>
+          <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Raporlama Merkezi</h2>
           <p className="text-stone-500 mt-1">
             {currentUser?.role === 'facility_manager' 
-              ? 'Sorumlu olduğunuz lojmanın anlık durumu.' 
-              : 'Zincir genelindeki personel lojmanlarına genel bakış.'}
+              ? 'Sorumlu olduğunuz lojmanların detaylı analizleri.' 
+              : 'Zincir genelindeki konaklama istatistikleri ve analizler.'}
           </p>
         </div>
         <div className="flex gap-3">
@@ -157,179 +220,237 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* 1. KPI Cards (4 Grid) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-[#2D332D] text-white p-6 rounded-[32px] shadow-sm relative overflow-hidden group">
-          <div className="relative z-10">
-            <div className="flex justify-between items-start mb-4">
-              <p className="text-sm text-stone-300 font-medium">Doluluk Oranı</p>
-              <Activity className="w-5 h-5 text-[#A4A895]" />
-            </div>
-            <div className="flex items-end gap-3">
-              <p className="text-4xl font-serif font-bold">{metrics.occupancyRate}%</p>
-            </div>
-            <div className="mt-4 w-full bg-stone-700 h-1.5 rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full ${Number(metrics.occupancyRate) > 90 ? 'bg-orange-500' : 'bg-[#D9D3C1]'}`} 
-                style={{ width: `${Math.min(100, Number(metrics.occupancyRate))}%` }}
-              ></div>
-            </div>
-          </div>
-          <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:scale-110 transition-transform duration-500">
-            <Building2 className="w-32 h-32" />
-          </div>
-        </div>
+        <Card className="bg-[#2D332D] text-white border-transparent">
+          <CardHeader>
+            <CardTitle className="text-stone-300" icon={Building2}>Toplam Lojman Kapasitesi</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-serif font-bold">{totalCapacity}</div>
+            <p className="text-xs text-stone-400 mt-2 font-medium">aktif odalardaki yatak sayısı</p>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white p-6 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-2">
-            <p className="text-sm text-stone-500 font-medium">Kapasite Kullanımı</p>
-            <Users className="w-5 h-5 text-stone-400" />
-          </div>
-          <div>
-            <div className="flex items-baseline gap-2">
-              <p className="text-4xl font-serif font-bold text-[#2D332D]">{metrics.occupiedBeds}</p>
-              <span className="text-stone-400 text-sm font-medium">/ {metrics.totalCapacity} Yatak</span>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <span className="text-xs font-bold px-2 py-1 bg-stone-100 text-stone-600 rounded-md">
-                Dolu: {metrics.occupiedBeds}
-              </span>
-              <span className="text-xs font-bold px-2 py-1 bg-[#F5F2ED] text-[#7C8363] rounded-md">
-                Boş: {metrics.emptyBeds}
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-2">
-            <p className="text-sm text-stone-500 font-medium">Yerleşim Bekleyen</p>
-            <AlertCircle className="w-5 h-5 text-stone-400" />
-          </div>
-          <div>
-            <p className="text-4xl font-serif font-bold text-[#2D332D]">{pendingStaffCount}</p>
-            <p className="text-xs text-stone-400 mt-3 font-medium flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-[#7C8363]" />
-              Havuzda bekleyen personel
+        <Card>
+          <CardHeader>
+            <CardTitle icon={Users}>Aktif Konaklayan Personel</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-serif font-bold text-[#2D332D]">{activeStaffCount}</div>
+            <p className="text-xs text-[#7C8363] mt-2 font-bold bg-[#F5F2ED] w-fit px-2 py-1 rounded-md">
+              Şu an lojmanda kalanlar
             </p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="bg-[#FFF8F3] p-6 rounded-[32px] border border-orange-100 shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-2">
-            <p className="text-sm text-orange-800/70 font-medium">Açık Arıza / Bakım</p>
-            <Wrench className="w-5 h-5 text-orange-400" />
-          </div>
-          <div>
-            <p className="text-4xl font-serif font-bold text-orange-800">{openMaintenanceCount}</p>
-            {openMaintenanceCount > 0 ? (
-              <p className="text-xs text-orange-700/80 mt-3 font-bold bg-orange-100/50 w-fit px-2 py-1 rounded-md">
-                Müdahale bekliyor
-              </p>
-            ) : (
-              <p className="text-xs text-stone-500 mt-3 font-medium">Tüm arızalar giderildi</p>
-            )}
-          </div>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle icon={Activity}>Doluluk Oranı</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-serif font-bold text-[#2D332D]">{occupancyRate.toFixed(1)}%</div>
+            <div className="mt-4 w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+              <div 
+                className={cn("h-full rounded-full transition-all duration-500", occupancyRate > 90 ? 'bg-orange-500' : 'bg-[#7C8363]')} 
+                style={{ width: `${Math.min(100, occupancyRate)}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle icon={BedDouble}>Boş Yatak Sayısı</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-serif font-bold text-[#2D332D]">{emptyBeds}</div>
+            <p className="text-xs text-stone-500 mt-2 font-medium">atanmaya uygun kapasite</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Bar Chart - Facility Occupancy */}
-        <div className="lg:col-span-2 bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col">
-          <div className="mb-6">
-            <h3 className="font-bold text-lg text-[#1A1C18]">Lojman Doluluk Oranları (%)</h3>
-            <p className="text-sm text-stone-500">Tesis bazlı doluluk kapasitesi kıyaslaması</p>
-          </div>
-          <div className="flex-1 w-full min-h-[300px]">
-             {metrics.facilityOccupancyData.length > 0 ? (
+      {/* 2. Distribution Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle icon={PieChartIcon}>Cinsiyet Dağılımı</CardTitle>
+            <p className="text-sm text-stone-500">Aktif konaklayan personelin demografisi</p>
+          </CardHeader>
+          <CardContent className="min-h-[280px] relative">
+             {genderData.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={genderData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={90}
+                        paddingAngle={4}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {genderData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.name === 'Erkek' ? GENDER_COLORS.male : GENDER_COLORS.female} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: '1px solid #E8E6E1', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        itemStyle={{ color: '#2D332D', fontWeight: 600 }}
+                      />
+                      <Legend 
+                        verticalAlign="bottom" 
+                        height={36} 
+                        iconType="circle"
+                        formatter={(value) => <span className="text-stone-600 font-semibold ml-1">{value}</span>}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8 text-[#2D332D]">
+                    <span className="text-3xl font-serif font-bold">{activeStaffCount}</span>
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-stone-400">Kişi</span>
+                  </div>
+                </>
+             ) : (
+                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
+                  <Users className="w-8 h-8 opacity-20" />
+                  <p className="text-sm font-medium">Veri bulunamadı</p>
+                </div>
+             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle icon={BarChart3}>Otele Göre Konaklama</CardTitle>
+            <p className="text-sm text-stone-500">Otellerin personelleri lojmanlarda ne kadar yer kaplıyor?</p>
+          </CardHeader>
+          <CardContent className="min-h-[280px]">
+             {hotelDistributionData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={metrics.facilityOccupancyData} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
+                  <BarChart data={hotelDistributionData} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8E6E1" />
                     <XAxis 
                       dataKey="name" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#78716C', fontSize: 12, fontWeight: 600 }}
+                      tick={{ fill: '#78716C', fontSize: 12, fontWeight: 500 }}
                       dy={10}
                     />
                     <YAxis 
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: '#78716C', fontSize: 12 }}
-                      domain={[0, 100]}
+                      allowDecimals={false}
                     />
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F5F5F4' }} />
-                    <Bar dataKey="Doluluk" radius={[6, 6, 0, 0]} maxBarSize={60}>
-                      {metrics.facilityOccupancyData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.Doluluk > 90 ? '#FB923C' : '#7C8363'} />
-                      ))}
-                    </Bar>
+                    <Bar dataKey="Kişi" fill="#7C8363" radius={[4, 4, 0, 0]} maxBarSize={50} />
                   </BarChart>
                 </ResponsiveContainer>
              ) : (
-                <div className="w-full h-full flex items-center justify-center text-stone-400 flex-col gap-2">
-                  <Building2 className="w-8 h-8 opacity-20" />
+                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
+                  <Building className="w-8 h-8 opacity-20" />
                   <p className="text-sm font-medium">Veri bulunamadı</p>
                 </div>
              )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* Pie Chart - Gender Distribution */}
-        <div className="bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col">
-          <div className="mb-2">
-            <h3 className="font-bold text-lg text-[#1A1C18]">Cinsiyet Dağılımı</h3>
-            <p className="text-sm text-stone-500">Mevcut konaklayan personel</p>
-          </div>
-          <div className="flex-1 w-full min-h-[250px] relative">
-            {metrics.genderData.length > 0 ? (
-              <>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={metrics.genderData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {metrics.genderData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.name === 'Erkek' ? GENDER_COLORS.male : GENDER_COLORS.female} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '12px', border: '1px solid #E8E6E1', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      itemStyle={{ color: '#2D332D', fontWeight: 600 }}
-                    />
-                    <Legend 
-                      verticalAlign="bottom" 
-                      height={36} 
-                      iconType="circle"
-                      formatter={(value) => <span className="text-stone-600 font-semibold ml-1">{value}</span>}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Center Label inside Donut */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8 text-[#2D332D]">
-                  <span className="text-3xl font-serif font-bold">{metrics.occupiedBeds}</span>
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-stone-400">Toplam</span>
-                </div>
-              </>
+      {/* 3. Detailed Analysis (Grid) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle icon={DoorOpen}>Lojman Bazlı Doluluk</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {facilityOccupancyList.length > 0 ? (
+              <div className="space-y-5">
+                {facilityOccupancyList.map(fac => (
+                  <div key={fac.id}>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-sm font-bold text-[#2D332D]">{fac.name}</span>
+                      <span className="text-xs font-semibold text-stone-500">
+                        {fac.occupied} / {fac.capacity} Yatak
+                      </span>
+                    </div>
+                    <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
+                      <div 
+                        className={cn("h-full rounded-full", fac.rate > 90 ? 'bg-orange-500' : 'bg-[#7C8363]')} 
+                        style={{ width: `${Math.min(100, fac.rate)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
-                <div className="w-full h-full flex items-center justify-center text-stone-400 flex-col gap-2">
-                  <Users className="w-8 h-8 opacity-20" />
-                  <p className="text-sm font-medium">Henüz konaklama yok</p>
-                </div>
+               <div className="py-8 text-center text-sm text-stone-500">Lojman verisi bulunamadı</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle icon={ListVideo}>Departmanlara Göre Dağılım</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {departmentDistributionList.length > 0 ? (
+               <div className="space-y-3">
+                 {departmentDistributionList.map((dept, index) => (
+                   <div key={index} className="flex justify-between items-center border-b border-stone-100 last:border-0 pb-3 last:pb-0">
+                     <div className="flex items-center gap-3">
+                       <div className="w-2 h-2 rounded-full bg-[#7C8363]" />
+                       <span className="text-sm font-medium text-stone-700">{dept.name}</span>
+                     </div>
+                     <span className="text-sm font-bold text-[#2D332D] bg-[#F5F2ED] px-2.5 py-0.5 rounded-md">
+                       {dept.count} Kişi
+                     </span>
+                   </div>
+                 ))}
+               </div>
+            ) : (
+               <div className="py-8 text-center text-sm text-stone-500">Departman verisi bulunamadı</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 4. Departed/Past Staff Report */}
+      <div className="mt-8 bg-stone-100/60 border border-stone-200 rounded-xl p-8 pt-6">
+        <div className="flex items-center gap-2 mb-6">
+          <LogOut className="w-5 h-5 text-stone-500" />
+          <h3 className="font-bold text-lg text-stone-800 tracking-tight">Geçmiş Dönem Raporları</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col justify-center items-center text-center">
+            <span className="text-xs uppercase tracking-widest font-bold text-stone-400 mb-2">Çıkış Yapan Personel</span>
+            <div className="text-5xl font-serif font-bold text-stone-800">{departedStaffCount}</div>
+            <p className="text-xs font-semibold text-stone-500 mt-2">Bugüne kadar ayrılanlar</p>
+          </div>
+          
+          <div className="md:col-span-2 bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+            <h4 className="text-sm font-bold text-stone-700 mb-4">En Çok Ayrılan Departmanlar</h4>
+            {departedStaffByDepartment.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {departedStaffByDepartment.map((dept, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-stone-50 border border-stone-100 rounded-lg px-4 py-2">
+                     <span className="text-sm font-semibold text-stone-700">{dept.name}</span>
+                     <span className="text-xs font-bold text-stone-500 bg-white border border-stone-200 px-2 py-0.5 rounded-md">
+                       {dept.count}
+                     </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-stone-400">Geçmiş konaklama kaydı bulunamadı.</p>
             )}
           </div>
         </div>
-
       </div>
+
     </div>
   );
 }
-
