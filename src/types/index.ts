@@ -29,8 +29,10 @@ export interface User {
   fullName: string;
   email: string;
   role: Role;
-  assignedHotelId?: string;
-  assignedFacilityId?: string;
+  assignedHotelId?: string; // Legacy
+  assignedFacilityId?: string; // Legacy
+  assignedHotelIds?: string[];
+  assignedFacilityIds?: string[];
   status?: 'active' | 'inactive';
 }
 

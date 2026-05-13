@@ -52,8 +52,12 @@ export default function StaffManagement() {
 
   // Form states
   const [showAddStaffForm, setShowAddStaffForm] = useState(false);
+  const defaultHotelId = currentUser?.role === 'hotel_hr_manager' 
+    ? (currentUser.assignedHotelIds?.[0] || currentUser.assignedHotelId || '') 
+    : '';
+
   const [newStaff, setNewStaff] = useState({
-    fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: currentUser?.role === 'hotel_hr_manager' ? (currentUser.assignedHotelId || '') : '', gender: 'male' as const
+    fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const
   });
 
   // Placement modal state
@@ -105,7 +109,10 @@ export default function StaffManagement() {
         if (!item.staff) return false;
         
         // Role based filtering
-        if (currentUser?.role === 'hotel_hr_manager' && item.hotel?.id !== currentUser.assignedHotelId) return false;
+        if (currentUser?.role === 'hotel_hr_manager') {
+          const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+          if (item.hotel && !hotelIds.includes(item.hotel.id)) return false;
+        }
 
         // UI filtering
         if (filterHotel && item.hotel?.id !== filterHotel) return false;
@@ -136,8 +143,14 @@ export default function StaffManagement() {
         if (!item.staff) return false;
         
         // Role based filtering
-        if (currentUser?.role === 'hotel_hr_manager' && item.hotel?.id !== currentUser.assignedHotelId) return false;
-        if (currentUser?.role === 'facility_manager' && item.facility?.id !== currentUser.assignedFacilityId) return false;
+        if (currentUser?.role === 'hotel_hr_manager') {
+          const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+          if (item.hotel && !hotelIds.includes(item.hotel.id)) return false;
+        }
+        if (currentUser?.role === 'facility_manager') {
+          const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+          if (item.facility && !facIds.includes(item.facility.id)) return false;
+        }
 
         // UI filtering
         if (filterHotel && item.hotel?.id !== filterHotel) return false;
@@ -177,8 +190,14 @@ export default function StaffManagement() {
         if (!item.staff) return false;
         
         // Role based filtering
-        if (currentUser?.role === 'hotel_hr_manager' && item.hotel?.id !== currentUser.assignedHotelId) return false;
-        if (currentUser?.role === 'facility_manager' && item.facility?.id !== currentUser.assignedFacilityId) return false;
+        if (currentUser?.role === 'hotel_hr_manager') {
+          const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+          if (item.hotel && !hotelIds.includes(item.hotel.id)) return false;
+        }
+        if (currentUser?.role === 'facility_manager') {
+          const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+          if (item.facility && !facIds.includes(item.facility.id)) return false;
+        }
 
         // UI filtering
         if (filterHotel && item.hotel?.id !== filterHotel) return false;
@@ -211,7 +230,12 @@ export default function StaffManagement() {
     if (!newStaff.fullName || !newStaff.hotelId || !canAddStaff) return;
     addStaff({ ...newStaff, status: 'pending_placement' });
     setShowAddStaffForm(false);
-    setNewStaff({ fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: currentUser?.role === 'hotel_hr_manager' ? (currentUser.assignedHotelId || '') : '', gender: 'male' });
+    
+    // reset form
+    const defaultHotelId = currentUser?.role === 'hotel_hr_manager' 
+      ? (currentUser.assignedHotelIds?.[0] || currentUser.assignedHotelId || '') 
+      : '';
+    setNewStaff({ fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' });
   };
 
   const handlePlaceStaff = () => {

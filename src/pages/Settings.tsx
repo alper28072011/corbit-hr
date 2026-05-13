@@ -26,13 +26,20 @@ export default function Settings() {
     key: ''
   });
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    fullName: string;
+    email: string;
+    role: string;
+    assignedHotelIds: string[];
+    assignedFacilityIds: string[];
+    status: 'active' | 'inactive';
+  }>({
     fullName: '',
     email: '',
     role: 'hotel_hr_manager',
-    assignedHotelId: '',
-    assignedFacilityId: '',
-    status: 'active' as 'active' | 'inactive'
+    assignedHotelIds: [],
+    assignedFacilityIds: [],
+    status: 'active'
   });
 
   // Security check
@@ -50,13 +57,17 @@ export default function Settings() {
     e.preventDefault();
     if (!formData.fullName || !formData.email) return;
 
+    // Both hr_manager and facility_manager might need these now, or we just save what's selected
+    const hotelIds = formData.assignedHotelIds;
+    const facilityIds = formData.assignedFacilityIds;
+
     if (editingUser) {
       updateUser(editingUser, {
         fullName: formData.fullName,
         email: formData.email,
         role: formData.role,
-        assignedHotelId: formData.role === 'hotel_hr_manager' ? formData.assignedHotelId : undefined,
-        assignedFacilityId: formData.role === 'facility_manager' ? formData.assignedFacilityId : undefined,
+        assignedHotelIds: hotelIds,
+        assignedFacilityIds: facilityIds,
         status: formData.status
       });
     } else {
@@ -64,8 +75,8 @@ export default function Settings() {
         fullName: formData.fullName,
         email: formData.email,
         role: formData.role,
-        assignedHotelId: formData.role === 'hotel_hr_manager' ? formData.assignedHotelId : undefined,
-        assignedFacilityId: formData.role === 'facility_manager' ? formData.assignedFacilityId : undefined,
+        assignedHotelIds: hotelIds,
+        assignedFacilityIds: facilityIds,
         status: formData.status
       });
     }
@@ -75,7 +86,7 @@ export default function Settings() {
   const closeForm = () => {
     setShowAddForm(false);
     setEditingUser(null);
-    setFormData({ fullName: '', email: '', role: 'hotel_hr_manager', assignedHotelId: '', assignedFacilityId: '', status: 'active' });
+    setFormData({ fullName: '', email: '', role: 'hotel_hr_manager', assignedHotelIds: [], assignedFacilityIds: [], status: 'active' });
   };
 
   const startEdit = (userId: string) => {
@@ -85,8 +96,8 @@ export default function Settings() {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
-      assignedHotelId: user.assignedHotelId || '',
-      assignedFacilityId: user.assignedFacilityId || '',
+      assignedHotelIds: user.assignedHotelIds || (user.assignedHotelId ? [user.assignedHotelId] : []),
+      assignedFacilityIds: user.assignedFacilityIds || (user.assignedFacilityId ? [user.assignedFacilityId] : []),
       status: user.status || 'active'
     });
     setEditingUser(userId);
@@ -200,33 +211,74 @@ export default function Settings() {
               </select>
             </div>
 
-            {formData.role === 'hotel_hr_manager' && (
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Sorumlu Olduğu Otel</label>
-                <select required value={formData.assignedHotelId} onChange={e => setFormData({...formData, assignedHotelId: e.target.value})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]">
-                  <option value="">Otel Seçin...</option>
-                  {hotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-                </select>
+            {['hotel_hr_manager', 'facility_manager'].includes(formData.role) && (
+              <div className="md:col-span-2 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 mb-2">Sorumlu Olduğu Otel(ler)</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {hotels.map(h => (
+                      <label key={h.id} className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-stone-50">
+                        <input
+                          type="checkbox"
+                          checked={formData.assignedHotelIds.includes(h.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked 
+                              ? [...formData.assignedHotelIds, h.id] 
+                              : formData.assignedHotelIds.filter(id => id !== h.id);
+                            
+                            // Also clear facility ids that aren't in the selected hotels anymore
+                            const activeHotelIds = newIds;
+                            const newFacilityIds = formData.assignedFacilityIds.filter(fId => {
+                              const f = facilities.find(fac => fac.id === fId);
+                              return f && activeHotelIds.includes(f.hotelId);
+                            });
+
+                            setFormData({...formData, assignedHotelIds: newIds, assignedFacilityIds: newFacilityIds});
+                          }}
+                          className="rounded border-[#E8E6E1] text-[#7C8363] focus:ring-[#7C8363] w-4 h-4"
+                        />
+                        <span className="text-sm text-stone-700">{h.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {formData.assignedHotelIds.length === 0 && (
+                    <p className="text-xs text-red-500 mt-1">Lütfen en az bir otel seçin.</p>
+                  )}
+                </div>
+
+                {formData.role === 'facility_manager' && formData.assignedHotelIds.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-500 mb-2">Sorumlu Olduğu Lojman(lar)</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {facilities.filter(f => formData.assignedHotelIds.includes(f.hotelId)).map(f => (
+                        <label key={f.id} className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-stone-50">
+                          <input
+                            type="checkbox"
+                            checked={formData.assignedFacilityIds.includes(f.id)}
+                            onChange={(e) => {
+                              const newIds = e.target.checked 
+                                ? [...formData.assignedFacilityIds, f.id] 
+                                : formData.assignedFacilityIds.filter(id => id !== f.id);
+                              setFormData({...formData, assignedFacilityIds: newIds});
+                            }}
+                            className="rounded border-[#E8E6E1] text-[#7C8363] focus:ring-[#7C8363] w-4 h-4"
+                          />
+                          <span className="text-sm text-stone-700">{f.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {formData.role === 'facility_manager' && (
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Sorumlu Olduğu Lojman</label>
-                <select required value={formData.assignedFacilityId} onChange={e => setFormData({...formData, assignedFacilityId: e.target.value})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]">
-                  <option value="">Lojman Seçin...</option>
-                  {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </select>
-              </div>
-            )}
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Durum</label>
-                <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as 'active' | 'inactive'})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]">
-                  <option value="active">Aktif</option>
-                  <option value="inactive">Pasif</option>
-                </select>
-              </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-stone-500 mb-1">Durum</label>
+              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as 'active' | 'inactive'})} className="w-1/2 border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]">
+                <option value="active">Aktif</option>
+                <option value="inactive">Pasif</option>
+              </select>
+            </div>
 
             <div className="md:col-span-2 flex justify-end gap-2 mt-4">
               <button type="button" onClick={closeForm} className="px-4 py-2 border border-stone-200 hover:bg-stone-50 rounded-xl text-stone-600 font-semibold transition-colors">İptal</button>
@@ -264,9 +316,36 @@ export default function Settings() {
                     {roles.length > 0 ? roles.find(r => r.key === user.role)?.name || user.role : ROLE_NAMES[user.role] || user.role}
                   </td>
                   <td className="py-4 text-stone-500">
-                    {user.role === 'hotel_hr_manager' ? hotels.find(h => h.id === user.assignedHotelId)?.name || '-' : ''}
-                    {user.role === 'facility_manager' ? facilities.find(f => f.id === user.assignedFacilityId)?.name || '-' : ''}
-                    {['super_admin', 'hr_director'].includes(user.role) ? 'Tüm Tesisler' : ''}
+                    {['super_admin', 'hr_director'].includes(user.role) ? 'Tüm Tesisler' : (
+                      <div className="flex flex-col gap-1">
+                        {user.role === 'hotel_hr_manager' && (
+                          <span className="text-sm">
+                            {(user.assignedHotelIds || (user.assignedHotelId ? [user.assignedHotelId] : []))
+                              .map(id => hotels.find(h => h.id === id)?.name)
+                              .filter(Boolean)
+                              .join(', ') || '-'}
+                          </span>
+                        )}
+                        {user.role === 'facility_manager' && (
+                          <>
+                            <span className="text-xs text-stone-400 font-semibold uppercase">Oteller:</span>
+                            <span className="text-sm mb-1">
+                              {(user.assignedHotelIds || (user.assignedHotelId ? [user.assignedHotelId] : []))
+                                .map(id => hotels.find(h => h.id === id)?.name)
+                                .filter(Boolean)
+                                .join(', ') || '-'}
+                            </span>
+                            <span className="text-xs text-stone-400 font-semibold uppercase">Lojmanlar:</span>
+                            <span className="text-sm">
+                              {(user.assignedFacilityIds || (user.assignedFacilityId ? [user.assignedFacilityId] : []))
+                                .map(id => facilities.find(f => f.id === id)?.name)
+                                .filter(Boolean)
+                                .join(', ') || '-'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="py-4 text-right">
                     <div className="flex justify-end gap-2">

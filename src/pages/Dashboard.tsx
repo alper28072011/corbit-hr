@@ -35,10 +35,12 @@ export default function Dashboard() {
   const authorizedFacilities = useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === 'facility_manager') {
-      return facilities.filter(f => f.id === currentUser.assignedFacilityId);
+      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      return facilities.filter(f => facIds.includes(f.id));
     }
     if (currentUser.role === 'hotel_hr_manager') {
-      return facilities.filter(f => f.hotelId === currentUser.assignedHotelId);
+      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+      return facilities.filter(f => hotelIds.includes(f.hotelId));
     }
     return facilities;
   }, [facilities, currentUser]);
@@ -104,7 +106,8 @@ export default function Dashboard() {
   const pendingStaffCount = useMemo(() => {
     let pending = staff.filter(s => s.status === 'pending_placement');
     if (currentUser?.role === 'hotel_hr_manager') {
-      pending = pending.filter(s => s.hotelId === currentUser.assignedHotelId);
+      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+      pending = pending.filter(s => hotelIds.includes(s.hotelId));
     }
     return pending.length;
   }, [staff, currentUser]);

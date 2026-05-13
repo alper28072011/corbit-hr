@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
@@ -14,10 +14,13 @@ export default function RoomManagement() {
 
   useEffect(() => {
     if (currentUser?.role === 'facility_manager') {
-      const facility = facilities.find(f => f.id === currentUser.assignedFacilityId);
-      if (facility) {
-        setSelectedHotelId(facility.hotelId);
-        setSelectedFacilityId(facility.id);
+      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      if (facIds.length > 0 && !selectedFacilityId) {
+        const facility = facilities.find(f => f.id === facIds[0]);
+        if (facility) {
+          setSelectedHotelId(facility.hotelId);
+          setSelectedFacilityId(facility.id);
+        }
       }
     }
   }, [currentUser, facilities]);
@@ -69,9 +72,21 @@ export default function RoomManagement() {
     );
   }
 
-  const hotelFacilities = currentUser?.role === 'facility_manager' 
-    ? facilities.filter(f => f.id === currentUser.assignedFacilityId)
-    : facilities.filter(f => f.hotelId === selectedHotelId);
+  const availableHotels = useMemo(() => {
+    if (!currentUser) return [];
+    if (['super_admin', 'hr_director'].includes(currentUser.role)) return hotels;
+    const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+    return hotels.filter(h => hotelIds.includes(h.id));
+  }, [hotels, currentUser]);
+
+  const hotelFacilities = useMemo(() => {
+    let facs = facilities.filter(f => f.hotelId === selectedHotelId);
+    if (currentUser?.role === 'facility_manager') {
+      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      facs = facs.filter(f => facIds.includes(f.id));
+    }
+    return facs;
+  }, [facilities, selectedHotelId, currentUser]);
     
   const facilityRooms = rooms.filter(r => r.facilityId === selectedFacilityId);
 
@@ -132,11 +147,10 @@ export default function RoomManagement() {
                   setSelectedHotelId(e.target.value);
                   setSelectedFacilityId('');
                 }}
-                disabled={currentUser?.role === 'facility_manager'}
-                className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#FDFCFB] disabled:opacity-50"
+                className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#FDFCFB]"
               >
                 <option value="">Otel Seçiniz...</option>
-                {hotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                {availableHotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
               </select>
             </div>
 
@@ -145,7 +159,7 @@ export default function RoomManagement() {
               <select 
                 value={selectedFacilityId}
                 onChange={(e) => setSelectedFacilityId(e.target.value)}
-                disabled={!selectedHotelId || currentUser?.role === 'facility_manager'}
+                disabled={!selectedHotelId || hotelFacilities.length === 0}
                 className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#FDFCFB] disabled:opacity-50"
               >
                 <option value="">Lojman Seçiniz...</option>

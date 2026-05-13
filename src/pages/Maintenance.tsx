@@ -59,7 +59,10 @@ export default function Maintenance() {
   };
 
   const visibleRequests = currentUser?.role === 'facility_manager' 
-    ? maintenanceRequests.filter(req => req.facilityId === currentUser.assignedFacilityId)
+    ? maintenanceRequests.filter(req => {
+        const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+        return facIds.includes(req.facilityId);
+      })
     : maintenanceRequests;
 
   const getColItems = (status: MaintenanceStatus) => {
