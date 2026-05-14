@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceRequest, User, RoleConfig } from '../types';
+import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceRequest, User, RoleConfig, ActionLog } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
@@ -57,6 +57,11 @@ interface AppState {
   addMaintenanceRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status' | 'resolvedAt'>) => Promise<void>;
   updateMaintenanceStatus: (id: string, status: MaintenanceRequest['status']) => Promise<void>;
   deleteMaintenanceRequest: (id: string) => Promise<void>;
+  
+  // Logs
+  logs: ActionLog[];
+  setLogs: (logs: ActionLog[]) => void;
+  addLog: (log: Omit<ActionLog, 'id'>) => Promise<void>;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -69,6 +74,7 @@ export const useStore = create<AppState>((set, get) => ({
       staff: [],
       accommodations: [],
       maintenanceRequests: [],
+      logs: [],
 
       setUsers: (users) => set({ users }),
       setRoles: (roles) => set({ roles }),
@@ -78,8 +84,17 @@ export const useStore = create<AppState>((set, get) => ({
       setStaff: (staff) => set({ staff }),
       setAccommodations: (accommodations) => set({ accommodations }),
       setMaintenanceRequests: (maintenanceRequests) => set({ maintenanceRequests }),
+      setLogs: (logs) => set({ logs }),
 
       setCurrentUser: (user) => set({ currentUser: user }),
+
+      addLog: async (logData) => {
+        try {
+          await addDoc(collection(db, "logs"), logData);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.CREATE, "logs");
+        }
+      },
 
       addRole: async (roleData) => {
         try {
@@ -198,7 +213,8 @@ export const useStore = create<AppState>((set, get) => ({
 
       updateRoom: async (id, data) => {
          try {
-           await updateDoc(doc(db, "rooms", id), data);
+           const cleanData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
+           await updateDoc(doc(db, "rooms", id), cleanData);
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `rooms/${id}`);
          }
@@ -214,7 +230,18 @@ export const useStore = create<AppState>((set, get) => ({
 
       addStaff: async (staffData) => {
          try {
-           await addDoc(collection(db, "staff"), staffData);
+           const docRef = await addDoc(collection(db, "staff"), staffData);
+           const state = get();
+           if (state.currentUser) {
+             await get().addLog({
+               entityId: docRef.id,
+               entityType: 'staff',
+               action: 'create',
+               changes: 'Personel kaydı oluşturuldu.',
+               performedBy: state.currentUser.fullName || state.currentUser.email,
+               timestamp: Date.now()
+             });
+           }
          } catch (error) {
            handleFirestoreError(error, OperationType.CREATE, "staff");
          }
@@ -222,7 +249,32 @@ export const useStore = create<AppState>((set, get) => ({
 
       updateStaff: async (id, data) => {
          try {
+           const state = get();
+           const oldData = state.staff.find(s => s.id === id);
+           
            await updateDoc(doc(db, "staff", id), data);
+
+           if (state.currentUser && oldData) {
+             const changes: string[] = [];
+             Object.entries(data).forEach(([key, newValue]) => {
+               const oldValue = (oldData as any)[key];
+               if (oldValue !== newValue && key !== 'status') {
+                   // Status usually updated automatically by system actions
+                   changes.push(`${key}: ${oldValue} -> ${newValue}`);
+               }
+             });
+
+             if (changes.length > 0) {
+               await get().addLog({
+                 entityId: id,
+                 entityType: 'staff',
+                 action: 'update',
+                 changes: `Personel bilgileri güncellendi: ${changes.join(', ')}`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+               });
+             }
+           }
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `staff/${id}`);
          }
@@ -230,8 +282,21 @@ export const useStore = create<AppState>((set, get) => ({
       
       deleteStaff: async (id) => {
          try {
+           const state = get();
+           const oldData = state.staff.find(s => s.id === id);
+           
            await deleteDoc(doc(db, "staff", id));
-           // Optional: you could also delete or cleanup related accommodations
+           
+           if (state.currentUser && oldData) {
+              await get().addLog({
+                 entityId: id,
+                 entityType: 'staff',
+                 action: 'delete',
+                 changes: `Personel kaydı silindi (${oldData.fullName}).`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
          } catch (error) {
            handleFirestoreError(error, OperationType.DELETE, `staff/${id}`);
          }
@@ -239,6 +304,7 @@ export const useStore = create<AppState>((set, get) => ({
         
       placeStaff: async (staffId, facilityId, roomId) => {
          try {
+           const state = get();
            const accData = {
               staffId,
               facilityId,
@@ -248,6 +314,21 @@ export const useStore = create<AppState>((set, get) => ({
            };
            await addDoc(collection(db, "accommodations"), accData);
            await updateDoc(doc(db, "staff", staffId), { status: 'placed' });
+           
+           if (state.currentUser) {
+              const fac = state.facilities.find(f => f.id === facilityId);
+              const rm = state.rooms.find(r => r.id === roomId);
+              const roomStr = fac && rm ? `${fac.name} / ${rm.roomNumber}` : 'Bilinmeyen Oda';
+              
+              await get().addLog({
+                 entityId: staffId,
+                 entityType: 'staff',
+                 action: 'check_in',
+                 changes: `Personel lojmana yerleştirildi: ${roomStr}`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
          } catch (error) {
            handleFirestoreError(error, OperationType.CREATE, "accommodations");
          }
@@ -264,6 +345,17 @@ export const useStore = create<AppState>((set, get) => ({
              checkOutDate: checkoutDate 
            });
            await updateDoc(doc(db, "staff", acc.staffId), { status: 'left' });
+           
+           if (state.currentUser) {
+              await get().addLog({
+                 entityId: acc.staffId,
+                 entityType: 'staff',
+                 action: 'check_out',
+                 changes: `Personel çıkışı yapıldı. (Çıkış Tarihi: ${checkoutDate})`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }
@@ -280,6 +372,17 @@ export const useStore = create<AppState>((set, get) => ({
              checkOutDate: null 
            });
            await updateDoc(doc(db, "staff", acc.staffId), { status: 'placed' });
+           
+           if (state.currentUser) {
+              await get().addLog({
+                 entityId: acc.staffId,
+                 entityType: 'staff',
+                 action: 'update',
+                 changes: `Personel çıkış işlemi geri alındı. Personel tekrar lojmanda.`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }
@@ -287,10 +390,28 @@ export const useStore = create<AppState>((set, get) => ({
 
       changeRoom: async (accommodationId, newFacilityId, newRoomId) => {
          try {
+           const state = get();
+           const acc = state.accommodations.find(a => a.id === accommodationId);
+           
            await updateDoc(doc(db, "accommodations", accommodationId), {
              facilityId: newFacilityId,
              roomId: newRoomId
            });
+           
+           if (state.currentUser && acc) {
+              const fac = state.facilities.find(f => f.id === newFacilityId);
+              const rm = state.rooms.find(r => r.id === newRoomId);
+              const roomStr = fac && rm ? `${fac.name} / ${rm.roomNumber}` : 'Bilinmeyen Oda';
+              
+              await get().addLog({
+                 entityId: acc.staffId,
+                 entityType: 'staff',
+                 action: 'room_change',
+                 changes: `Oda değiştirildi. Yeni Oda: ${roomStr}`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }

@@ -72,6 +72,16 @@ export interface Accommodation {
   status: 'active' | 'checked_out';
 }
 
+export interface ActionLog {
+  id: string;
+  entityId: string;
+  entityType: 'staff' | 'room' | 'facility';
+  action: 'create' | 'update' | 'delete' | 'check_in' | 'check_out' | 'room_change';
+  changes: string;
+  performedBy: string;
+  timestamp: number;
+}
+
 export type MaintenanceStatus = 'open' | 'in_progress' | 'resolved';
 
 export interface MaintenanceRequest {

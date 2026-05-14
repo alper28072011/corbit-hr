@@ -16,6 +16,8 @@ export const PERMISSION_KEYS = {
   change_room: 'change_room',
   view_document: 'view_document',
   
+  view_logs: 'view_logs',
+  
   view_maintenance: 'view_maintenance',
   manage_maintenance: 'manage_maintenance',
   
@@ -37,6 +39,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   delete_staff: 'Personel Kaydı Sil',
   change_room: 'Oda Değiştir',
   view_document: 'Belge Görüntüle',
+  view_logs: 'İşlem Geçmişi Görüntüle',
   view_maintenance: 'Arızaları Görüntüle',
   manage_maintenance: 'Arıza Kapat / Yönet',
   view_settings: 'Ayarları Görüntüle',
@@ -44,9 +47,9 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   super_admin: Object.values(PERMISSION_KEYS) as PermissionKey[],
-  hr_director: ['view_hotel_management', 'view_room_management', 'view_staff_management', 'view_maintenance'],
+  hr_director: ['view_hotel_management', 'view_room_management', 'view_staff_management', 'edit_staff', 'view_logs', 'view_maintenance'],
   hotel_hr_manager: ['view_staff_management', 'add_staff_request'],
-  facility_manager: ['view_room_management', 'edit_room_management', 'view_staff_management', 'place_staff', 'checkout_staff', 'view_maintenance', 'manage_maintenance']
+  facility_manager: ['view_room_management', 'edit_room_management', 'view_staff_management', 'place_staff', 'checkout_staff', 'edit_staff', 'view_logs', 'view_maintenance', 'manage_maintenance']
 };
 
 export function hasPermission(userRole: Role | undefined, permissionKey: string | string[], rolesConfig?: RoleConfig[]): boolean {

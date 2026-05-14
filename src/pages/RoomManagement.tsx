@@ -90,7 +90,7 @@ export default function RoomManagement() {
       bedCount: room.bedCount,
       genderType: room.genderType,
       status: room.status,
-      notes: room.notes
+      notes: room.notes || ''
     });
   };
 
@@ -176,36 +176,23 @@ export default function RoomManagement() {
       </div>
 
       {/* Toolbar */}
-      <div className="card-standard p-4 flex flex-col md:flex-row gap-4 bg-[#FDFCFB] shrink-0 md:items-center">
-        <div className="flex items-center gap-4 shrink-0">
-          <span className="text-sm font-bold text-stone-600 uppercase tracking-wider">Lojman Seçin:</span>
-          <select 
-            value={selectedFacilityId}
-            onChange={(e) => setSelectedFacilityId(e.target.value)}
-            className="flex-1 max-w-sm px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium min-w-[200px]"
-          >
-            <option value="" disabled>Lojman Seçiniz...</option>
-            {availableFacilities.map(f => {
-              const hotelNames = f.allowedHotelIds?.map(id => hotels.find(h => h.id === id)?.name).filter(Boolean).join(', ') || 'Bilinmeyen Otel';
-              return <option key={f.id} value={f.id}>{hotelNames} - {f.name} (Kapasite: {f.capacity})</option>;
-            })}
-          </select>
-        </div>
+      <div className="card-standard p-4 flex flex-col md:flex-row justify-between gap-4 bg-[#FDFCFB] shrink-0 md:items-center">
+        {selectedFacilityId ? (
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input 
+              type="text" 
+              placeholder="Oda no veya açıklama ile ara..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm transition-all"
+            />
+          </div>
+        ) : <div className="flex-1 max-w-md md:block hidden"></div>}
 
-        {selectedFacilityId && (
-          <>
-            <div className="h-8 w-px bg-[#E8E6E1] hidden md:block" />
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-              <input 
-                type="text" 
-                placeholder="Oda no veya açıklama ile ara..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm transition-all"
-              />
-            </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 hide-scrollbar items-center">
+        <div className="flex items-center gap-3 shrink-0 overflow-x-auto pb-2 md:pb-0 hide-scrollbar w-full md:w-auto overflow-y-hidden md:justify-end">
+          {selectedFacilityId && (
+            <>
               <select 
                 value={filterBlock} 
                 onChange={(e) => setFilterBlock(e.target.value)}
@@ -234,9 +221,21 @@ export default function RoomManagement() {
                 <option value="maintenance">Bakımda</option>
                 <option value="inactive">Pasif</option>
               </select>
-            </div>
-          </>
-        )}
+              <div className="h-8 w-px bg-[#E8E6E1] hidden md:block mx-1" />
+            </>
+          )}
+
+          <select 
+            value={selectedFacilityId}
+            onChange={(e) => setSelectedFacilityId(e.target.value)}
+            className="flex-none max-w-sm px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#7C8363] text-white shadow-sm font-semibold min-w-[200px]"
+          >
+            <option value="" disabled className="bg-white text-stone-700">Lojman Seçiniz...</option>
+            {availableFacilities.map(f => {
+              return <option key={f.id} value={f.id} className="bg-white text-stone-700">{f.name}</option>;
+            })}
+          </select>
+        </div>
       </div>
 
       {showAddForm && (

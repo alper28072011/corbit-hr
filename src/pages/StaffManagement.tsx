@@ -1,5 +1,5 @@
 import React, { useState, useMemo, ReactNode, useRef } from "react";
-import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX } from "lucide-react";
+import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
@@ -65,6 +65,16 @@ export default function StaffManagement() {
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
 
+  // Edit Modal State
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: ''
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Logs Modal State
+  const [logsModalStaffId, setLogsModalStaffId] = useState<string | null>(null);
+
   // Global Search & Filters
   const [globalSearch, setGlobalSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -89,6 +99,7 @@ export default function StaffManagement() {
   const canDeleteStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.delete_staff, roles);
   const canChangeRoom = hasPermission(currentUser?.role, PERMISSION_KEYS.change_room, roles);
   const canViewDoc = hasPermission(currentUser?.role, PERMISSION_KEYS.view_document, roles);
+  const canViewLogs = hasPermission(currentUser?.role, 'view_logs', roles);
 
   const availableHotels = useMemo(() => {
     if (!currentUser) return [];
@@ -198,6 +209,32 @@ export default function StaffManagement() {
     setSelectedStaffIdToPlace(null);
     setSelectedFacilityId('');
     setSelectedRoomId('');
+  };
+
+  const handleOpenEdit = (staffData: import('../types').Staff) => {
+    setEditForm({
+      fullName: staffData.fullName,
+      tcNo: staffData.tcNo,
+      phone: staffData.phone,
+      department: staffData.department,
+      position: staffData.position,
+      hotelId: staffData.hotelId,
+      gender: staffData.gender,
+      status: staffData.status
+    });
+    setEditingStaffId(staffData.id);
+  };
+
+  const handleSaveEdit = async (e: import('react').FormEvent) => {
+    e.preventDefault();
+    if (!editingStaffId) return;
+    setIsSavingEdit(true);
+    try {
+      await useStore.getState().updateStaff(editingStaffId, editForm);
+      setEditingStaffId(null);
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const staffToPlace = staff.find(s => s.id === selectedStaffIdToPlace);
@@ -410,9 +447,17 @@ export default function StaffManagement() {
                              </button>
                           )}
                           
+                          {canViewLogs && (
+                            <button 
+                              onClick={() => setLogsModalStaffId(s.id)}
+                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                            >
+                              <Clock className="w-4 h-4" /> İşlem Geçmişi
+                            </button>
+                          )}
                           {canEditStaff && (
                             <button 
-                              onClick={() => alert("Personel düzenleme ekranı geliştirme aşamasındadır.")}
+                              onClick={() => handleOpenEdit(s)}
                               className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
                             >
                               <Edit2 className="w-4 h-4" /> Düzenle
@@ -551,6 +596,137 @@ export default function StaffManagement() {
           </div>
         </div>
       )}
+
+      {/* Edit Staff Modal */}
+      {editingStaffId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]">
+            <h3 className="text-xl font-bold mb-6 text-[#2D332D]">Personel Düzenle</h3>
+            <form onSubmit={handleSaveEdit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Ad Soyad *</label>
+                <input required type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">TC Kimlik / Pasaport *</label>
+                <input required type="text" value={editForm.tcNo} onChange={e => setEditForm({...editForm, tcNo: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Telefon</label>
+                <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çalıştığı Otel *</label>
+                <select 
+                  required 
+                  value={editForm.hotelId} 
+                  onChange={e => setEditForm({...editForm, hotelId: e.target.value})} 
+                  className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] disabled:opacity-50"
+                  disabled={currentUser?.role === 'hotel_hr_manager'}
+                >
+                  <option value="">Seçiniz...</option>
+                  {availableHotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Cinsiyet *</label>
+                <select value={editForm.gender} onChange={e => setEditForm({...editForm, gender: e.target.value as 'male'|'female'})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
+                  <option value="male">Erkek</option>
+                  <option value="female">Kadın</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Departman</label>
+                <input type="text" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Görev / Pozisyon</label>
+                <input type="text" value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              
+              <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+                <button type="button" onClick={() => setEditingStaffId(null)} className="px-6 py-2 border border-[#E8E6E1] bg-white text-stone-600 rounded-xl hover:bg-stone-50 font-semibold text-sm">İptal</button>
+                <button type="submit" disabled={isSavingEdit} className="px-6 py-2 bg-[#7C8363] text-white rounded-xl hover:bg-[#6A7152] font-semibold text-sm flex items-center gap-2">
+                  {isSavingEdit ? 'Kaydediliyor...' : <><Edit2 className="w-4 h-4"/> Kaydet</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Logs Modal */}
+      {logsModalStaffId && (
+        <StaffLogsModal staffId={logsModalStaffId} onClose={() => setLogsModalStaffId(null)} />
+      )}
+    </div>
+  );
+}
+
+function StaffLogsModal({ staffId, onClose }: { staffId: string, onClose: () => void }) {
+  const allLogs = useStore(s => s.logs);
+  const staffLogs = useMemo(() => {
+    return allLogs.filter(l => l.entityId === staffId).sort((a,b) => b.timestamp - a.timestamp);
+  }, [allLogs, staffId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl relative">
+        <div className="flex justify-between items-start shrink-0 mb-4 pb-4 border-b border-stone-100">
+          <div>
+            <h3 className="text-xl font-bold text-[#2D332D] flex items-center gap-2">
+              <Clock className="w-5 h-5 text-stone-400" /> İşlem Geçmişi
+            </h3>
+            <p className="text-sm text-stone-500 mt-1">Personel üzerinde yapılan işlemler ve değişiklikler</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-stone-400 hover:text-stone-700 bg-stone-50 rounded-xl transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2">
+          {staffLogs.length === 0 ? (
+            <div className="py-12 flex items-center justify-center text-stone-500 text-sm">
+              Bu personel için henüz bir işlem kaydı bulunmuyor.
+            </div>
+          ) : (
+            <div className="relative border-l-2 border-stone-100 ml-3 py-6 space-y-8">
+              {staffLogs.map((log) => {
+                 let icon = <Edit2 className="w-4 h-4 text-[#7C8363]" />;
+                 if (log.action === 'create') icon = <UserPlus className="w-4 h-4 text-emerald-600" />;
+                 if (log.action === 'delete') icon = <Trash2 className="w-4 h-4 text-red-500" />;
+                 if (log.action === 'check_in') icon = <CheckCircle className="w-4 h-4 text-emerald-600" />;
+                 if (log.action === 'check_out') icon = <LogOut className="w-4 h-4 text-orange-500" />;
+                 if (log.action === 'room_change') icon = <Replace className="w-4 h-4 text-blue-500" />;
+
+                 return (
+                  <div key={log.id} className="relative pl-6">
+                    <span className="absolute -left-6 top-1 w-6 overflow-hidden">
+                       <div className="w-2.5 h-2.5 bg-white border-2 border-stone-300 rounded-full ml-1.5 mt-0.5"></div>
+                    </span>
+                    <div className="bg-stone-50 border border-stone-100 rounded-xl p-4 shadow-sm relative">
+                       <span className="absolute -left-[35px] top-4 w-6 h-6 bg-white border border-stone-100 shadow-sm rounded-full flex items-center justify-center">
+                         {icon}
+                       </span>
+                       <div className="flex justify-between items-start gap-4 mb-2">
+                         <span className="text-xs font-bold font-mono text-stone-500 uppercase tracking-widest bg-stone-100 px-2 py-1 rounded">
+                           {new Date(log.timestamp).toLocaleString('tr-TR')}
+                         </span>
+                         <span className="text-xs text-stone-500 font-medium whitespace-nowrap bg-white border border-stone-200 px-2 py-0.5 rounded-full shadow-sm">
+                           {log.performedBy || 'Sistem'}
+                         </span>
+                       </div>
+                       <p className="text-sm text-[#2D332D] leading-relaxed">
+                         {log.changes}
+                       </p>
+                    </div>
+                  </div>
+                 );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
