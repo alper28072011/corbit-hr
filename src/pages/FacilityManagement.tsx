@@ -3,6 +3,7 @@ import { Plus, Hotel as HotelIcon, Building, Trash2, Edit2, ChevronRight, Inbox,
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
+import { PageHeader } from "../components/layout/PageHeader";
 
 export default function FacilityManagement() {
   const { hotels, facilities, addHotel, deleteHotel, addFacility, updateFacility, deleteFacility, currentUser, roles } = useStore();
@@ -81,15 +82,15 @@ export default function FacilityManagement() {
   const selectedHotelFacilities = facilities.filter(f => f.hotelId === selectedHotelId);
 
   return (
-    <div className="space-y-8 pb-8">
-      <div>
-        <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Tesis Yönetimi</h2>
-        <p className="text-stone-500 mt-1">Oteller, lojman binaları ve kat planları yönetimi.</p>
-      </div>
+    <div className="w-full h-full flex flex-col p-6 space-y-6">
+      <PageHeader
+        title="Tesis Yönetimi"
+        description="Oteller, lojman binaları ve kat planları yönetimi."
+      />
       
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
         {/* Sol Panel - Oteller Listesi */}
-        <div className="lg:col-span-4 bg-white p-6 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col h-[600px]">
+        <div className="lg:col-span-4 card-standard p-6 flex flex-col">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-[#1A1C18] flex items-center gap-2">
               <HotelIcon className="w-5 h-5 text-[#7C8363]" />
@@ -164,7 +165,8 @@ export default function FacilityManagement() {
         </div>
 
         {/* Sağ Panel - Lojmanlar (Tesisler) Listesi */}
-        <div className="lg:col-span-8 bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col h-[600px]">
+        <div className="lg:col-span-8 card-standard p-6 flex flex-col relative overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
           {!selectedHotelId ? (
             <div className="flex flex-col items-center justify-center h-full text-center max-w-md mx-auto">
               <div className="w-16 h-16 bg-[#F5F2ED] rounded-full flex items-center justify-center mb-4">
@@ -314,6 +316,7 @@ export default function FacilityManagement() {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
     </div>

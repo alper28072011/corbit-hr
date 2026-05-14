@@ -3,6 +3,7 @@ import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAler
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
+import { PageHeader } from "../components/layout/PageHeader";
 
 export default function RoomManagement() {
   const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, currentUser, roles } = useStore();
@@ -122,17 +123,15 @@ export default function RoomManagement() {
   };
 
   return (
-    <div className="space-y-8 pb-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-[#E8E6E1] pb-4">
-        <div>
-          <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Oda Yönetimi</h2>
-          <p className="text-stone-500 mt-1">Oda tipleri, yatak kapasiteleri ve oda durumları burada yönetilecek.</p>
-        </div>
-      </div>
+    <div className="w-full h-full flex flex-col p-6 space-y-6">
+      <PageHeader
+        title="Oda Yönetimi"
+        description="Oda tipleri, yatak kapasiteleri ve oda durumları burada yönetilecek."
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
         {/* Left Sidebar - Selection */}
-        <div className="lg:col-span-4 bg-white p-6 rounded-[32px] border border-[#E8E6E1] shadow-sm flex flex-col min-h-[500px]">
+        <div className="lg:col-span-4 card-standard p-6 flex flex-col">
           <h3 className="text-lg font-bold text-[#1A1C18] flex items-center gap-2 mb-6">
             <Building className="w-5 h-5 text-[#7C8363]" />
             Tesis Seçimi
@@ -245,7 +244,7 @@ export default function RoomManagement() {
         </div>
 
         {/* Right Content - Room List */}
-        <div className="lg:col-span-8 bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm min-h-[500px]">
+        <div className="lg:col-span-8 card-standard p-6 overflow-y-auto">
           {!selectedFacilityId ? (
             <div className="flex flex-col items-center justify-center h-full text-center max-w-sm mx-auto text-stone-400">
               <BedDouble className="w-12 h-12 mb-4 opacity-30" />

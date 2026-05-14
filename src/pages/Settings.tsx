@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, ShieldAlert, Check } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { Role } from "../types";
 import { PERMISSION_KEYS, PERMISSION_LABELS, PermissionKey } from "../lib/permissions";
+import { PageHeader } from "../components/layout/PageHeader";
 
 const ROLE_NAMES: Record<string, string> = {
   super_admin: 'Süper Admin',
@@ -149,13 +150,11 @@ export default function Settings() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#2D332D]">Ayarlar</h1>
-          <p className="text-stone-500 mt-1">Sistem kullanıcıları ve yetkilerini yönetin.</p>
-        </div>
-      </div>
+    <div className="w-full h-full flex flex-col p-6 space-y-6">
+      <PageHeader
+        title="Ayarlar"
+        description="Sistem kullanıcıları ve yetkilerini yönetin."
+      />
 
       <div className="flex gap-4 border-b border-[#E8E6E1]">
         <button 
@@ -185,7 +184,7 @@ export default function Settings() {
           </div>
 
       {showAddForm && (
-        <div className="bg-white p-6 rounded-[32px] border border-[#E8E6E1] shadow-sm mb-8">
+        <div className="card-standard p-6 mb-8">
           <h3 className="text-lg font-bold mb-4">{editingUser ? 'Kullanıcı Düzenle' : 'Yeni Kullanıcı Ekle'}</h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -288,8 +287,8 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm">
-        <div className="overflow-x-auto">
+      <div className="card-standard p-6 min-h-0 flex-1 overflow-hidden flex flex-col">
+        <div className="overflow-x-auto flex-1">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-[#E8E6E1] uppercase text-xs text-stone-400">
@@ -387,7 +386,7 @@ export default function Settings() {
           </div>
 
           {showRoleForm && (
-            <div className="bg-white p-6 rounded-[32px] border border-[#E8E6E1] shadow-sm mb-8 relative">
+            <div className="card-standard p-6 mb-8 relative">
               <h3 className="text-lg font-bold mb-4">{editingRole ? 'Rol Düzenle' : 'Yeni Rol Ekle'}</h3>
               <form onSubmit={handleRoleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -412,8 +411,8 @@ export default function Settings() {
             </div>
           )}
 
-          <div className="bg-white rounded-[32px] border border-[#E8E6E1] shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="card-standard overflow-hidden min-h-0 flex-1 flex flex-col">
+            <div className="overflow-x-auto flex-1">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b uppercase text-xs text-stone-500 bg-[#FDFCFB]">

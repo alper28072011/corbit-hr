@@ -5,6 +5,7 @@ import { cn } from "../lib/utils";
 import { MaintenanceStatus } from "../types";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 import { ShieldAlert } from "lucide-react";
+import { PageHeader } from "../components/layout/PageHeader";
 
 function formatTimeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -79,7 +80,7 @@ export default function Maintenance() {
   const getRoomName = (id?: string) => rooms.find(r => r.id === id)?.roomNumber || 'Ortak Alan';
 
   const KanbanColumn = ({ title, status, items, icon: Icon, colorClass, borderClass }: { title: string, status: MaintenanceStatus, items: typeof openTickets, icon: any, colorClass: string, borderClass: string }) => (
-    <div className="flex flex-col bg-stone-50 rounded-[32px] p-6 border border-[#E8E6E1] h-full shadow-sm">
+    <div className="flex flex-col card-standard bg-stone-50 p-6 h-full">
       <div className="flex justify-between items-center mb-6 px-2">
         <h3 className="font-bold text-lg text-[#1A1C18] flex items-center gap-2">
           <Icon className={cn("w-5 h-5", colorClass)} />
@@ -166,22 +167,22 @@ export default function Maintenance() {
   );
 
   return (
-    <div className="space-y-8 pb-8 h-[calc(100vh-5rem)] flex flex-col">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 shrink-0 pb-4 border-b border-[#E8E6E1]">
-        <div>
-          <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Arıza ve Bakım</h2>
-          <p className="text-stone-500 mt-1">Lojmanlardaki arıza bildirimleri ve teknik servis takibi.</p>
-        </div>
-        {canManage && (
-          <button 
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Yeni Arıza Kaydı
-          </button>
-        )}
-      </div>
+    <div className="w-full h-full flex flex-col p-6 space-y-6">
+      <PageHeader
+        title="Arıza ve Bakım"
+        description="Lojmanlardaki arıza bildirimleri ve teknik servis takibi."
+        actions={
+          canManage && (
+            <button 
+              onClick={() => setShowForm(true)}
+              className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Yeni Arıza Kaydı
+            </button>
+          )
+        }
+      />
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 shrink-0 overflow-y-auto">

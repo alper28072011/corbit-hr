@@ -20,13 +20,14 @@ import {
 import { useStore } from "../store/useStore";
 import { hasPermission, PERMISSION_KEYS } from "../lib/permissions";
 import { cn } from "../lib/utils";
+import { PageHeader } from "../components/layout/PageHeader";
 
 const COLORS = ['#7C8363', '#2D332D', '#D9D3C1', '#C6CDB0', '#A4A895', '#F5F5F0'];
 const GENDER_COLORS = { male: '#7C8363', female: '#D9D3C1' };
 
 // --- Modular Card Components ---
 function Card({ className = "", children }: { className?: string, children: React.ReactNode }) {
-  return <div className={`bg-white rounded-xl border border-[#E8E6E1] shadow-sm flex flex-col ${className}`}>{children}</div>;
+  return <div className={`card-standard flex flex-col ${className}`}>{children}</div>;
 }
 
 function CardHeader({ className = "", children }: { className?: string, children: React.ReactNode }) {
@@ -192,33 +193,30 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 pb-12 w-full max-w-7xl mx-auto">
+    <div className="w-full h-full flex flex-col p-6 space-y-6 overflow-y-auto">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Raporlama Merkezi</h2>
-          <p className="text-stone-500 mt-1">
-            {currentUser?.role === 'facility_manager' 
-              ? 'Sorumlu olduğunuz lojmanların detaylı analizleri.' 
-              : 'Zincir genelindeki konaklama istatistikleri ve analizler.'}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          {hasPermission(currentUser?.role, PERMISSION_KEYS.add_staff_request, roles) && (
-            <Link to="/staff" className="px-4 py-2 border border-[#E8E6E1] rounded-xl bg-white hover:bg-stone-50 text-sm font-semibold transition-colors flex items-center gap-2">
-              <UserPlus className="w-4 h-4" />
-              Yeni Talep
-            </Link>
-          )}
-          {hasPermission(currentUser?.role, PERMISSION_KEYS.place_staff, roles) && (
-            <Link to="/staff" className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2">
-              <BedDouble className="w-4 h-4" />
-              Yerleşim Yap
-            </Link>
-          )}
-        </div>
-      </div>
+      <PageHeader 
+        title="Raporlama Merkezi"
+        description={currentUser?.role === 'facility_manager' 
+          ? 'Sorumlu olduğunuz lojmanların detaylı analizleri.' 
+          : 'Zincir genelindeki konaklama istatistikleri ve analizler.'}
+        actions={
+          <>
+            {hasPermission(currentUser?.role, PERMISSION_KEYS.add_staff_request, roles) && (
+              <Link to="/staff" className="px-4 py-2 border border-[#E8E6E1] rounded-xl bg-white hover:bg-stone-50 text-sm font-semibold transition-colors flex items-center gap-2">
+                <UserPlus className="w-4 h-4" />
+                Yeni Talep
+              </Link>
+            )}
+            {hasPermission(currentUser?.role, PERMISSION_KEYS.place_staff, roles) && (
+              <Link to="/staff" className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2">
+                <BedDouble className="w-4 h-4" />
+                Yerleşim Yap
+              </Link>
+            )}
+          </>
+        }
+      />
 
       {/* 1. KPI Cards (4 Grid) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -425,13 +423,13 @@ export default function Dashboard() {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col justify-center items-center text-center">
+          <div className="card-standard p-6 flex flex-col justify-center items-center text-center">
             <span className="text-xs uppercase tracking-widest font-bold text-stone-400 mb-2">Çıkış Yapan Personel</span>
             <div className="text-5xl font-serif font-bold text-stone-800">{departedStaffCount}</div>
             <p className="text-xs font-semibold text-stone-500 mt-2">Bugüne kadar ayrılanlar</p>
           </div>
           
-          <div className="md:col-span-2 bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+          <div className="md:col-span-2 card-standard p-6">
             <h4 className="text-sm font-bold text-stone-700 mb-4">En Çok Ayrılan Departmanlar</h4>
             {departedStaffByDepartment.length > 0 ? (
               <div className="flex flex-wrap gap-3">

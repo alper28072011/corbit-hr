@@ -3,6 +3,7 @@ import { Users, UserPlus, Filter, DoorOpen, DoorClosed, LogOut, ShieldAlert, Mor
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
+import { PageHeader } from "../components/layout/PageHeader";
 
 const ActionMenu = ({ children }: { children: ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -267,22 +268,22 @@ export default function StaffManagement() {
   }, [rooms, staffToPlace, selectedFacilityId, accommodations]);
 
   return (
-    <div className="space-y-8 pb-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-[#E8E6E1] pb-4">
-        <div>
-          <h2 className="text-3xl font-serif font-bold text-[#2D332D]">Personel Yönetimi</h2>
-          <p className="text-stone-500 mt-1">Personel listesi, giriş-çıkış işlemleri ve oda yerleşimleri (allocation).</p>
-        </div>
-        {canAddStaff && (
-          <button 
-            onClick={() => setShowAddStaffForm(true)}
-            className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2"
-          >
-            <UserPlus className="w-4 h-4" />
-            Yeni Personel Kaydı
-          </button>
-        )}
-      </div>
+    <div className="w-full h-full flex flex-col p-6 space-y-6">
+      <PageHeader
+        title="Personel Yönetimi"
+        description="Personel listesi, giriş-çıkış işlemleri ve oda yerleşimleri (allocation)."
+        actions={
+          canAddStaff && (
+            <button 
+              onClick={() => setShowAddStaffForm(true)}
+              className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2"
+            >
+              <UserPlus className="w-4 h-4" />
+              Yeni Personel Kaydı
+            </button>
+          )
+        }
+      />
 
       {showAddStaffForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
@@ -417,9 +418,9 @@ export default function StaffManagement() {
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-sm min-h-[400px]">
+      <div className="card-standard p-6 flex flex-col flex-1 min-h-[400px]">
         {activeTab === 'pending' && (
-          <div className="space-y-6">
+          <div className="space-y-6 flex-1 flex flex-col">
             <div className="overflow-x-auto rounded-xl border border-[#E8E6E1]">
               <table className="min-w-full text-left">
                 <thead>
