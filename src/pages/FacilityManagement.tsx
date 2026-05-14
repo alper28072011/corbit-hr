@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Hotel as HotelIcon, Building, Trash2, Edit2, Check, X, ShieldAlert } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
@@ -9,6 +9,8 @@ export default function FacilityManagement() {
   const { hotels, facilities, addHotel, deleteHotel, updateHotel, addFacility, updateFacility, deleteFacility, currentUser, roles } = useStore();
   
   const [activeTab, setActiveTab] = useState<'hotels' | 'dorms'>('hotels');
+  const [showHotelForm, setShowHotelForm] = useState(false);
+  const [showDormForm, setShowDormForm] = useState(false);
 
   if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles)) {
     return (
@@ -23,17 +25,19 @@ export default function FacilityManagement() {
   const canManage = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_hotel_management, roles);
 
   return (
-    <div className="w-full h-full flex flex-col p-6 space-y-6 overflow-hidden">
-      <div className="shrink-0 flex flex-col gap-4">
+    <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
+      <div className="shrink-0">
         <PageHeader
           title="Tesis Yönetimi"
           description="Oteller, lojman binaları ve otel-lojman bağlantı izinlerinin yönetimi."
         />
+      </div>
         
-        <div className="flex bg-stone-100 p-1 rounded-xl w-fit border border-[#E8E6E1]">
+      <div className="card-standard p-4 flex flex-col md:flex-row justify-between gap-4 bg-[#FDFCFB] shrink-0 md:items-center">
+        <div className="flex bg-stone-100 p-0.5 rounded-xl w-fit border border-[#E8E6E1]">
           <button 
             onClick={() => setActiveTab('hotels')}
-            className={cn("px-6 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
+            className={cn("px-6 py-1.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
               activeTab === 'hotels' ? "bg-white shadow-sm text-[#2D332D]" : "text-stone-500 hover:text-[#2D332D]"
             )}
           >
@@ -41,23 +45,52 @@ export default function FacilityManagement() {
           </button>
           <button 
             onClick={() => setActiveTab('dorms')}
-            className={cn("px-6 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
+            className={cn("px-6 py-1.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
               activeTab === 'dorms' ? "bg-white shadow-sm text-[#2D332D]" : "text-stone-500 hover:text-[#2D332D]"
             )}
           >
             <Building className="w-4 h-4" /> Lojmanlar
           </button>
         </div>
+
+        {canManage && (
+          <div>
+            {activeTab === 'hotels' ? (
+              !showHotelForm && (
+                <button 
+                  onClick={() => setShowHotelForm(true)}
+                  className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Yeni Otel Ekle
+                </button>
+              )
+            ) : (
+              !showDormForm && (
+                <button 
+                  onClick={() => {
+                    const evt = new CustomEvent('openDormForm');
+                    window.dispatchEvent(evt);
+                  }}
+                  className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Yeni Lojman Ekle
+                </button>
+              )
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="card-standard p-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {activeTab === 'hotels' ? (
           <HotelsTab 
             hotels={hotels} 
             canManage={canManage} 
             addHotel={addHotel}
             updateHotel={updateHotel}
-            deleteHotel={(id) => {
+            showForm={showHotelForm}
+            setShowForm={setShowHotelForm}
+            deleteHotel={(id: string) => {
               if (confirm('Oteli silmek istediğinize emin misiniz?')) deleteHotel(id);
             }} 
           />
@@ -68,7 +101,9 @@ export default function FacilityManagement() {
             canManage={canManage}
             addFacility={addFacility}
             updateFacility={updateFacility}
-            deleteFacility={(id) => {
+            showForm={showDormForm}
+            setShowForm={setShowDormForm}
+            deleteFacility={(id: string) => {
               if (confirm('Lojmanı silmek istediğinize emin misiniz?')) deleteFacility(id);
             }}
           />
@@ -80,8 +115,7 @@ export default function FacilityManagement() {
 
 // --- HOTELS TAB ---
 
-function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel }: any) {
-  const [showForm, setShowForm] = useState(false);
+function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel, showForm, setShowForm }: any) {
   const [formData, setFormData] = useState({ name: '', status: 'active' as const });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState({ name: '', status: 'active' as const });
@@ -101,18 +135,8 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel }: an
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center mb-6 shrink-0">
-        <h3 className="text-lg font-bold text-[#1A1C18]">Otel Listesi</h3>
-        {canManage && !showForm && (
-          <button 
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Yeni Otel Ekle
-          </button>
-        )}
-      </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* ... Removed old wrapper div where the button was ... */}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="mb-6 p-4 bg-stone-50 border border-[#E8E6E1] rounded-xl flex items-end gap-4 shrink-0">
@@ -134,8 +158,9 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel }: an
         </form>
       )}
 
-      <div className="flex-1 overflow-auto rounded-xl border border-[#E8E6E1]">
-        <table className="min-w-full text-left relative">
+      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
+        <div className="flex-1 overflow-auto">
+          <table className="min-w-full text-left relative">
           <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
             <tr>
               <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Otel Adı</th>
@@ -192,6 +217,7 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel }: an
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -199,9 +225,7 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel }: an
 
 // --- DORMS TAB ---
 
-function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, deleteFacility }: any) {
-  const [showForm, setShowForm] = useState(false);
-  
+function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, deleteFacility, showForm, setShowForm }: any) {
   const initialForm = {
     name: '',
     address: '',
@@ -213,6 +237,16 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
   
   const [formData, setFormData] = useState(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOpenDormForm = () => {
+      setFormData(initialForm);
+      setEditingId(null);
+      setShowForm(true);
+    };
+    window.addEventListener('openDormForm', handleOpenDormForm);
+    return () => window.removeEventListener('openDormForm', handleOpenDormForm);
+  }, []);
 
   const toggleHotelSelection = (hotelId: string) => {
     setFormData(prev => ({
@@ -265,25 +299,9 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
     setShowForm(true);
   };
 
-  const openNewForm = () => {
-    setFormData(initialForm);
-    setEditingId(null);
-    setShowForm(true);
-  };
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex justify-between items-center mb-6 shrink-0">
-        <h3 className="text-lg font-bold text-[#1A1C18]">Lojman Listesi</h3>
-        {canManage && !showForm && (
-          <button 
-            onClick={openNewForm}
-            className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Yeni Lojman Ekle
-          </button>
-        )}
-      </div>
+      {/* ... Removed old wrapper div where the button was ... */}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="mb-6 bg-[#FDFCFB] border border-[#E8E6E1] rounded-2xl overflow-hidden shrink-0">
@@ -351,8 +369,9 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
         </form>
       )}
 
-      <div className="flex-1 overflow-auto rounded-xl border border-[#E8E6E1]">
-        <table className="min-w-full text-left relative">
+      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
+        <div className="flex-1 overflow-auto">
+          <table className="min-w-full text-left relative">
           <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
             <tr>
               <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Lojman Adı</th>
@@ -411,9 +430,11 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
 }
+
 
 

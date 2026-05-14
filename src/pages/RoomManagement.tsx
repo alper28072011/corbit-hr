@@ -1,12 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X } from "lucide-react";
-import { useStore } from "../store/useStore";
-import { cn } from "../lib/utils";
-import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
-import { PageHeader } from "../components/layout/PageHeader";
-
-import { useState, useEffect, useMemo } from "react";
-import { Plus, Copy, Trash2, Edit2, ShieldAlert, Check, X, Search, Filter } from "lucide-react";
+import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X, Search, Filter } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
@@ -162,8 +155,8 @@ export default function RoomManagement() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-6 space-y-6 overflow-hidden">
-      <div className="shrink-0 flex flex-col gap-4">
+    <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
+      <div className="shrink-0">
         <PageHeader
           title="Oda Yönetimi"
           description="Oda tipleri, yatak kapasiteleri ve oda detaylarını buradan yönetin."
@@ -180,14 +173,16 @@ export default function RoomManagement() {
             )
           }
         />
-        
-        {/* Facility Selector */}
-        <div className="card-standard p-4 flex items-center gap-4 bg-[#FDFCFB]">
-          <span className="text-sm font-bold text-stone-600 uppercase tracking-wider shrink-0">Lojman Seçin:</span>
+      </div>
+
+      {/* Toolbar */}
+      <div className="card-standard p-4 flex flex-col md:flex-row gap-4 bg-[#FDFCFB] shrink-0 md:items-center">
+        <div className="flex items-center gap-4 shrink-0">
+          <span className="text-sm font-bold text-stone-600 uppercase tracking-wider">Lojman Seçin:</span>
           <select 
             value={selectedFacilityId}
             onChange={(e) => setSelectedFacilityId(e.target.value)}
-            className="flex-1 max-w-sm px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium"
+            className="flex-1 max-w-sm px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium min-w-[200px]"
           >
             <option value="" disabled>Lojman Seçiniz...</option>
             {availableFacilities.map(f => {
@@ -196,6 +191,52 @@ export default function RoomManagement() {
             })}
           </select>
         </div>
+
+        {selectedFacilityId && (
+          <>
+            <div className="h-8 w-px bg-[#E8E6E1] hidden md:block" />
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+              <input 
+                type="text" 
+                placeholder="Oda no veya açıklama ile ara..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm transition-all"
+              />
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 hide-scrollbar items-center">
+              <select 
+                value={filterBlock} 
+                onChange={(e) => setFilterBlock(e.target.value)}
+                className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[120px]"
+              >
+                <option value="">Tüm Bloklar</option>
+                {uniqueBlocks.map((b, i) => <option key={i} value={b as string}>{b}</option>)}
+              </select>
+              <select 
+                value={filterGender} 
+                onChange={(e) => setFilterGender(e.target.value)}
+                className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[130px]"
+              >
+                <option value="">Tüm Cinsiyetler</option>
+                <option value="male">Erkek</option>
+                <option value="female">Kadın</option>
+                <option value="mixed">Karma</option>
+              </select>
+              <select 
+                value={filterStatus} 
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[130px]"
+              >
+                <option value="">Tüm Durumlar</option>
+                <option value="active">Aktif</option>
+                <option value="maintenance">Bakımda</option>
+                <option value="inactive">Pasif</option>
+              </select>
+            </div>
+          </>
+        )}
       </div>
 
       {showAddForm && (
@@ -317,61 +358,15 @@ export default function RoomManagement() {
       )}
 
       {/* Main Table Content */}
-      <div className="card-standard p-6 flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
         {!selectedFacilityId ? (
-           <div className="flex flex-col items-center justify-center flex-1 text-center text-stone-400">
+           <div className="flex flex-col items-center justify-center flex-1 text-center text-stone-400 p-6">
              <Search className="w-12 h-12 mb-4 opacity-30" />
              <h3 className="text-xl font-bold text-[#2D332D] mb-2">Lojman Seçimi Bekleniyor</h3>
              <p className="text-sm">Odaları görüntülemek veya filtrelemek için üst bölümden bir lojman seçin.</p>
            </div>
         ) : (
-          <div className="flex flex-col flex-1 h-full min-h-0">
-            {/* Toolbar */}
-            <div className="flex flex-col md:flex-row gap-4 mb-6 shrink-0">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-                <input 
-                  type="text" 
-                  placeholder="Oda no veya açıklama ile ara..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]"
-                />
-              </div>
-              <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
-                <select 
-                  value={filterBlock} 
-                  onChange={(e) => setFilterBlock(e.target.value)}
-                  className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white min-w-[120px]"
-                >
-                  <option value="">Tüm Bloklar</option>
-                  {uniqueBlocks.map((b, i) => <option key={i} value={b as string}>{b}</option>)}
-                </select>
-                <select 
-                  value={filterGender} 
-                  onChange={(e) => setFilterGender(e.target.value)}
-                  className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white min-w-[130px]"
-                >
-                  <option value="">Tüm Cinsiyetler</option>
-                  <option value="male">Erkek</option>
-                  <option value="female">Kadın</option>
-                  <option value="mixed">Karma</option>
-                </select>
-                <select 
-                  value={filterStatus} 
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white min-w-[130px]"
-                >
-                  <option value="">Tüm Durumlar</option>
-                  <option value="active">Aktif</option>
-                  <option value="maintenance">Bakımda</option>
-                  <option value="inactive">Pasif</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="flex-1 overflow-auto rounded-xl border border-[#E8E6E1]">
+            <div className="flex-1 overflow-auto">
               <table className="min-w-full text-left relative">
                 <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
                   <tr>
@@ -473,7 +468,6 @@ export default function RoomManagement() {
                 </tbody>
               </table>
             </div>
-          </div>
         )}
       </div>
     </div>

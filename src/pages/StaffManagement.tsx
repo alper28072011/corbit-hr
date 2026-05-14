@@ -1,4 +1,4 @@
-import { useState, useMemo, ReactNode, useRef } from "react";
+import React, { useState, useMemo, ReactNode, useRef } from "react";
 import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
@@ -224,8 +224,8 @@ export default function StaffManagement() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-6 space-y-6 overflow-hidden">
-      <div className="shrink-0 flex flex-col gap-4">
+    <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
+      <div className="shrink-0">
         <PageHeader
           title="Personel Yönetimi"
           description="Personel listesi, giriş-çıkış işlemleri ve oda yerleşimleri (allocation)."
@@ -241,9 +241,10 @@ export default function StaffManagement() {
             )
           }
         />
+      </div>
 
-        {/* Toolbar */}
-        <div className="card-standard p-4 flex flex-col md:flex-row gap-4 bg-[#FDFCFB]">
+      {/* Toolbar */}
+      <div className="card-standard p-4 flex flex-col md:flex-row gap-4 bg-[#FDFCFB] shrink-0">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
             <input 
@@ -286,9 +287,8 @@ export default function StaffManagement() {
             </button>
           </div>
         </div>
-      </div>
 
-      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
         <div className="flex-1 overflow-auto">
           <table className="min-w-full text-left relative">
             <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">

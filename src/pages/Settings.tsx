@@ -229,7 +229,7 @@ export default function Settings() {
                             const activeHotelIds = newIds;
                             const newFacilityIds = formData.assignedFacilityIds.filter(fId => {
                               const f = facilities.find(fac => fac.id === fId);
-                              return f && activeHotelIds.includes(f.hotelId);
+                              return f && activeHotelIds.some(activeId => f.allowedHotelIds?.includes(activeId));
                             });
 
                             setFormData({...formData, assignedHotelIds: newIds, assignedFacilityIds: newFacilityIds});
@@ -249,7 +249,7 @@ export default function Settings() {
                   <div>
                     <label className="block text-xs font-semibold text-stone-500 mb-2">Sorumlu Olduğu Lojman(lar)</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {facilities.filter(f => formData.assignedHotelIds.includes(f.hotelId)).map(f => (
+                      {facilities.filter(f => formData.assignedHotelIds.some(hId => f.allowedHotelIds?.includes(hId))).map(f => (
                         <label key={f.id} className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-stone-50">
                           <input
                             type="checkbox"
