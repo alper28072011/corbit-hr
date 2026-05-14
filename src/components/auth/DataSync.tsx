@@ -56,7 +56,7 @@ export default function DataSync() {
       onSnapshot(collection(db, "facilities"), (snapshot: any) => {
         let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Facility));
         if (currentUser.role === 'hotel_hr_manager') {
-          data = data.filter(d => hotelIds.includes(d.hotelId));
+          data = data.filter(d => d.allowedHotelIds?.some((id: string) => hotelIds.includes(id)) || (d as any).hotelId && hotelIds.includes((d as any).hotelId));
         }
         setFacilities(data);
       }, (error: any) => handleFirestoreError(error, OperationType.LIST, "facilities"))

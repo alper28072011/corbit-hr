@@ -7,9 +7,11 @@ export interface Hotel {
 export interface Facility {
   id: string;
   name: string;
-  hotelId: string;
+  allowedHotelIds: string[];
   capacity: number;
   status: 'active' | 'passive';
+  address?: string;
+  contactPerson?: string;
 }
 
 export type GenderType = 'male' | 'female' | 'mixed';

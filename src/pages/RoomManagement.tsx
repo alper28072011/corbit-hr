@@ -37,7 +37,7 @@ export default function RoomManagement() {
       facs = facs.filter(f => facIds.includes(f.id));
     } else if (currentUser.role === 'hotel_hr_manager') {
       const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
-      facs = facs.filter(f => hotelIds.includes(f.hotelId));
+      facs = facs.filter(f => f.allowedHotelIds?.some(id => hotelIds.includes(id)) || (f as any).hotelId && hotelIds.includes((f as any).hotelId));
     }
     return facs;
   }, [facilities, currentUser]);
@@ -191,8 +191,8 @@ export default function RoomManagement() {
           >
             <option value="" disabled>Lojman Seçiniz...</option>
             {availableFacilities.map(f => {
-              const hotelName = hotels.find(h => h.id === f.hotelId)?.name || 'Bilinmeyen Otel';
-              return <option key={f.id} value={f.id}>{hotelName} - {f.name} (Kapasite: {f.capacity})</option>;
+              const hotelNames = f.allowedHotelIds?.map(id => hotels.find(h => h.id === id)?.name).filter(Boolean).join(', ') || 'Bilinmeyen Otel';
+              return <option key={f.id} value={f.id}>{hotelNames} - {f.name} (Kapasite: {f.capacity})</option>;
             })}
           </select>
         </div>

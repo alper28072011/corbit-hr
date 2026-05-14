@@ -1,27 +1,14 @@
 import { useState } from "react";
-import { Plus, Hotel as HotelIcon, Building, Trash2, Edit2, ChevronRight, Inbox, ShieldAlert } from "lucide-react";
+import { Plus, Hotel as HotelIcon, Building, Trash2, Edit2, Check, X, ShieldAlert } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 
 export default function FacilityManagement() {
-  const { hotels, facilities, addHotel, deleteHotel, addFacility, updateFacility, deleteFacility, currentUser, roles } = useStore();
+  const { hotels, facilities, addHotel, deleteHotel, updateHotel, addFacility, updateFacility, deleteFacility, currentUser, roles } = useStore();
   
-  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
-  
-  // Modals/Forms State
-  const [showHotelForm, setShowHotelForm] = useState(false);
-  const [newHotelName, setNewHotelName] = useState("");
-  const [hotelError, setHotelError] = useState("");
-
-  const [showFacilityForm, setShowFacilityForm] = useState(false);
-  const [facilityData, setFacilityData] = useState({ name: "", capacity: 0 });
-  const [facilityError, setFacilityError] = useState("");
-
-  // Edit Facility State
-  const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
-  const [editFacilityData, setEditFacilityData] = useState({ name: "", capacity: 0, status: 'active' });
+  const [activeTab, setActiveTab] = useState<'hotels' | 'dorms'>('hotels');
 
   if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles)) {
     return (
@@ -35,291 +22,398 @@ export default function FacilityManagement() {
 
   const canManage = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_hotel_management, roles);
 
-  const handleAddHotel = (e: import('react').FormEvent) => {
-    e.preventDefault();
-    if (!newHotelName.trim() || !canManage) {
-      setHotelError("Geçersiz işlem.");
-      return;
-    }
-    addHotel({ name: newHotelName.trim(), status: 'active' });
-    setNewHotelName("");
-    setShowHotelForm(false);
-    setHotelError("");
-  };
-
-  const handleAddFacility = (e: import('react').FormEvent) => {
-    e.preventDefault();
-    if (!selectedHotelId || !canManage) return;
-    if (!facilityData.name.trim()) {
-      setFacilityError("Lojman adı boş bırakılamaz.");
-      return;
-    }
-    if (facilityData.capacity <= 0) {
-      setFacilityError("Kapasite sıfırdan büyük olmalıdır.");
-      return;
-    }
-    addFacility({ 
-      name: facilityData.name.trim(), 
-      capacity: Number(facilityData.capacity), 
-      hotelId: selectedHotelId, 
-      status: 'active' 
-    });
-    setFacilityData({ name: "", capacity: 0 });
-    setShowFacilityForm(false);
-    setFacilityError("");
-  };
-
-  const submitEditFacility = (id: string) => {
-    if (!editFacilityData.name.trim() || editFacilityData.capacity <= 0) return;
-    updateFacility(id, {
-      name: editFacilityData.name.trim(),
-      capacity: Number(editFacilityData.capacity),
-      status: editFacilityData.status as 'active' | 'passive'
-    });
-    setEditingFacilityId(null);
-  };
-
-  const selectedHotelFacilities = facilities.filter(f => f.hotelId === selectedHotelId);
-
   return (
-    <div className="w-full h-full flex flex-col p-6 space-y-6">
-      <PageHeader
-        title="Tesis Yönetimi"
-        description="Oteller, lojman binaları ve kat planları yönetimi."
-      />
-      
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
-        {/* Sol Panel - Oteller Listesi */}
-        <div className="lg:col-span-4 card-standard p-6 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-[#1A1C18] flex items-center gap-2">
-              <HotelIcon className="w-5 h-5 text-[#7C8363]" />
-              Oteller
-            </h3>
-            {canManage && (
-              <button 
-                onClick={() => setShowHotelForm(true)}
-                className="p-2 bg-[#F5F2ED] text-[#7C8363] rounded-full hover:bg-[#E8E6E1] transition-colors"
-                title="Yeni Otel Ekle"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+    <div className="w-full h-full flex flex-col p-6 space-y-6 overflow-hidden">
+      <div className="shrink-0 flex flex-col gap-4">
+        <PageHeader
+          title="Tesis Yönetimi"
+          description="Oteller, lojman binaları ve otel-lojman bağlantı izinlerinin yönetimi."
+        />
+        
+        <div className="flex bg-stone-100 p-1 rounded-xl w-fit border border-[#E8E6E1]">
+          <button 
+            onClick={() => setActiveTab('hotels')}
+            className={cn("px-6 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
+              activeTab === 'hotels' ? "bg-white shadow-sm text-[#2D332D]" : "text-stone-500 hover:text-[#2D332D]"
             )}
-          </div>
-
-          {showHotelForm && (
-            <form onSubmit={handleAddHotel} className="mb-4 bg-[#FDFCFB] p-4 rounded-xl border border-[#E8E6E1]">
-              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Otel Adı</label>
-              <input
-                type="text"
-                value={newHotelName}
-                onChange={(e) => setNewHotelName(e.target.value)}
-                placeholder="Örn: Grand Hotel Resort"
-                className="w-full px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
-              />
-              {hotelError && <p className="text-red-500 text-xs mt-1">{hotelError}</p>}
-              <div className="flex gap-2 mt-3">
-                <button type="submit" className="flex-1 bg-[#7C8363] text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-[#6A7152] transition-colors">Kaydet</button>
-                <button type="button" onClick={() => {setShowHotelForm(false); setHotelError("");}} className="flex-1 border border-[#E8E6E1] text-stone-600 py-1.5 rounded-lg text-xs font-semibold hover:bg-stone-50 transition-colors">İptal</button>
-              </div>
-            </form>
-          )}
-
-          <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-            {hotels.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-stone-400">
-                <Inbox className="w-8 h-8 opacity-20 mb-2" />
-                <p className="text-sm">Henüz otel eklenmedi.</p>
-              </div>
-            ) : (
-              hotels.map(hotel => (
-                <div 
-                  key={hotel.id}
-                  onClick={() => setSelectedHotelId(hotel.id)}
-                  className={cn(
-                    "flex items-center justify-between p-4 rounded-xl cursor-pointer border transition-all",
-                    selectedHotelId === hotel.id 
-                      ? "bg-[#2D332D] text-white border-[#2D332D]" 
-                      : "bg-white text-[#1A1C18] border-[#E8E6E1] hover:border-[#7C8363] hover:shadow-sm"
-                  )}
-                >
-                  <div>
-                    <p className="font-semibold text-sm">{hotel.name}</p>
-                    <p className={cn("text-xs mt-0.5", selectedHotelId === hotel.id ? "text-stone-300" : "text-stone-500")}>
-                      {facilities.filter(f => f.hotelId === hotel.id).length} Lojman
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); deleteHotel(hotel.id); if(selectedHotelId === hotel.id) setSelectedHotelId(null); }}
-                      className={cn("p-1.5 rounded-md opacity-60 hover:opacity-100 transition-opacity", selectedHotelId === hotel.id ? "hover:bg-white/10" : "hover:bg-stone-100 text-red-500")}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <ChevronRight className={cn("w-4 h-4", selectedHotelId === hotel.id ? "text-white" : "text-stone-300")} />
-                  </div>
-                </div>
-              ))
+          >
+            <HotelIcon className="w-4 h-4" /> Oteller
+          </button>
+          <button 
+            onClick={() => setActiveTab('dorms')}
+            className={cn("px-6 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
+              activeTab === 'dorms' ? "bg-white shadow-sm text-[#2D332D]" : "text-stone-500 hover:text-[#2D332D]"
             )}
-          </div>
+          >
+            <Building className="w-4 h-4" /> Lojmanlar
+          </button>
         </div>
+      </div>
 
-        {/* Sağ Panel - Lojmanlar (Tesisler) Listesi */}
-        <div className="lg:col-span-8 card-standard p-6 flex flex-col relative overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-          {!selectedHotelId ? (
-            <div className="flex flex-col items-center justify-center h-full text-center max-w-md mx-auto">
-              <div className="w-16 h-16 bg-[#F5F2ED] rounded-full flex items-center justify-center mb-4">
-                <Building className="w-8 h-8 text-[#7C8363]" />
-              </div>
-              <h3 className="text-xl font-serif font-bold text-[#2D332D] mb-2">Lojmanları Görüntülemek İçin Bir Otel Seçin</h3>
-              <p className="text-stone-500 text-sm">Soldaki listeden bir otel seçerek, o otele bağlı personel lojmanlarını ve kapasite durumlarını yönetebilirsiniz.</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-8 pb-6 border-b border-stone-100">
-                <div>
-                  <h3 className="text-xl font-bold text-[#1A1C18] flex items-center gap-2">
-                    <Building className="w-6 h-6 text-[#7C8363]" />
-                    Bağlı Lojmanlar
-                  </h3>
-                  <p className="text-sm text-stone-500 mt-1">
-                    {hotels.find(h => h.id === selectedHotelId)?.name} tesisine ait lojman binaları
-                  </p>
-                </div>
-                {canManage && (
-                  <button 
-                    onClick={() => setShowFacilityForm(true)}
-                    className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors"
-                  >
-                    + Yeni Lojman Binası
-                  </button>
-                )}
-              </div>
-
-              {showFacilityForm && (
-                <form onSubmit={handleAddFacility} className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4 bg-[#FDFCFB] p-6 rounded-2xl border border-[#E8E6E1]">
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Lojman / Bina Adı</label>
-                    <input
-                      type="text"
-                      value={facilityData.name}
-                      onChange={(e) => setFacilityData({...facilityData, name: e.target.value})}
-                      placeholder="Örn: C Blok Lojman"
-                      className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Tam Kapasite (Kişi)</label>
-                    <input
-                      type="number"
-                      value={facilityData.capacity || ""}
-                      onChange={(e) => setFacilityData({...facilityData, capacity: parseInt(e.target.value) || 0})}
-                      placeholder="Örn: 100"
-                      className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]"
-                    />
-                  </div>
-                  <div className="md:col-span-3 flex justify-end gap-3 mt-2">
-                    {facilityError && <p className="text-red-500 text-xs self-center mr-auto">{facilityError}</p>}
-                    <button type="button" onClick={() => {setShowFacilityForm(false); setFacilityError("");}} className="px-5 py-2 border border-[#E8E6E1] text-stone-600 rounded-xl text-sm font-semibold hover:bg-stone-50 transition-colors">İptal</button>
-                    <button type="submit" className="px-5 py-2 bg-[#2D332D] text-white rounded-xl text-sm font-semibold hover:bg-[#1A1C18] transition-colors">Lojmanı Kaydet</button>
-                  </div>
-                </form>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pr-2 pb-4">
-                {selectedHotelFacilities.length === 0 ? (
-                   <div className="col-span-full flex flex-col items-center justify-center p-12 border-2 border-dashed border-[#E8E6E1] rounded-2xl text-stone-400">
-                     <p className="text-sm">Bu otele ait henüz lojman tanımlanmamış.</p>
-                   </div>
-                ) : (
-                  selectedHotelFacilities.map(facility => {
-                    if (editingFacilityId === facility.id) {
-                      return (
-                        <div key={facility.id} className="bg-[#FDFCFB] p-5 rounded-2xl border-2 border-[#7C8363] shadow-sm flex flex-col gap-3">
-                           <input
-                             value={editFacilityData.name}
-                             onChange={(e) => setEditFacilityData({...editFacilityData, name: e.target.value})}
-                             placeholder="Lojman Adı"
-                             className="w-full px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
-                           />
-                           <div className="flex gap-2">
-                             <input
-                               type="number"
-                               value={editFacilityData.capacity || ""}
-                               onChange={(e) => setEditFacilityData({...editFacilityData, capacity: parseInt(e.target.value) || 0})}
-                               placeholder="Kapasite"
-                               className="w-1/2 px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
-                             />
-                             <select
-                               value={editFacilityData.status}
-                               onChange={(e) => setEditFacilityData({...editFacilityData, status: e.target.value as 'active' | 'passive'})}
-                               className="w-1/2 px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
-                             >
-                                <option value="active">Aktif</option>
-                                <option value="passive">Pasif</option>
-                             </select>
-                           </div>
-                           <div className="flex justify-end gap-2 mt-2">
-                              <button onClick={() => setEditingFacilityId(null)} className="px-3 py-1.5 border border-[#E8E6E1] text-stone-600 rounded-lg text-xs font-semibold hover:bg-stone-50 transition-colors">İptal</button>
-                              <button onClick={() => submitEditFacility(facility.id)} className="px-3 py-1.5 bg-[#7C8363] text-white rounded-lg text-xs font-semibold hover:bg-[#6A7152] transition-colors">Kaydet</button>
-                           </div>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div key={facility.id} className="group relative bg-[#FDFCFB] p-6 rounded-2xl border border-[#E8E6E1] hover:shadow-md hover:border-[#7C8363] transition-all flex flex-col">
-                        <div className="flex items-start justify-between mb-4">
-                          <h4 className="font-bold text-[#2D332D] text-lg pr-4">{facility.name}</h4>
-                          <div className="flex flex-col items-end gap-2 shrink-0">
-                            <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", facility.status === 'active' ? "bg-green-100 text-green-800" : "bg-stone-200 text-stone-600")}>
-                              {facility.status === 'active' ? 'AKTİF' : 'PASİF'}
-                            </span>
-                            {canManage && (
-                              <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button 
-                                  onClick={() => {
-                                    setEditFacilityData({ name: facility.name, capacity: facility.capacity, status: facility.status });
-                                    setEditingFacilityId(facility.id);
-                                  }}
-                                  className="p-1.5 bg-white border border-[#E8E6E1] text-stone-600 rounded-lg hover:border-[#7C8363] hover:text-[#7C8363] transition-colors shadow-sm"
-                                  title="Düzenle"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    if(confirm('Lojmanı silmek istediğinize emin misiniz?')) {
-                                      deleteFacility(facility.id);
-                                    }
-                                  }}
-                                  className="p-1.5 bg-white border border-[#E8E6E1] text-red-500 rounded-lg hover:border-red-500 hover:bg-red-50 transition-colors shadow-sm"
-                                  title="Sil"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6 mt-auto pt-4 border-t border-[#E8E6E1] border-dashed">
-                          <div>
-                            <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Kapasite</p>
-                            <p className="text-lg font-mono font-semibold text-[#1A1C18]">{facility.capacity} <span className="text-sm font-sans text-stone-500 font-normal">Kişi</span></p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </>
-          )}
-          </div>
-        </div>
+      <div className="card-standard p-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+        {activeTab === 'hotels' ? (
+          <HotelsTab 
+            hotels={hotels} 
+            canManage={canManage} 
+            addHotel={addHotel}
+            updateHotel={updateHotel}
+            deleteHotel={(id) => {
+              if (confirm('Oteli silmek istediğinize emin misiniz?')) deleteHotel(id);
+            }} 
+          />
+        ) : (
+          <DormsTab 
+            facilities={facilities} 
+            hotels={hotels} 
+            canManage={canManage}
+            addFacility={addFacility}
+            updateFacility={updateFacility}
+            deleteFacility={(id) => {
+              if (confirm('Lojmanı silmek istediğinize emin misiniz?')) deleteFacility(id);
+            }}
+          />
+        )}
       </div>
     </div>
   );
 }
+
+// --- HOTELS TAB ---
+
+function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel }: any) {
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ name: '', status: 'active' as const });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState({ name: '', status: 'active' as const });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) return;
+    addHotel({ name: formData.name.trim(), status: formData.status as 'active' | 'passive' });
+    setFormData({ name: '', status: 'active' });
+    setShowForm(false);
+  };
+
+  const handleUpdate = () => {
+    if (!editData.name.trim() || !editingId) return;
+    updateHotel(editingId, { name: editData.name.trim(), status: editData.status });
+    setEditingId(null);
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center mb-6 shrink-0">
+        <h3 className="text-lg font-bold text-[#1A1C18]">Otel Listesi</h3>
+        {canManage && !showForm && (
+          <button 
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Yeni Otel Ekle
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-6 p-4 bg-stone-50 border border-[#E8E6E1] rounded-xl flex items-end gap-4 shrink-0">
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Otel Adı</label>
+            <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Örn: Grand Hotel" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Durum</label>
+            <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]">
+              <option value="active">Aktif</option>
+              <option value="passive">Pasif</option>
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="py-2 px-4 bg-[#7C8363] text-white rounded-lg text-sm font-semibold hover:bg-[#6A7152]">Ekle</button>
+            <button type="button" onClick={() => setShowForm(false)} className="py-2 px-4 bg-white border border-[#E8E6E1] text-stone-600 rounded-lg text-sm font-semibold hover:bg-stone-50">İptal</button>
+          </div>
+        </form>
+      )}
+
+      <div className="flex-1 overflow-auto rounded-xl border border-[#E8E6E1]">
+        <table className="min-w-full text-left relative">
+          <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
+            <tr>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Otel Adı</th>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum</th>
+              {canManage && <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#E8E6E1] bg-white">
+            {hotels.length === 0 ? (
+              <tr><td colSpan={3} className="px-6 py-8 text-center text-stone-500">Henüz otel eklenmemiş.</td></tr>
+            ) : (
+              hotels.map((hotel: any) => (
+                <tr key={hotel.id} className="hover:bg-stone-50 transition-colors">
+                  {editingId === hotel.id ? (
+                    <>
+                      <td className="px-6 py-3"><input type="text" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="w-full px-2 py-1 text-sm border rounded" /></td>
+                      <td className="px-6 py-3">
+                        <select value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})} className="px-2 py-1 text-sm border rounded">
+                          <option value="active">Aktif</option>
+                          <option value="passive">Pasif</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={handleUpdate} className="p-1.5 bg-[#7C8363] text-white rounded hover:bg-[#6A7152]" title="Kaydet"><Check className="w-4 h-4" /></button>
+                          <button onClick={() => setEditingId(null)} className="p-1.5 bg-stone-200 text-stone-700 rounded hover:bg-stone-300" title="İptal"><X className="w-4 h-4" /></button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-6 py-4 font-semibold text-stone-800">{hotel.name}</td>
+                      <td className="px-6 py-4">
+                        <span className={cn("inline-flex px-2 py-0.5 rounded text-xs font-semibold", hotel.status === 'active' ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-600")}>
+                          {hotel.status === 'active' ? 'AKTİF' : 'PASİF'}
+                        </span>
+                      </td>
+                      {canManage && (
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => { setEditingId(hotel.id); setEditData({ name: hotel.name, status: hotel.status }); }} className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => deleteHotel(hotel.id)} className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// --- DORMS TAB ---
+
+function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, deleteFacility }: any) {
+  const [showForm, setShowForm] = useState(false);
+  
+  const initialForm = {
+    name: '',
+    address: '',
+    contactPerson: '',
+    capacity: 0,
+    status: 'active' as const,
+    allowedHotelIds: [] as string[]
+  };
+  
+  const [formData, setFormData] = useState(initialForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const toggleHotelSelection = (hotelId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      allowedHotelIds: prev.allowedHotelIds.includes(hotelId) 
+        ? prev.allowedHotelIds.filter(id => id !== hotelId)
+        : [...prev.allowedHotelIds, hotelId]
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) return;
+
+    if (editingId) {
+      updateFacility(editingId, {
+        name: formData.name.trim(),
+        address: formData.address,
+        contactPerson: formData.contactPerson,
+        capacity: Number(formData.capacity),
+        status: formData.status,
+        allowedHotelIds: formData.allowedHotelIds
+      });
+      setEditingId(null);
+    } else {
+      addFacility({
+        name: formData.name.trim(),
+        address: formData.address,
+        contactPerson: formData.contactPerson,
+        capacity: Number(formData.capacity),
+        status: formData.status,
+        allowedHotelIds: formData.allowedHotelIds
+      } as any);
+    }
+    
+    setFormData(initialForm);
+    setShowForm(false);
+  };
+
+  const handleEdit = (fac: any) => {
+    setFormData({
+      name: fac.name,
+      address: fac.address || '',
+      contactPerson: fac.contactPerson || '',
+      capacity: fac.capacity,
+      status: fac.status || 'active',
+      allowedHotelIds: fac.allowedHotelIds || (fac.hotelId ? [fac.hotelId] : [])
+    });
+    setEditingId(fac.id);
+    setShowForm(true);
+  };
+
+  const openNewForm = () => {
+    setFormData(initialForm);
+    setEditingId(null);
+    setShowForm(true);
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex justify-between items-center mb-6 shrink-0">
+        <h3 className="text-lg font-bold text-[#1A1C18]">Lojman Listesi</h3>
+        {canManage && !showForm && (
+          <button 
+            onClick={openNewForm}
+            className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Yeni Lojman Ekle
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-6 bg-[#FDFCFB] border border-[#E8E6E1] rounded-2xl overflow-hidden shrink-0">
+          <div className="p-4 border-b border-[#E8E6E1] bg-white flex justify-between items-center">
+            <h4 className="font-bold text-[#2D332D]">{editingId ? 'Lojmanı Düzenle' : 'Yeni Lojman Kaydı'}</h4>
+            <button type="button" onClick={() => setShowForm(false)} className="text-stone-400 hover:text-stone-700">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Lojman Adı *</label>
+                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Örn: Merkez Lojman" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Kapasite *</label>
+                  <input required min="1" type="number" value={formData.capacity || ''} onChange={e => setFormData({...formData, capacity: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Kişi sayısı" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Durum *</label>
+                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
+                    <option value="active">Aktif</option>
+                    <option value="passive">Pasif</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">İlgili Kişi / İletişim</label>
+                <input type="text" value={formData.contactPerson} onChange={e => setFormData({...formData, contactPerson: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Ad Soyad, Telefon..." />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Adres</label>
+                <textarea rows={2} value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] resize-none" placeholder="Açık adres..." />
+              </div>
+            </div>
+
+            <div className="bg-stone-50 border border-[#E8E6E1] rounded-xl p-4 flex flex-col">
+              <label className="block text-sm font-bold text-[#2D332D] mb-1">İzin Verilen Oteller</label>
+              <p className="text-xs text-stone-500 mb-4">Bu lojmanda hangi otellerin personeli konaklayabilir?</p>
+              
+              <div className="flex-1 overflow-y-auto space-y-2 max-h-48 border border-stone-200 rounded-lg p-2 bg-white">
+                {hotels.map((hotel: any) => (
+                  <label key={hotel.id} className="flex items-center gap-3 p-2 hover:bg-stone-50 rounded cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={formData.allowedHotelIds.includes(hotel.id)}
+                      onChange={() => toggleHotelSelection(hotel.id)}
+                      className="w-4 h-4 text-[#7C8363] border-gray-300 rounded focus:ring-[#7C8363]"
+                    />
+                    <span className="text-sm font-medium text-stone-700">{hotel.name}</span>
+                  </label>
+                ))}
+                {hotels.length === 0 && <p className="text-sm text-stone-400 p-2">Sistemde kayıtlı otel bulunmuyor.</p>}
+              </div>
+            </div>
+          </div>
+          <div className="p-4 border-t border-[#E8E6E1] bg-stone-50 flex justify-end gap-3">
+            <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2 border border-[#E8E6E1] bg-white text-stone-600 rounded-xl text-sm font-semibold hover:bg-stone-50">İptal</button>
+            <button type="submit" className="px-6 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold hover:bg-[#6A7152] flex items-center gap-2">
+              <Check className="w-4 h-4" /> {editingId ? 'Güncelle' : 'Lojmanı Kaydet'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="flex-1 overflow-auto rounded-xl border border-[#E8E6E1]">
+        <table className="min-w-full text-left relative">
+          <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
+            <tr>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Lojman Adı</th>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">İzin Verilen Oteller</th>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">İlgili Kişi</th>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Kapasite</th>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum</th>
+              {canManage && <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#E8E6E1] bg-white">
+            {facilities.length === 0 ? (
+              <tr><td colSpan={6} className="px-6 py-8 text-center text-stone-500">Henüz lojman eklenmemiş.</td></tr>
+            ) : (
+              facilities.map((fac: any) => {
+                const allowedHotels = fac.allowedHotelIds?.map((id: string) => hotels.find((h: any) => h.id === id)).filter(Boolean) || [];
+                return (
+                  <tr key={fac.id} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-stone-800">{fac.name}</p>
+                      {fac.address && <p className="text-xs text-stone-500 truncate max-w-[200px]" title={fac.address}>{fac.address}</p>}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {allowedHotels.length > 0 ? allowedHotels.map((h: any) => (
+                          <span key={h.id} className="inline-flex px-2 py-0.5 rounded border border-stone-200 bg-white text-[10px] font-semibold text-stone-600 shadow-sm">
+                            {h.name}
+                          </span>
+                        )) : (
+                          <span className="text-xs text-stone-400 italic">Yok</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-stone-600 truncate max-w-[150px]">{fac.contactPerson || '-'}</td>
+                    <td className="px-6 py-4 font-semibold text-[#1A1C18]">{fac.capacity}</td>
+                    <td className="px-6 py-4">
+                      <span className={cn("inline-flex px-2 py-0.5 rounded text-xs font-semibold", fac.status === 'active' ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-600")}>
+                        {fac.status === 'active' ? 'AKTİF' : 'PASİF'}
+                      </span>
+                    </td>
+                    {canManage && (
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => handleEdit(fac)} className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg">
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => deleteFacility(fac.id)} className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 

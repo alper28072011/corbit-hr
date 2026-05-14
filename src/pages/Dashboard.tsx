@@ -59,7 +59,7 @@ export default function Dashboard() {
     }
     if (currentUser.role === 'hotel_hr_manager') {
       const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
-      return facilities.filter(f => hotelIds.includes(f.hotelId));
+      return facilities.filter(f => f.allowedHotelIds?.some(id => hotelIds.includes(id)) || (f as any).hotelId && hotelIds.includes((f as any).hotelId));
     }
     return facilities;
   }, [facilities, currentUser]);
