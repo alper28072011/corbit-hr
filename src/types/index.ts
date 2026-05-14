@@ -40,9 +40,12 @@ export interface Room {
   id: string;
   facilityId: string;
   roomNumber: string;
+  block?: string;
+  floor?: string;
   bedCount: number;
   genderType: GenderType;
   status: RoomStatus;
+  notes?: string;
 }
 
 export interface Staff {
