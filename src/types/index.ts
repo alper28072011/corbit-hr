@@ -8,7 +8,8 @@ export interface Facility {
   id: string;
   name: string;
   allowedHotelIds: string[];
-  capacity: number;
+  roomCapacity: number;
+  bedCapacity: number;
   status: 'active' | 'passive';
   address?: string;
   contactPerson?: string;

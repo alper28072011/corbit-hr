@@ -230,7 +230,8 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
     name: '',
     address: '',
     contactPerson: '',
-    capacity: 0,
+    roomCapacity: 0,
+    bedCapacity: 0,
     status: 'active' as const,
     allowedHotelIds: [] as string[]
   };
@@ -266,7 +267,8 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
         name: formData.name.trim(),
         address: formData.address,
         contactPerson: formData.contactPerson,
-        capacity: Number(formData.capacity),
+        roomCapacity: Number(formData.roomCapacity),
+        bedCapacity: Number(formData.bedCapacity),
         status: formData.status,
         allowedHotelIds: formData.allowedHotelIds
       });
@@ -276,7 +278,8 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
         name: formData.name.trim(),
         address: formData.address,
         contactPerson: formData.contactPerson,
-        capacity: Number(formData.capacity),
+        roomCapacity: Number(formData.roomCapacity),
+        bedCapacity: Number(formData.bedCapacity),
         status: formData.status,
         allowedHotelIds: formData.allowedHotelIds
       } as any);
@@ -291,7 +294,8 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
       name: fac.name,
       address: fac.address || '',
       contactPerson: fac.contactPerson || '',
-      capacity: fac.capacity,
+      roomCapacity: fac.roomCapacity || 0,
+      bedCapacity: fac.bedCapacity || 0,
       status: fac.status || 'active',
       allowedHotelIds: fac.allowedHotelIds || (fac.hotelId ? [fac.hotelId] : [])
     });
@@ -319,8 +323,18 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Kapasite *</label>
-                  <input required min="1" type="number" value={formData.capacity || ''} onChange={e => setFormData({...formData, capacity: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Kişi sayısı" />
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Oda Kapasitesi *</label>
+                  <input required min="1" type="number" value={formData.roomCapacity || ''} onChange={e => setFormData({...formData, roomCapacity: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Oda sayısı" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Yatak Kapasitesi *</label>
+                  <input required min="1" type="number" value={formData.bedCapacity || ''} onChange={e => setFormData({...formData, bedCapacity: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Yatak sayısı" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Yekili İletişim</label>
+                  <input type="text" value={formData.contactPerson} onChange={e => setFormData({...formData, contactPerson: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Ad Soyad veya Tel" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Durum *</label>
@@ -377,7 +391,7 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
               <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Lojman Adı</th>
               <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">İzin Verilen Oteller</th>
               <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">İlgili Kişi</th>
-              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Kapasite</th>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-center">Kapasite (Oda / Yatak)</th>
               <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum</th>
               {canManage && <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>}
             </tr>
@@ -406,7 +420,12 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-stone-600 truncate max-w-[150px]">{fac.contactPerson || '-'}</td>
-                    <td className="px-6 py-4 font-semibold text-[#1A1C18]">{fac.capacity}</td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex flex-col items-center">
+                        <span className="font-semibold text-[#2D332D]">{fac.roomCapacity} Oda</span>
+                        <span className="text-xs text-stone-500">{fac.bedCapacity} Yatak</span>
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <span className={cn("inline-flex px-2 py-0.5 rounded text-xs font-semibold", fac.status === 'active' ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-600")}>
                         {fac.status === 'active' ? 'AKTİF' : 'PASİF'}

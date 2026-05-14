@@ -559,7 +559,7 @@ export default function StaffManagement() {
                 <select value={selectedFacilityId} onChange={(e) => { setSelectedFacilityId(e.target.value); setSelectedRoomId(''); }} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
                   <option value="">Lojman Binası Seçin...</option>
                   {availableFacilities.map(f => (
-                    <option key={f.id} value={f.id}>{f.name} (Kapasite: {f.capacity})</option>
+                    <option key={f.id} value={f.id}>{f.name} (Kapasite: {f.bedCapacity} Yatak)</option>
                   ))}
                 </select>
               </div>

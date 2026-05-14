@@ -1,16 +1,19 @@
-import { useState, useEffect, useMemo } from "react";
-import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X, Search, Filter } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X, Search, Filter, Upload, Download } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
+import * as XLSX from "xlsx";
 
 export default function RoomManagement() {
   const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, currentUser, roles } = useStore();
 
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
+  const [activeTab, setActiveTab] = useState<'single' | 'excel'>('single');
+  const [importing, setImporting] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,11 +47,6 @@ export default function RoomManagement() {
   // Single Room Form State
   const [newRoom, setNewRoom] = useState({
     roomNumber: '', block: '', floor: '', bedCount: 1, genderType: 'male' as const, notes: ''
-  });
-
-  // Bulk Room Form State
-  const [bulkConfig, setBulkConfig] = useState({
-    prefix: '', block: '', floor: '', startNo: 1, count: 10, bedCount: 2, genderType: 'male' as const, notes: ''
   });
 
   // Edit Room State
@@ -105,6 +103,32 @@ export default function RoomManagement() {
     setEditingRoomId(null);
   };
 
+  const selectedFac = availableFacilities.find(f => f.id === selectedFacilityId);
+  const currentRoomSum = facilityRooms.length; // From filtered rooms, wait - it should be ALL rooms in that facility
+  const allFacRooms = rooms.filter(r => r.facilityId === selectedFacilityId);
+  const totalRoomSumInFac = allFacRooms.length;
+  const totalBedSumInFac = allFacRooms.reduce((sum, r) => sum + r.bedCount, 0);
+
+  const roomCapacityLimit = selectedFac?.roomCapacity || 0;
+  const bedCapacityLimit = selectedFac?.bedCapacity || 0;
+  
+  const availableRoomSlots = Math.max(0, roomCapacityLimit - totalRoomSumInFac);
+  const availableBedSlots = Math.max(0, bedCapacityLimit - totalBedSumInFac);
+
+  const isRoomLimitReached = totalRoomSumInFac >= roomCapacityLimit && roomCapacityLimit > 0;
+  const isBedLimitReached = totalBedSumInFac >= bedCapacityLimit && bedCapacityLimit > 0;
+
+  const handleDownloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Oda No', 'Blok', 'Kat', 'Kapasite (Yatak)', 'Cinsiyet (Erkek/Kadin/Karma)', 'Aciklama'],
+      ['101', 'A Blok', '1. Kat', 3, 'Erkek', 'Balkonlu'],
+      ['102', 'B Blok', '2. Kat', 2, 'Kadin', '']
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Odalar");
+    XLSX.writeFile(wb, "rooms_template.xlsx");
+  };
+
   if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
@@ -118,6 +142,16 @@ export default function RoomManagement() {
   const handleAddSingleRoom = (e: import('react').FormEvent) => {
     e.preventDefault();
     if (!selectedFacilityId || !newRoom.roomNumber || !canEdit) return;
+
+    if (roomCapacityLimit > 0 && totalRoomSumInFac + 1 > roomCapacityLimit) {
+      alert(`Oda kapasitesi aşıldı! En fazla ${roomCapacityLimit} oda eklenebilir.`);
+      return;
+    }
+    if (bedCapacityLimit > 0 && totalBedSumInFac + Number(newRoom.bedCount) > bedCapacityLimit) {
+      alert(`Yatak kapasitesi aşıldı! En fazla ${availableBedSlots} yatak daha eklenebilir.`);
+      return;
+    }
+
     addRoom({
       facilityId: selectedFacilityId,
       roomNumber: newRoom.roomNumber,
@@ -132,26 +166,65 @@ export default function RoomManagement() {
     setShowAddForm(false);
   };
 
-  const handleAddBulkRooms = (e: import('react').FormEvent) => {
+  const handleExcelUpload = async (e: import('react').FormEvent) => {
     e.preventDefault();
-    if (!selectedFacilityId || bulkConfig.count <= 0 || !canEdit) return;
+    if (!excelFile || !selectedFacilityId || !canEdit) return;
+    
+    setImporting(true);
+    try {
+      const data = await excelFile.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'buffer' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const items: any[] = XLSX.utils.sheet_to_json(ws);
+      
+      const newRooms: any[] = [];
+      let totalBedsToImport = 0;
 
-    const newRooms = [];
-    for (let i = 0; i < bulkConfig.count; i++) {
-      newRooms.push({
-        facilityId: selectedFacilityId,
-        roomNumber: `${bulkConfig.prefix}${bulkConfig.startNo + i}`,
-        block: bulkConfig.block,
-        floor: bulkConfig.floor,
-        bedCount: Number(bulkConfig.bedCount),
-        genderType: bulkConfig.genderType,
-        status: 'active' as const,
-        notes: bulkConfig.notes
-      });
+      for (const item of items) {
+         let bedCount = parseInt(item['Kapasite (Yatak)']) || 1;
+         totalBedsToImport += bedCount;
+         let genderInput = (item['Cinsiyet (Erkek/Kadin/Karma)'] || '').toLowerCase();
+         let gType = 'male';
+         if (genderInput.includes('kadin') || genderInput.includes('kadın')) gType = 'female';
+         if (genderInput.includes('karma')) gType = 'mixed';
+
+         newRooms.push({
+           facilityId: selectedFacilityId,
+           roomNumber: String(item['Oda No'] || ''),
+           block: String(item['Blok'] || ''),
+           floor: String(item['Kat'] || ''),
+           bedCount: bedCount,
+           genderType: gType,
+           status: 'active' as const,
+           notes: String(item['Aciklama'] || item['Açıklama'] || '')
+         });
+      }
+
+      if (roomCapacityLimit > 0 && totalRoomSumInFac + newRooms.length > roomCapacityLimit) {
+         alert(`Lojman oda kapasitesini aşıyorsunuz! Maksimum ${availableRoomSlots} oda daha eklenebilir.`);
+         setImporting(false);
+         return;
+      }
+      if (bedCapacityLimit > 0 && totalBedSumInFac + totalBedsToImport > bedCapacityLimit) {
+         alert(`Lojman yatak kapasitesini aşıyorsunuz! Maksimum ${availableBedSlots} yatak daha eklenebilir.`);
+         setImporting(false);
+         return;
+      }
+
+      if (newRooms.length > 0) {
+        // Assume addRoomsBulk handles batch writes in useStore
+        await addRoomsBulk(newRooms);
+      }
+      
+      setShowAddForm(false);
+      setExcelFile(null);
+    } catch (err) {
+      alert("Excel dosyası okunurken bir hata oluştu.");
+      console.error(err);
+    } finally {
+      setImporting(false);
     }
-    addRoomsBulk(newRooms);
-    setBulkConfig({ ...bulkConfig, startNo: bulkConfig.startNo + bulkConfig.count });
-    setShowAddForm(false);
   };
 
   return (
@@ -176,71 +249,105 @@ export default function RoomManagement() {
       </div>
 
       {/* Toolbar */}
-      <div className="card-standard p-4 flex flex-col md:flex-row justify-between gap-4 bg-[#FDFCFB] shrink-0 md:items-center">
-        {selectedFacilityId ? (
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-            <input 
-              type="text" 
-              placeholder="Oda no veya açıklama ile ara..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm transition-all"
-            />
+      <div className="card-standard p-4 flex flex-col items-stretch gap-4 bg-[#FDFCFB] shrink-0">
+        <div className="flex flex-col md:flex-row justify-between gap-4 md:items-center">
+          {selectedFacilityId ? (
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+              <input 
+                type="text" 
+                placeholder="Oda no veya açıklama ile ara..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm transition-all"
+              />
+            </div>
+          ) : <div className="flex-1 max-w-md md:block hidden"></div>}
+
+          <div className="flex items-center gap-3 shrink-0 overflow-x-auto pb-2 md:pb-0 hide-scrollbar w-full md:w-auto overflow-y-hidden md:justify-end">
+            {selectedFacilityId && (
+              <>
+                <select 
+                  value={filterBlock} 
+                  onChange={(e) => setFilterBlock(e.target.value)}
+                  className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[120px]"
+                >
+                  <option value="">Tüm Bloklar</option>
+                  {uniqueBlocks.map((b, i) => <option key={i} value={b as string}>{b}</option>)}
+                </select>
+                <select 
+                  value={filterGender} 
+                  onChange={(e) => setFilterGender(e.target.value)}
+                  className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[130px]"
+                >
+                  <option value="">Tüm Cinsiyetler</option>
+                  <option value="male">Erkek</option>
+                  <option value="female">Kadın</option>
+                  <option value="mixed">Karma</option>
+                </select>
+                <select 
+                  value={filterStatus} 
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[130px]"
+                >
+                  <option value="">Tüm Durumlar</option>
+                  <option value="active">Aktif</option>
+                  <option value="maintenance">Bakımda</option>
+                  <option value="inactive">Pasif</option>
+                </select>
+                <div className="h-8 w-px bg-[#E8E6E1] hidden md:block mx-1" />
+              </>
+            )}
+
+            <select 
+              value={selectedFacilityId}
+              onChange={(e) => setSelectedFacilityId(e.target.value)}
+              className="flex-none max-w-sm px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#7C8363] text-white shadow-sm font-semibold min-w-[200px]"
+            >
+              {availableFacilities.map(f => {
+                return <option key={f.id} value={f.id} className="bg-white text-stone-700">{f.name}</option>;
+              })}
+            </select>
           </div>
-        ) : <div className="flex-1 max-w-md md:block hidden"></div>}
-
-        <div className="flex items-center gap-3 shrink-0 overflow-x-auto pb-2 md:pb-0 hide-scrollbar w-full md:w-auto overflow-y-hidden md:justify-end">
-          {selectedFacilityId && (
-            <>
-              <select 
-                value={filterBlock} 
-                onChange={(e) => setFilterBlock(e.target.value)}
-                className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[120px]"
-              >
-                <option value="">Tüm Bloklar</option>
-                {uniqueBlocks.map((b, i) => <option key={i} value={b as string}>{b}</option>)}
-              </select>
-              <select 
-                value={filterGender} 
-                onChange={(e) => setFilterGender(e.target.value)}
-                className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[130px]"
-              >
-                <option value="">Tüm Cinsiyetler</option>
-                <option value="male">Erkek</option>
-                <option value="female">Kadın</option>
-                <option value="mixed">Karma</option>
-              </select>
-              <select 
-                value={filterStatus} 
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[130px]"
-              >
-                <option value="">Tüm Durumlar</option>
-                <option value="active">Aktif</option>
-                <option value="maintenance">Bakımda</option>
-                <option value="inactive">Pasif</option>
-              </select>
-              <div className="h-8 w-px bg-[#E8E6E1] hidden md:block mx-1" />
-            </>
-          )}
-
-          <select 
-            value={selectedFacilityId}
-            onChange={(e) => setSelectedFacilityId(e.target.value)}
-            className="flex-none max-w-sm px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-[#7C8363] text-white shadow-sm font-semibold min-w-[200px]"
-          >
-            <option value="" disabled className="bg-white text-stone-700">Lojman Seçiniz...</option>
-            {availableFacilities.map(f => {
-              return <option key={f.id} value={f.id} className="bg-white text-stone-700">{f.name}</option>;
-            })}
-          </select>
         </div>
+
+        {selectedFacilityId && selectedFac && (roomCapacityLimit > 0 || bedCapacityLimit > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+            <div className="bg-stone-50 rounded-xl p-4 border border-stone-100 flex flex-col justify-center">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-bold text-stone-700 uppercase tracking-wider">Oda Kapasitesi</span>
+                <span className={cn("text-xs font-bold", isRoomLimitReached ? "text-red-600" : "text-stone-500")}>
+                  {totalRoomSumInFac} / {roomCapacityLimit} <span className="opacity-75 font-medium ml-1">({availableRoomSlots} Oda Eklenebilir)</span>
+                </span>
+              </div>
+              <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={cn("h-full rounded-full transition-all", isRoomLimitReached ? "bg-red-500" : "bg-[#7C8363]")}
+                  style={{ width: `${roomCapacityLimit > 0 ? Math.min(100, (totalRoomSumInFac / roomCapacityLimit) * 100) : 0}%` }}
+                />
+              </div>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-4 border border-stone-100 flex flex-col justify-center">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-bold text-stone-700 uppercase tracking-wider">Yatak Kapasitesi</span>
+                <span className={cn("text-xs font-bold", isBedLimitReached ? "text-red-600" : "text-stone-500")}>
+                  {totalBedSumInFac} / {bedCapacityLimit} <span className="opacity-75 font-medium ml-1">({availableBedSlots} Yatak Eklenebilir)</span>
+                </span>
+              </div>
+              <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={cn("h-full rounded-full transition-all", isBedLimitReached ? "bg-red-500" : "bg-[#7C8363]")}
+                  style={{ width: `${bedCapacityLimit > 0 ? Math.min(100, (totalBedSumInFac / bedCapacityLimit) * 100) : 0}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {showAddForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 shrink-0 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl min-h-[450px] max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1] shrink-0">
               <h3 className="text-xl font-bold text-[#2D332D]">Yeni Oda Kaydı</h3>
               <button onClick={() => setShowAddForm(false)} className="text-stone-400 hover:text-stone-600">
@@ -253,15 +360,15 @@ export default function RoomManagement() {
                 <button 
                   onClick={() => setActiveTab('single')}
                   className={cn("px-6 py-2 text-sm font-bold rounded-lg transition-all", activeTab === 'single' ? "bg-[#7C8363] shadow-sm text-white" : "text-stone-500 hover:text-[#2D332D]")}
-                >Tekli Kayıt</button>
+                >1. Tekli Kayıt</button>
                 <button 
-                  onClick={() => setActiveTab('bulk')}
-                  className={cn("px-6 py-2 text-sm font-bold rounded-lg transition-all", activeTab === 'bulk' ? "bg-[#7C8363] shadow-sm text-white" : "text-stone-500 hover:text-[#2D332D]")}
-                >Toplu Kayıt</button>
+                  onClick={() => setActiveTab('excel')}
+                  className={cn("px-6 py-2 text-sm font-bold rounded-lg transition-all", activeTab === 'excel' ? "bg-[#7C8363] shadow-sm text-white" : "text-stone-500 hover:text-[#2D332D]")}
+                >2. Excel ile Yükle</button>
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1">
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col">
               {activeTab === 'single' ? (
                 <form id="singleRoomForm" onSubmit={handleAddSingleRoom} className="space-y-4">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -296,46 +403,34 @@ export default function RoomManagement() {
                   </div>
                 </form>
               ) : (
-                <form id="bulkRoomForm" onSubmit={handleAddBulkRooms} className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Ön Ek</label>
-                      <input type="text" value={bulkConfig.prefix} onChange={e => setBulkConfig({...bulkConfig, prefix: e.target.value})} placeholder="Örn: A-" className="w-full px-3 py-2 border rounded-lg text-sm" />
-                    </div>
+                <form id="excelRoomForm" onSubmit={handleExcelUpload} className="flex flex-col flex-1 gap-6 justify-center">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
+                    <ShieldAlert className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
                     <div>
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Başlangıç No *</label>
-                      <input required type="number" value={bulkConfig.startNo} onChange={e => setBulkConfig({...bulkConfig, startNo: parseInt(e.target.value) || 1})} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                      <h4 className="text-sm font-bold text-blue-900 mb-1">Toplu Oda Yükleme Sistemi</h4>
+                      <p className="text-xs text-blue-800 mb-3">Sisteme odaları hızlı bir şekilde dahil edebilmek için hazırladığımız özel Excel formatını kullanmalısınız. Yükleme esnasında belirlenen lojman kapasitesi sınırları dikkate alınacaktır.</p>
+                      <button type="button" onClick={handleDownloadTemplate} className="text-sm font-semibold bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-2">
+                         <Download className="w-4 h-4" /> Şablonu İndir
+                      </button>
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Adet *</label>
-                      <input required type="number" min="1" value={bulkConfig.count} onChange={e => setBulkConfig({...bulkConfig, count: parseInt(e.target.value) || 1})} className="w-full px-3 py-2 border rounded-lg text-sm" />
-                    </div>
-                    
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Blok (Atanacaksa)</label>
-                      <input type="text" value={bulkConfig.block} onChange={e => setBulkConfig({...bulkConfig, block: e.target.value})} placeholder="Örn: B Blok" className="w-full px-3 py-2 border rounded-lg text-sm" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Kat (Atanacaksa)</label>
-                      <input type="text" value={bulkConfig.floor} onChange={e => setBulkConfig({...bulkConfig, floor: e.target.value})} placeholder="Örn: 2. Kat" className="w-full px-3 py-2 border rounded-lg text-sm" />
-                    </div>
+                  </div>
 
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Yatak / Oda *</label>
-                      <input required type="number" min="1" value={bulkConfig.bedCount} onChange={e => setBulkConfig({...bulkConfig, bedCount: parseInt(e.target.value) || 1})} className="w-full px-3 py-2 border rounded-lg text-sm" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Cinsiyet *</label>
-                      <select value={bulkConfig.genderType} onChange={e => setBulkConfig({...bulkConfig, genderType: e.target.value as any})} className="w-full px-3 py-2 border rounded-lg text-sm">
-                        <option value="male">Erkek</option>
-                        <option value="female">Kadın</option>
-                        <option value="mixed">Karma</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-4">
-                      <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Açıklama</label>
-                      <input type="text" value={bulkConfig.notes} onChange={e => setBulkConfig({...bulkConfig, notes: e.target.value})} placeholder="Her oda için geçerli olacak not..." className="w-full px-3 py-2 border rounded-lg text-sm" />
-                    </div>
+                  <div>
+                     <label className="block text-xs font-semibold text-stone-500 uppercase mb-2">Excel Dosyası (.xlsx)</label>
+                     <div className="relative group">
+                       <input 
+                         required 
+                         type="file" 
+                         accept=".xlsx, .xls"
+                         onChange={e => setExcelFile(e.target.files?.[0] || null)}
+                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                       />
+                       <div className={cn("w-full border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center transition-colors group-hover:bg-stone-50", excelFile ? "border-[#7C8363] bg-[#7C8363]/5" : "border-[#E8E6E1] bg-white")}>
+                         <Upload className={cn("w-8 h-8 mb-3", excelFile ? "text-[#7C8363]" : "text-stone-300")} />
+                         <span className="text-sm font-semibold text-stone-700">{excelFile ? excelFile.name : "Dosya seçmek için tıklayın veya sürükleyin"}</span>
+                         {!excelFile && <span className="text-xs text-stone-500 mt-1">Sadece .xlsx ve .xls dosyaları</span>}
+                       </div>
+                     </div>
                   </div>
                 </form>
               )}
@@ -346,10 +441,11 @@ export default function RoomManagement() {
               </button>
               <button 
                 type="submit" 
-                form={activeTab === 'single' ? "singleRoomForm" : "bulkRoomForm"} 
-                className="px-6 py-2.5 bg-[#7C8363] text-white rounded-xl font-semibold hover:bg-[#6A7152] transition-colors flex items-center gap-2"
+                form={activeTab === 'single' ? "singleRoomForm" : "excelRoomForm"} 
+                disabled={importing || (activeTab === 'excel' && !excelFile)}
+                className="px-6 py-2.5 bg-[#7C8363] text-white rounded-xl font-semibold hover:bg-[#6A7152] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {activeTab === 'single' ? <><Plus className="w-4 h-4"/> Ekle</> : <><Copy className="w-4 h-4"/> {bulkConfig.count} Oda Ekle</>}
+                {activeTab === 'single' ? <><Plus className="w-4 h-4"/> Ekle</> : importing ? 'Yükleniyor...' : <><Upload className="w-4 h-4"/> Yükle</>}
               </button>
             </div>
           </div>
