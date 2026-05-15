@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Building2,
@@ -20,15 +20,22 @@ interface SidebarProps {
 export default function Sidebar({ open, setOpen }: SidebarProps) {
   const currentUser = useStore(state => state.currentUser);
   const roles = useStore(state => state.roles);
+  const staff = useStore(state => state.staff);
+  const pendingStaffCount = staff.filter(s => s.status === "pending_placement").length;
 
   const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles) && { name: "Tesis Yönetimi", href: "/facilities", icon: Building2 },
     hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles) && { name: "Oda Yönetimi", href: "/rooms", icon: BedDouble },
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles) && { name: "Personel Yönetimi", href: "/staff", icon: Users },
+    hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles) && { 
+      name: "Personel Yönetimi", 
+      href: pendingStaffCount > 0 ? "/staff?filter=pending" : "/staff", 
+      icon: Users,
+      badge: pendingStaffCount
+    },
     hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles) && { name: "Arıza ve Bakım", href: "/maintenance", icon: Wrench },
     hasPermission(currentUser?.role, PERMISSION_KEYS.view_settings, roles) && { name: "Ayarlar", href: "/settings", icon: Settings },
-  ].filter(Boolean) as { name: string, href: string, icon: any }[];
+  ].filter(Boolean) as { name: string, href: string, icon: any, badge?: number }[];
 
   return (
     <>
@@ -93,7 +100,12 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                           )}
                           aria-hidden="true"
                         />
-                        {item.name}
+                        <span className="flex-1">{item.name}</span>
+                        {item.badge && item.badge > 0 ? (
+                          <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 ml-auto shrink-0 shadow-sm flex items-center justify-center min-w-[20px]">
+                            {item.badge}
+                          </span>
+                        ) : null}
                       </>
                     )}
                   </NavLink>

@@ -1,4 +1,5 @@
-import React, { useState, useMemo, ReactNode, useRef } from "react";
+import React, { useState, useMemo, ReactNode, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
@@ -81,6 +82,19 @@ export default function StaffManagement() {
   const [filterHotel, setFilterHotel] = useState('');
   const [filterFacility, setFilterFacility] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
+  const [searchParams] = useSearchParams();
+
+  // Handle URL query parameters and filter initialization
+  useEffect(() => {
+    const filterParam = searchParams.get('filter');
+    const pendingCount = staff.filter(s => s.status === 'pending_placement').length;
+
+    if (filterParam === 'pending') {
+      setFilterStatus('pending_placement');
+    } else if (!filterParam || pendingCount === 0) {
+      setFilterStatus('placed');
+    }
+  }, [searchParams, staff]);
 
   if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles)) {
     return (
