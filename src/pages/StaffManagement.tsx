@@ -5,6 +5,7 @@ import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
+import CheckInWizard from "../components/staff/CheckInWizard";
 
 const ActionMenu = ({ children }: { children: ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -562,53 +563,7 @@ export default function StaffManagement() {
       )}
 
       {selectedStaffIdToPlace && staffToPlace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl">
-            <h3 className="text-xl font-bold mb-2 text-[#2D332D]">Oda Yerleşimi (Check-in)</h3>
-            <p className="text-stone-500 text-sm mb-6">Personel: <strong className="text-[#2D332D]">{staffToPlace.fullName}</strong> ({staffToPlace.gender === 'male' ? 'Erkek' : 'Kadın'})</p>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Lojman Seçimi</label>
-                <select value={selectedFacilityId} onChange={(e) => { setSelectedFacilityId(e.target.value); setSelectedRoomId(''); }} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
-                  <option value="">Lojman Binası Seçin...</option>
-                  {availableFacilities.map(f => (
-                    <option key={f.id} value={f.id}>{f.name} (Kapasite: {f.bedCapacity} Yatak)</option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedFacilityId && (
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Uygun Oda Seçimi</label>
-                  <select value={selectedRoomId} onChange={(e) => setSelectedRoomId(e.target.value)} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
-                    <option value="">Oda Seçin...</option>
-                    {availableRooms.length === 0 && <option disabled>Uygun boş oda bulunamadı.</option>}
-                    {availableRooms.map(r => {
-                      const occ = accommodations.filter(a => a.roomId === r.id && a.status === 'active').length;
-                      return (
-                        <option key={r.id} value={r.id}>
-                          Oda {r.roomNumber} ({occ}/{r.bedCount} Dolu) - {r.genderType === 'male' ? 'Erkek' : r.genderType === 'female' ? 'Kadın' : 'Karma'}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex justify-end gap-3 mt-8">
-              <button onClick={() => setSelectedStaffIdToPlace(null)} className="px-6 py-2 border border-[#E8E6E1] bg-white text-stone-600 rounded-xl hover:bg-stone-50 font-semibold text-sm">İptal</button>
-              <button 
-                onClick={handlePlaceStaff} 
-                disabled={!selectedFacilityId || !selectedRoomId}
-                className="px-6 py-2 bg-[#7C8363] text-white rounded-xl hover:bg-[#6A7152] font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <CheckCircle className="w-4 h-4"/> Yerleştir
-              </button>
-            </div>
-          </div>
-        </div>
+        <CheckInWizard staffMember={staffToPlace} onClose={() => setSelectedStaffIdToPlace(null)} />
       )}
 
       {/* Edit Staff Modal */}

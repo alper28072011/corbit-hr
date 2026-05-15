@@ -83,6 +83,18 @@ export interface ActionLog {
   timestamp: number;
 }
 
+export interface ApprovalRequest {
+  id: string;
+  type: 'cross_dorm_placement';
+  staffId: string;
+  targetFacilityId: string;
+  targetRoomId: string;
+  requestedBy: string; // UserId
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reason?: string;
+}
+
 export type MaintenanceStatus = 'open' | 'in_progress' | 'resolved';
 
 export interface MaintenanceRequest {
