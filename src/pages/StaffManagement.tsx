@@ -1,6 +1,6 @@
 import React, { useState, useMemo, ReactNode, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info } from "lucide-react";
+import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown, LayoutList, Grid3X3, Users } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
@@ -84,6 +84,10 @@ export default function StaffManagement() {
   const [filterFacility, setFilterFacility] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [searchParams] = useSearchParams();
+
+  // Sort & View Mode State
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'room', direction: 'asc' });
+  const [viewMode, setViewMode] = useState<'list' | 'room'>('list');
 
   // Handle URL query parameters and filter initialization
   useEffect(() => {
@@ -195,7 +199,58 @@ export default function StaffManagement() {
 
       return true;
     }).sort((a, b) => {
-      // sort pending first, then placed, then left. Then by name
+      // Dynamic Sort
+      if (sortConfig) {
+        let aValue: any = '';
+        let bValue: any = '';
+        
+        switch (sortConfig.key) {
+          case 'hotel':
+            aValue = a.hotel?.name || '';
+            bValue = b.hotel?.name || '';
+            break;
+          case 'department':
+            aValue = `${a.staff.department || ''} ${a.staff.position || ''}`;
+            bValue = `${b.staff.department || ''} ${b.staff.position || ''}`;
+            break;
+          case 'fullName':
+            aValue = a.staff.fullName || '';
+            bValue = b.staff.fullName || '';
+            break;
+          case 'facility':
+            aValue = a.facility?.name || '';
+            bValue = b.facility?.name || '';
+            break;
+          case 'room':
+            aValue = a.room?.roomNumber || '';
+            bValue = b.room?.roomNumber || '';
+            break;
+          case 'gender':
+            aValue = a.staff.gender || '';
+            bValue = b.staff.gender || '';
+            break;
+          case 'status':
+            const statusLabels: Record<string, string> = {
+              pending_placement: 'Bekliyor',
+              placed: 'Konaklıyor',
+              left: 'Çıkış Yaptı'
+            };
+            aValue = statusLabels[a.staff.status] || a.staff.status;
+            bValue = statusLabels[b.staff.status] || b.staff.status;
+            break;
+        }
+
+        if (sortConfig.key === 'room') {
+          const cmp = String(aValue).localeCompare(String(bValue), undefined, { numeric: true });
+          return sortConfig.direction === 'asc' ? cmp : -cmp;
+        }
+
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      }
+
+      // Base Sort: sort pending first, then placed, then left. Then by name
       const statusOrder = { pending_placement: 0, placed: 1, left: 2 };
       const aOrder = statusOrder[a.staff.status as keyof typeof statusOrder] ?? 3;
       const bOrder = statusOrder[b.staff.status as keyof typeof statusOrder] ?? 3;
@@ -203,7 +258,7 @@ export default function StaffManagement() {
       
       return a.staff.fullName.localeCompare(b.staff.fullName);
     });
-  }, [staff, hotels, facilities, rooms, accommodations, currentUser, globalSearch, filterStatus, filterHotel, filterFacility, filterDepartment]);
+  }, [staff, hotels, facilities, rooms, accommodations, currentUser, globalSearch, filterStatus, filterHotel, filterFacility, filterDepartment, sortConfig]);
 
 
   const handleAddStaff = (e: import('react').FormEvent) => {
@@ -275,6 +330,27 @@ export default function StaffManagement() {
     setFilterDepartment('');
   };
 
+  const requestSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (columnName: string) => {
+    if (!sortConfig || sortConfig.key !== columnName) {
+      return <ArrowUpDown className="w-3 h-3 ml-1 opacity-40 hover:opacity-100 transition-opacity" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ArrowUp className="w-3 h-3 ml-1 text-[#7C8363]" /> 
+      : <ArrowDown className="w-3 h-3 ml-1 text-[#7C8363]" />;
+  };
+
+  const isSorted = (columnName: string) => {
+    return sortConfig?.key === columnName;
+  };
+
   return (
     <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
       <div className="shrink-0">
@@ -297,6 +373,20 @@ export default function StaffManagement() {
 
       {/* Toolbar */}
       <div className="card-standard p-4 flex flex-col md:flex-row gap-4 bg-[#FDFCFB] shrink-0">
+          <div className="flex bg-stone-100 p-1 rounded-xl shrink-0 self-start">
+            <button 
+              onClick={() => setViewMode('list')} 
+              className={cn("px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2", viewMode === 'list' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-[#2D332D]' : 'text-stone-500 hover:text-stone-700')}
+            >
+              <LayoutList className="w-4 h-4" /> Liste Görünümü
+            </button>
+            <button 
+              onClick={() => setViewMode('room')} 
+              className={cn("px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2", viewMode === 'room' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-[#2D332D]' : 'text-stone-500 hover:text-stone-700')}
+            >
+              <Grid3X3 className="w-4 h-4" /> Rack Görünümü
+            </button>
+          </div>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
             <input 
@@ -341,185 +431,301 @@ export default function StaffManagement() {
         </div>
 
       <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
-        <div className="flex-1 overflow-auto">
-          <table className="min-w-full text-left relative">
-            <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
-              <tr>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Personel Adı</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Lojman</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Oda</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Departman</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Görev</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Cinsiyet</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E8E6E1] bg-white">
-              {unifiedStaffData.length === 0 ? (
+        {viewMode === 'list' ? (
+          <div className="flex-1 overflow-auto">
+            <table className="min-w-full text-left relative">
+              <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-stone-500">
-                    Seçilen kriterlere uygun personel bulunamadı.
-                  </td>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('hotel') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('hotel')}>
+                    <div className="flex items-center">Otel Adı {getSortIcon('hotel')}</div>
+                  </th>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('department') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('department')}>
+                    <div className="flex items-center">Departman & Görev {getSortIcon('department')}</div>
+                  </th>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('fullName') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('fullName')}>
+                    <div className="flex items-center">Personel Adı {getSortIcon('fullName')}</div>
+                  </th>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('facility') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('facility')}>
+                    <div className="flex items-center">Lojman {getSortIcon('facility')}</div>
+                  </th>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('room') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('room')}>
+                    <div className="flex items-center">Oda {getSortIcon('room')}</div>
+                  </th>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('gender') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('gender')}>
+                    <div className="flex items-center">Cinsiyet {getSortIcon('gender')}</div>
+                  </th>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('status') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('status')}>
+                    <div className="flex items-center">Durum {getSortIcon('status')}</div>
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>
                 </tr>
-              ) : (
-                unifiedStaffData.map(({ staff: s, hotel: h, acc, facility: f, room: r }) => (
-                  <tr key={s.id} className="hover:bg-stone-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-[#2D332D]">{s.fullName}</p>
-                        {/* Tooltip info icon */}
-                        <div className="relative flex items-center justify-center group">
-                          <Info className="w-4 h-4 text-stone-400 hover:text-[#7C8363] cursor-help" />
-                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:flex flex-col bg-gray-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap z-20 shadow-lg items-center before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-800">
-                            <span className="font-semibold block mb-1">TC Kimlik No: {s.tcNo || '-'}</span>
-                            <span className="block text-gray-200">Telefon: {s.phone || '-'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-[#7C8363]">
-                      {s.status === 'pending_placement' ? (
-                        <span className="text-stone-400 italic font-normal">-</span>
-                      ) : (
-                        f?.name || 'Bilinmeyen Lojman'
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-mono font-medium text-stone-600">
-                      {s.status === 'pending_placement' ? (
-                        <span className="text-stone-400 italic font-sans font-normal">-</span>
-                      ) : (
-                        r?.roomNumber || '-'
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-stone-600">
-                      <p className="font-medium text-stone-800">{s.department || '-'}</p>
-                      <p className="text-[11px] text-stone-500 mt-0.5">{h?.name || '-'}</p>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-stone-600">
-                      {s.position || '-'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider", s.gender === 'female' ? "bg-pink-50 text-pink-700" : "bg-blue-50 text-blue-700")}>
-                        {s.gender === 'female' ? 'Kadın' : 'Erkek'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex flex-col items-start gap-1">
-                        {s.status === 'placed' && (
-                           <>
-                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-green-50 text-green-700 border border-green-200">
-                               Konaklıyor
-                             </span>
-                             <span className="text-[11px] text-stone-500 font-medium whitespace-nowrap">
-                               G: {acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}
-                             </span>
-                           </>
-                        )}
-                        {s.status === 'pending_placement' && (
-                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-200">
-                             Bekliyor
-                           </span>
-                        )}
-                        {s.status === 'left' && (
-                           <>
-                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-stone-100 text-stone-600 border border-stone-200">
-                               Çıkış Yaptı
-                             </span>
-                             <span className="text-[11px] text-stone-500 font-medium whitespace-nowrap">
-                               Ç: {acc?.checkOutDate ? new Date(acc.checkOutDate).toLocaleDateString('tr-TR') : '-'}
-                             </span>
-                           </>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {(canPlaceStaff || canCheckoutStaff || canEditStaff || canDeleteStaff || canViewDoc) ? (
-                        <ActionMenu>
-                          {s.status === 'pending_placement' && canPlaceStaff && (
-                            <button 
-                              onClick={() => setSelectedStaffIdToPlace(s.id)}
-                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
-                            >
-                              <CheckCircle className="w-4 h-4 text-[#7C8363]" /> Yerleştir
-                            </button>
-                          )}
-                          {s.status === 'placed' && canCheckoutStaff && acc && (
-                            <button 
-                              onClick={() => {
-                                if(confirm(`${s.fullName} isimli personelin lojmandan çıkışını yapmak istediğinize emin misiniz?`)) {
-                                  checkoutStaff(acc.id, new Date().toISOString().split('T')[0]);
-                                }
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
-                            >
-                              <LogOut className="w-4 h-4" /> Çıkış Yap
-                            </button>
-                          )}
-                          {s.status === 'placed' && canChangeRoom && (
-                             <button 
-                               onClick={() => alert("Oda değiştirme ekranı geliştirme aşamasındadır.")}
-                               className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
-                             >
-                               <Replace className="w-4 h-4" /> Oda Değiştir
-                             </button>
-                          )}
-                          {s.status === 'left' && canPlaceStaff && acc && (
-                             <button 
-                               onClick={() => {
-                                 if(confirm(`${s.fullName} isimli personelin lojmana geri dönüşünü (C/OUT İptali) onaylıyor musunuz?`)) {
-                                   undoCheckoutStaff(acc.id);
-                                 }
-                               }}
-                               className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
-                             >
-                               <CheckCircle className="w-4 h-4" /> Çıkış İptali (Geri Al)
-                             </button>
-                          )}
-                          
-                          {canViewLogs && (
-                            <button 
-                              onClick={() => setLogsModalStaffId(s.id)}
-                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
-                            >
-                              <Clock className="w-4 h-4" /> İşlem Geçmişi
-                            </button>
-                          )}
-                          {canEditStaff && (
-                            <button 
-                              onClick={() => handleOpenEdit(s)}
-                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
-                            >
-                              <Edit2 className="w-4 h-4" /> Düzenle
-                            </button>
-                          )}
-                          {canViewDoc && (
-                            <button 
-                              onClick={() => alert("Belge görüntüleme ekranı geliştirme aşamasındadır.")}
-                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
-                            >
-                              <FileText className="w-4 h-4" /> Belge Görüntüle
-                            </button>
-                          )}
-                          {canDeleteStaff && (
-                            <button 
-                              onClick={() => { if(confirm(`${s.fullName} isimli personelin kaydını tamamen silmek istediğinize emin misiniz?`)) deleteStaff(s.id); }}
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
-                            >
-                              <Trash2 className="w-4 h-4" /> Kaydı Sil
-                            </button>
-                          )}
-                        </ActionMenu>
-                      ) : (
-                        <span className="text-stone-400 text-xs">-</span>
-                      )}
+              </thead>
+              <tbody className="divide-y divide-[#E8E6E1] bg-white">
+                {unifiedStaffData.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center text-stone-500">
+                      Seçilen kriterlere uygun personel bulunamadı.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  unifiedStaffData.map(({ staff: s, hotel: h, acc, facility: f, room: r }) => (
+                    <tr key={s.id} className="hover:bg-stone-50 transition-colors">
+                      <td className="px-6 py-4 text-sm font-semibold text-stone-700">
+                        {h?.name || '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-stone-600">
+                        <p className="font-medium text-stone-800">{s.department || '-'}</p>
+                        <p className="text-[11px] text-stone-500 mt-0.5">{s.position || '-'}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-[#2D332D]">{s.fullName}</p>
+                          {/* Tooltip info icon */}
+                          <div className="relative flex items-center justify-center group">
+                            <Info className="w-4 h-4 text-stone-400 hover:text-[#7C8363] cursor-help" />
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:flex flex-col bg-gray-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap z-20 shadow-lg items-center before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-800">
+                              <span className="font-semibold block mb-1">TC Kimlik No: {s.tcNo || '-'}</span>
+                              <span className="block text-gray-200">Telefon: {s.phone || '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-semibold text-[#7C8363]">
+                        {s.status === 'pending_placement' ? (
+                          <span className="text-stone-400 italic font-normal">-</span>
+                        ) : (
+                          f?.name || 'Bilinmeyen Lojman'
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-mono font-medium text-stone-600">
+                        {s.status === 'pending_placement' ? (
+                          <span className="text-stone-400 italic font-sans font-normal">-</span>
+                        ) : (
+                          r?.roomNumber || '-'
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider", s.gender === 'female' ? "bg-pink-50 text-pink-700" : "bg-blue-50 text-blue-700")}>
+                          {s.gender === 'female' ? 'Kadın' : 'Erkek'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <div className="flex flex-col items-start gap-1">
+                          {s.status === 'placed' && (
+                             <>
+                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-green-50 text-green-700 border border-green-200">
+                                 Konaklıyor
+                               </span>
+                               <span className="text-[11px] text-stone-500 font-medium whitespace-nowrap">
+                                 G: {acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}
+                               </span>
+                             </>
+                          )}
+                          {s.status === 'pending_placement' && (
+                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-200">
+                               Bekliyor
+                             </span>
+                          )}
+                          {s.status === 'left' && (
+                             <>
+                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-stone-100 text-stone-600 border border-stone-200">
+                                 Çıkış Yaptı
+                               </span>
+                               <span className="text-[11px] text-stone-500 font-medium whitespace-nowrap">
+                                 Ç: {acc?.checkOutDate ? new Date(acc.checkOutDate).toLocaleDateString('tr-TR') : '-'}
+                               </span>
+                             </>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {(canPlaceStaff || canCheckoutStaff || canEditStaff || canDeleteStaff || canViewDoc) ? (
+                          <ActionMenu>
+                            {s.status === 'pending_placement' && canPlaceStaff && (
+                              <button 
+                                onClick={() => setSelectedStaffIdToPlace(s.id)}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <CheckCircle className="w-4 h-4 text-[#7C8363]" /> Yerleştir
+                              </button>
+                            )}
+                            {s.status === 'placed' && canCheckoutStaff && acc && (
+                              <button 
+                                onClick={() => {
+                                  if(confirm(`${s.fullName} isimli personelin lojmandan çıkışını yapmak istediğinize emin misiniz?`)) {
+                                    checkoutStaff(acc.id, new Date().toISOString().split('T')[0]);
+                                  }
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <LogOut className="w-4 h-4" /> Çıkış Yap
+                              </button>
+                            )}
+                            {s.status === 'placed' && canChangeRoom && (
+                               <button 
+                                 onClick={() => alert("Oda değiştirme ekranı geliştirme aşamasındadır.")}
+                                 className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                               >
+                                 <Replace className="w-4 h-4" /> Oda Değiştir
+                               </button>
+                            )}
+                            {s.status === 'left' && canPlaceStaff && acc && (
+                               <button 
+                                 onClick={() => {
+                                   if(confirm(`${s.fullName} isimli personelin lojmana geri dönüşünü (C/OUT İptali) onaylıyor musunuz?`)) {
+                                     undoCheckoutStaff(acc.id);
+                                   }
+                                 }}
+                                 className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                               >
+                                 <CheckCircle className="w-4 h-4" /> Çıkış İptali (Geri Al)
+                               </button>
+                            )}
+                            
+                            {canViewLogs && (
+                              <button 
+                                onClick={() => setLogsModalStaffId(s.id)}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <Clock className="w-4 h-4" /> İşlem Geçmişi
+                              </button>
+                            )}
+                            {canEditStaff && (
+                              <button 
+                                onClick={() => handleOpenEdit(s)}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <Edit2 className="w-4 h-4" /> Düzenle
+                              </button>
+                            )}
+                            {canViewDoc && (
+                              <button 
+                                onClick={() => alert("Belge görüntüleme ekranı geliştirme aşamasındadır.")}
+                                className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                              >
+                                <FileText className="w-4 h-4" /> Belge Görüntüle
+                              </button>
+                            )}
+                            {canDeleteStaff && (
+                              <button 
+                                onClick={() => { if(confirm(`${s.fullName} isimli personelin kaydını tamamen silmek istediğinize emin misiniz?`)) deleteStaff(s.id); }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
+                              >
+                                <Trash2 className="w-4 h-4" /> Kaydı Sil
+                              </button>
+                            )}
+                          </ActionMenu>
+                        ) : (
+                          <span className="text-stone-400 text-xs">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto p-6 bg-[#FDFCFB]">
+            {availableFacilities.map(facility => {
+              const facilityRooms = rooms
+                .filter(r => r.facilityId === facility.id && r.status === 'active')
+                .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+              if (facilityRooms.length === 0) return null;
+
+              return (
+                <div key={facility.id} className="mb-10 last:mb-0">
+                  <div className="flex items-center gap-3 mb-6 pb-3 border-b border-stone-200">
+                     <h3 className="text-xl font-bold text-[#2D332D]">{facility.name}</h3>
+                     <span className="px-2.5 py-1 bg-stone-100 text-stone-600 rounded-lg text-xs font-bold">{facilityRooms.length} Oda</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {facilityRooms.map(room => {
+                      const activeAccs = accommodations.filter(a => a.roomId === room.id && a.status === 'active');
+                      const currentOccupancy = activeAccs.length;
+                      const isFull = currentOccupancy >= room.bedCount;
+                      const isEmpty = currentOccupancy === 0;
+                      const progressWidth = Math.min(100, Math.round((currentOccupancy / room.bedCount) * 100));
+                      
+                      const residentNames = activeAccs.map(acc => {
+                         const resident = staff.find(s => s.id === acc.staffId);
+                         return resident?.fullName || 'Bilinmeyen Personel';
+                      });
+
+                      return (
+                        <div key={room.id} className={cn(
+                          "group relative bg-white border border-[#E8E6E1] rounded-xl p-5 shadow-sm transition-all hover:shadow-md",
+                          isFull && "border-red-200 bg-red-50/10",
+                          isEmpty && "border-green-200 bg-green-50/10"
+                        )}>
+                          <div className="flex justify-between items-start mb-4">
+                             <div>
+                               <div className="flex items-center gap-2 mb-1">
+                                 <span className="text-lg font-bold font-mono text-[#2D332D]">{room.roomNumber}</span>
+                                 <span className={cn(
+                                   "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                                   room.genderType === 'female' ? "bg-pink-50 text-pink-700" : 
+                                   room.genderType === 'male' ? "bg-blue-50 text-blue-700" : 
+                                   "bg-purple-50 text-purple-700"
+                                 )}>{room.genderType === 'female' ? 'Kadın' : room.genderType === 'male' ? 'Erkek' : 'Karma'}</span>
+                               </div>
+                               <span className="text-xs text-stone-500">{room.block ? `${room.block} Blok` : ''} {room.floor ? `${room.floor}. Kat` : ''}</span>
+                             </div>
+                             
+                             <div className={cn(
+                               "flex flex-col items-end",
+                               isFull ? "text-red-600" : (isEmpty ? "text-green-600" : "text-[#7C8363]")
+                             )}>
+                               <span className="text-xl font-bold font-mono leading-none">{currentOccupancy}<span className="text-stone-400 text-sm">/{room.bedCount}</span></span>
+                               <span className="text-[10px] font-semibold uppercase mt-1">Dolu</span>
+                             </div>
+                          </div>
+
+                          <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden mb-4">
+                             <div 
+                               className={cn("h-full rounded-full transition-all", isFull ? "bg-red-500" : "bg-[#7C8363]")}
+                               style={{ width: `${progressWidth}%` }}
+                             />
+                          </div>
+
+                          <div className="flex items-center gap-2 text-sm text-stone-600 font-medium cursor-help">
+                             <Users className="w-4 h-4 text-stone-400" />
+                             {isEmpty ? 'Boş Oda' : `${currentOccupancy} Kişi Konaklıyor`}
+                             
+                             {/* Hover Resident List */}
+                             {!isEmpty && (
+                               <div className="absolute top-full left-0 mt-2 w-full invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-20">
+                                 <div className="bg-gray-800 text-white text-xs rounded-lg p-3 shadow-xl">
+                                   <p className="font-semibold text-gray-400 mb-2 border-b border-gray-700 pb-1">Konaklayanlar</p>
+                                   <ul className="space-y-1.5">
+                                     {residentNames.map((name, i) => (
+                                       <li key={i} className="flex items-center gap-2">
+                                         <div className="w-1.5 h-1.5 rounded-full bg-[#7C8363]" />
+                                         {name}
+                                       </li>
+                                     ))}
+                                   </ul>
+                                 </div>
+                               </div>
+                             )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            
+            {availableFacilities.every(facility => rooms.filter(r => r.facilityId === facility.id && r.status === 'active').length === 0) && (
+               <div className="flex flex-col items-center justify-center p-12 text-stone-500 bg-white rounded-xl border border-dashed border-stone-300">
+                  <Grid3X3 className="w-12 h-12 mb-4 text-stone-300" />
+                  <p className="text-sm font-medium">Görüntülenecek oda bulunamadı.</p>
+               </div>
+            )}
+          </div>
+        )}
       </div>
 
       {showAddStaffForm && (
