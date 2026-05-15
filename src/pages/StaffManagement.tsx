@@ -1,6 +1,6 @@
 import React, { useState, useMemo, ReactNode, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock } from "lucide-react";
+import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
@@ -345,18 +345,20 @@ export default function StaffManagement() {
           <table className="min-w-full text-left relative">
             <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
               <tr>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Personel</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">İletişim & Cinsiyet</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Otel & Departman</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Lojman & Oda</th>
-                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum & Tarih</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Personel Adı</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Lojman</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Oda</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Departman</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Görev</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Cinsiyet</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum</th>
                 <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E8E6E1] bg-white">
               {unifiedStaffData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-stone-500">
+                  <td colSpan={8} className="px-6 py-12 text-center text-stone-500">
                     Seçilen kriterlere uygun personel bulunamadı.
                   </td>
                 </tr>
@@ -364,30 +366,43 @@ export default function StaffManagement() {
                 unifiedStaffData.map(({ staff: s, hotel: h, acc, facility: f, room: r }) => (
                   <tr key={s.id} className="hover:bg-stone-50 transition-colors">
                     <td className="px-6 py-4">
-                      <p className="font-bold text-[#2D332D]">{s.fullName}</p>
-                      <p className="text-[11px] text-stone-500 mt-0.5">{s.tcNo}</p>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-stone-600">
-                      <div className="flex flex-col items-start gap-1">
-                        <span>{s.phone || '-'}</span>
-                        <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider", s.gender === 'female' ? "bg-pink-50 text-pink-700" : "bg-blue-50 text-blue-700")}>
-                          {s.gender === 'female' ? 'Kadın' : 'Erkek'}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-[#2D332D]">{s.fullName}</p>
+                        {/* Tooltip info icon */}
+                        <div className="relative flex items-center justify-center group">
+                          <Info className="w-4 h-4 text-stone-400 hover:text-[#7C8363] cursor-help" />
+                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:flex flex-col bg-gray-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap z-20 shadow-lg items-center before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-800">
+                            <span className="font-semibold block mb-1">TC Kimlik No: {s.tcNo || '-'}</span>
+                            <span className="block text-gray-200">Telefon: {s.phone || '-'}</span>
+                          </div>
+                        </div>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-sm font-semibold text-[#7C8363]">
+                      {s.status === 'pending_placement' ? (
+                        <span className="text-stone-400 italic font-normal">-</span>
+                      ) : (
+                        f?.name || 'Bilinmeyen Lojman'
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-mono font-medium text-stone-600">
+                      {s.status === 'pending_placement' ? (
+                        <span className="text-stone-400 italic font-sans font-normal">-</span>
+                      ) : (
+                        r?.roomNumber || '-'
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-stone-600">
-                      <p className="font-semibold text-stone-700">{h?.name || '-'}</p>
-                      <p className="text-xs text-stone-500 mt-0.5 whitespace-nowrap">{s.department || '-'} / {s.position || '-'}</p>
+                      <p className="font-medium text-stone-800">{s.department || '-'}</p>
+                      <p className="text-[11px] text-stone-500 mt-0.5">{h?.name || '-'}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-stone-600">
+                      {s.position || '-'}
                     </td>
                     <td className="px-6 py-4">
-                      {s.status === 'pending_placement' ? (
-                        <span className="text-stone-400 italic text-sm">-</span>
-                      ) : (
-                        <>
-                          <p className="font-semibold text-[#7C8363] text-sm">{f?.name || 'Bilinmiyor Lojman'}</p>
-                          <p className="text-xs font-mono font-medium text-stone-600 mt-0.5">Oda: {r?.roomNumber || '-'}</p>
-                        </>
-                      )}
+                      <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider", s.gender === 'female' ? "bg-pink-50 text-pink-700" : "bg-blue-50 text-blue-700")}>
+                        {s.gender === 'female' ? 'Kadın' : 'Erkek'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex flex-col items-start gap-1">
