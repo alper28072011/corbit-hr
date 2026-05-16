@@ -27,24 +27,24 @@ const GENDER_COLORS = { male: '#7C8363', female: '#D9D3C1' };
 
 // --- Modular Card Components ---
 function Card({ className = "", children }: { className?: string, children: React.ReactNode }) {
-  return <div className={`card-standard flex flex-col ${className}`}>{children}</div>;
+  return <div className={cn("card-standard flex flex-col", className)}>{children}</div>;
 }
 
 function CardHeader({ className = "", children }: { className?: string, children: React.ReactNode }) {
-  return <div className={`p-6 pb-4 flex flex-col gap-1 ${className}`}>{children}</div>;
+  return <div className={cn("p-6 pb-4 flex flex-col gap-1", className)}>{children}</div>;
 }
 
 function CardTitle({ className = "", children, icon: Icon }: { className?: string, children: React.ReactNode, icon?: any }) {
   return (
     <div className="flex items-center justify-between mb-1">
-      <h3 className={`font-semibold text-stone-700 ${className}`}>{children}</h3>
-      {Icon && <Icon className="w-5 h-5 text-stone-400" />}
+      <h3 className={cn("font-semibold text-stone-700", className)}>{children}</h3>
+      {Icon && <Icon className={cn("w-5 h-5 text-stone-400", className)} />}
     </div>
   );
 }
 
 function CardContent({ className = "", children }: { className?: string, children: React.ReactNode }) {
-  return <div className={`p-6 pt-0 flex-1 ${className}`}>{children}</div>;
+  return <div className={cn("p-6 pt-0 flex-1", className)}>{children}</div>;
 }
 // -------------------------------
 

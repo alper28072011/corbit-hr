@@ -56,11 +56,13 @@ export interface Staff {
   fullName: string;
   tcNo: string;
   phone: string;
+  birthDate?: string;
   department: string;
   position: string;
   hotelId: string;
   gender: 'male' | 'female';
   status: 'pending_placement' | 'placed' | 'left';
+  notes?: string;
 }
 
 export interface Accommodation {

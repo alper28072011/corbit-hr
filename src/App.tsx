@@ -14,6 +14,8 @@ import Settings from "./pages/Settings";
 import AuthProvider from "./components/auth/AuthProvider";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
+import RackManagement from "./pages/RackManagement";
+
 export default function App() {
   return (
     <AuthProvider>
@@ -23,6 +25,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="facilities" element={<FacilityManagement />} />
             <Route path="rooms" element={<RoomManagement />} />
+            <Route path="rack" element={<RackManagement />} />
             <Route path="staff" element={<StaffManagement />} />
             <Route path="maintenance" element={<Maintenance />} />
             <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>

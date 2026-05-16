@@ -1,8 +1,8 @@
 import React, { useState, useMemo, ReactNode, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown, LayoutList, Grid3X3, Users } from "lucide-react";
+import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useStore } from "../store/useStore";
-import { cn } from "../lib/utils";
+import { cn, calculateAge } from "../lib/utils";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 import CheckInWizard from "../components/staff/CheckInWizard";
@@ -59,7 +59,7 @@ export default function StaffManagement() {
     : '';
 
   const [newStaff, setNewStaff] = useState({
-    fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const, notes: ''
   });
 
   // Placement modal state
@@ -70,9 +70,12 @@ export default function StaffManagement() {
   // Edit Modal State
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: ''
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: '', notes: ''
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Tooltip state
+  const [tooltipData, setTooltipData] = useState<{ x: number, y: number, staffId: string } | null>(null);
 
   // Logs Modal State
   const [logsModalStaffId, setLogsModalStaffId] = useState<string | null>(null);
@@ -85,9 +88,8 @@ export default function StaffManagement() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [searchParams] = useSearchParams();
 
-  // Sort & View Mode State
+  // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'room', direction: 'asc' });
-  const [viewMode, setViewMode] = useState<'list' | 'room'>('list');
 
   // Handle URL query parameters and filter initialization
   useEffect(() => {
@@ -270,7 +272,7 @@ export default function StaffManagement() {
     const dHotelId = currentUser?.role === 'hotel_hr_manager' 
       ? (currentUser.assignedHotelIds?.[0] || currentUser.assignedHotelId || '') 
       : '';
-    setNewStaff({ fullName: '', tcNo: '', phone: '', department: '', position: '', hotelId: dHotelId, gender: 'male' });
+    setNewStaff({ fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: dHotelId, gender: 'male', notes: '' });
   };
 
   const handlePlaceStaff = () => {
@@ -285,12 +287,14 @@ export default function StaffManagement() {
     setEditForm({
       fullName: staffData.fullName,
       tcNo: staffData.tcNo,
-      phone: staffData.phone,
+      phone: staffData.phone || '',
+      birthDate: staffData.birthDate || '',
       department: staffData.department,
       position: staffData.position,
       hotelId: staffData.hotelId,
       gender: staffData.gender,
-      status: staffData.status
+      status: staffData.status,
+      notes: staffData.notes || ''
     });
     setEditingStaffId(staffData.id);
   };
@@ -373,20 +377,6 @@ export default function StaffManagement() {
 
       {/* Toolbar */}
       <div className="card-standard p-4 flex flex-col md:flex-row gap-4 bg-[#FDFCFB] shrink-0">
-          <div className="flex bg-stone-100 p-1 rounded-xl shrink-0 self-start">
-            <button 
-              onClick={() => setViewMode('list')} 
-              className={cn("px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2", viewMode === 'list' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-[#2D332D]' : 'text-stone-500 hover:text-stone-700')}
-            >
-              <LayoutList className="w-4 h-4" /> Liste Görünümü
-            </button>
-            <button 
-              onClick={() => setViewMode('room')} 
-              className={cn("px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2", viewMode === 'room' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-[#2D332D]' : 'text-stone-500 hover:text-stone-700')}
-            >
-              <Grid3X3 className="w-4 h-4" /> Rack Görünümü
-            </button>
-          </div>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
             <input 
@@ -431,7 +421,6 @@ export default function StaffManagement() {
         </div>
 
       <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
-        {viewMode === 'list' ? (
           <div className="flex-1 overflow-auto">
             <table className="min-w-full text-left relative">
               <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
@@ -481,12 +470,15 @@ export default function StaffManagement() {
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-[#2D332D]">{s.fullName}</p>
                           {/* Tooltip info icon */}
-                          <div className="relative flex items-center justify-center group">
+                          <div 
+                            className="relative flex items-center justify-center"
+                            onMouseEnter={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: s.id });
+                            }}
+                            onMouseLeave={() => setTooltipData(null)}
+                          >
                             <Info className="w-4 h-4 text-stone-400 hover:text-[#7C8363] cursor-help" />
-                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:flex flex-col bg-gray-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap z-20 shadow-lg items-center before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-800">
-                              <span className="font-semibold block mb-1">TC Kimlik No: {s.tcNo || '-'}</span>
-                              <span className="block text-gray-200">Telefon: {s.phone || '-'}</span>
-                            </div>
                           </div>
                         </div>
                       </td>
@@ -625,107 +617,6 @@ export default function StaffManagement() {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="flex-1 overflow-auto p-6 bg-[#FDFCFB]">
-            {availableFacilities.map(facility => {
-              const facilityRooms = rooms
-                .filter(r => r.facilityId === facility.id && r.status === 'active')
-                .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
-              if (facilityRooms.length === 0) return null;
-
-              return (
-                <div key={facility.id} className="mb-10 last:mb-0">
-                  <div className="flex items-center gap-3 mb-6 pb-3 border-b border-stone-200">
-                     <h3 className="text-xl font-bold text-[#2D332D]">{facility.name}</h3>
-                     <span className="px-2.5 py-1 bg-stone-100 text-stone-600 rounded-lg text-xs font-bold">{facilityRooms.length} Oda</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {facilityRooms.map(room => {
-                      const activeAccs = accommodations.filter(a => a.roomId === room.id && a.status === 'active');
-                      const currentOccupancy = activeAccs.length;
-                      const isFull = currentOccupancy >= room.bedCount;
-                      const isEmpty = currentOccupancy === 0;
-                      const progressWidth = Math.min(100, Math.round((currentOccupancy / room.bedCount) * 100));
-                      
-                      const residentNames = activeAccs.map(acc => {
-                         const resident = staff.find(s => s.id === acc.staffId);
-                         return resident?.fullName || 'Bilinmeyen Personel';
-                      });
-
-                      return (
-                        <div key={room.id} className={cn(
-                          "group relative bg-white border border-[#E8E6E1] rounded-xl p-5 shadow-sm transition-all hover:shadow-md",
-                          isFull && "border-red-200 bg-red-50/10",
-                          isEmpty && "border-green-200 bg-green-50/10"
-                        )}>
-                          <div className="flex justify-between items-start mb-4">
-                             <div>
-                               <div className="flex items-center gap-2 mb-1">
-                                 <span className="text-lg font-bold font-mono text-[#2D332D]">{room.roomNumber}</span>
-                                 <span className={cn(
-                                   "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                                   room.genderType === 'female' ? "bg-pink-50 text-pink-700" : 
-                                   room.genderType === 'male' ? "bg-blue-50 text-blue-700" : 
-                                   "bg-purple-50 text-purple-700"
-                                 )}>{room.genderType === 'female' ? 'Kadın' : room.genderType === 'male' ? 'Erkek' : 'Karma'}</span>
-                               </div>
-                               <span className="text-xs text-stone-500">{room.block ? `${room.block} Blok` : ''} {room.floor ? `${room.floor}. Kat` : ''}</span>
-                             </div>
-                             
-                             <div className={cn(
-                               "flex flex-col items-end",
-                               isFull ? "text-red-600" : (isEmpty ? "text-green-600" : "text-[#7C8363]")
-                             )}>
-                               <span className="text-xl font-bold font-mono leading-none">{currentOccupancy}<span className="text-stone-400 text-sm">/{room.bedCount}</span></span>
-                               <span className="text-[10px] font-semibold uppercase mt-1">Dolu</span>
-                             </div>
-                          </div>
-
-                          <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden mb-4">
-                             <div 
-                               className={cn("h-full rounded-full transition-all", isFull ? "bg-red-500" : "bg-[#7C8363]")}
-                               style={{ width: `${progressWidth}%` }}
-                             />
-                          </div>
-
-                          <div className="flex items-center gap-2 text-sm text-stone-600 font-medium cursor-help">
-                             <Users className="w-4 h-4 text-stone-400" />
-                             {isEmpty ? 'Boş Oda' : `${currentOccupancy} Kişi Konaklıyor`}
-                             
-                             {/* Hover Resident List */}
-                             {!isEmpty && (
-                               <div className="absolute top-full left-0 mt-2 w-full invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-20">
-                                 <div className="bg-gray-800 text-white text-xs rounded-lg p-3 shadow-xl">
-                                   <p className="font-semibold text-gray-400 mb-2 border-b border-gray-700 pb-1">Konaklayanlar</p>
-                                   <ul className="space-y-1.5">
-                                     {residentNames.map((name, i) => (
-                                       <li key={i} className="flex items-center gap-2">
-                                         <div className="w-1.5 h-1.5 rounded-full bg-[#7C8363]" />
-                                         {name}
-                                       </li>
-                                     ))}
-                                   </ul>
-                                 </div>
-                               </div>
-                             )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-            
-            {availableFacilities.every(facility => rooms.filter(r => r.facilityId === facility.id && r.status === 'active').length === 0) && (
-               <div className="flex flex-col items-center justify-center p-12 text-stone-500 bg-white rounded-xl border border-dashed border-stone-300">
-                  <Grid3X3 className="w-12 h-12 mb-4 text-stone-300" />
-                  <p className="text-sm font-medium">Görüntülenecek oda bulunamadı.</p>
-               </div>
-            )}
-          </div>
-        )}
       </div>
 
       {showAddStaffForm && (
@@ -733,9 +624,13 @@ export default function StaffManagement() {
           <div className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl">
             <h3 className="text-xl font-bold mb-6 text-[#2D332D]">Yeni Personel Kaydı</h3>
             <form onSubmit={handleAddStaff} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Ad Soyad *</label>
                 <input required type="text" value={newStaff.fullName} onChange={e => setNewStaff({...newStaff, fullName: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Personel ad ve soyadı" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Doğum Tarihi</label>
+                <input type="date" value={newStaff.birthDate} onChange={e => setNewStaff({...newStaff, birthDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">TC Kimlik / Pasaport *</label>
@@ -773,6 +668,10 @@ export default function StaffManagement() {
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Görev / Pozisyon</label>
                 <input type="text" value={newStaff.position} onChange={e => setNewStaff({...newStaff, position: e.target.value})} placeholder="Örn: Aşçı" className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Notlar / Açıklama</label>
+                <textarea value={newStaff.notes} onChange={e => setNewStaff({...newStaff, notes: e.target.value})} placeholder="Personel ile ilgili notlar..." className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] min-h-[80px]" />
+              </div>
               
               <div className="md:col-span-2 flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowAddStaffForm(false)} className="px-6 py-2 border border-[#E8E6E1] bg-white text-stone-600 rounded-xl hover:bg-stone-50 font-semibold text-sm">İptal</button>
@@ -793,9 +692,13 @@ export default function StaffManagement() {
           <div className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]">
             <h3 className="text-xl font-bold mb-6 text-[#2D332D]">Personel Düzenle</h3>
             <form onSubmit={handleSaveEdit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Ad Soyad *</label>
                 <input required type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Doğum Tarihi</label>
+                <input type="date" value={editForm.birthDate} onChange={e => setEditForm({...editForm, birthDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">TC Kimlik / Pasaport *</label>
@@ -833,6 +736,10 @@ export default function StaffManagement() {
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Görev / Pozisyon</label>
                 <input type="text" value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Notlar / Açıklama</label>
+                <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} placeholder="Personel ile ilgili notlar..." className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] min-h-[80px]" />
+              </div>
               
               <div className="md:col-span-2 flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingStaffId(null)} className="px-6 py-2 border border-[#E8E6E1] bg-white text-stone-600 rounded-xl hover:bg-stone-50 font-semibold text-sm">İptal</button>
@@ -849,6 +756,36 @@ export default function StaffManagement() {
       {logsModalStaffId && (
         <StaffLogsModal staffId={logsModalStaffId} onClose={() => setLogsModalStaffId(null)} />
       )}
+
+      {/* Global Tooltip */}
+      {tooltipData && (() => {
+        const s = staff.find(st => st.id === tooltipData.staffId);
+        if (!s) return null;
+        return (
+          <div 
+            className="fixed flex flex-col bg-gray-800 text-white text-xs rounded-lg px-3 py-3 z-[9999] shadow-xl items-center pointer-events-none before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-800 transform -translate-x-1/2 -translate-y-full origin-bottom"
+            style={{ 
+              left: tooltipData.x, 
+              top: tooltipData.y - 8 // 8px offset above the icon
+            }}
+          >
+            <span className="font-semibold block mb-1">TC Kimlik No: {s.tcNo || '-'}</span>
+            <span className="block text-gray-200 mb-1">Telefon: {s.phone || '-'}</span>
+            {s.birthDate ? (
+              <span className="block text-gray-200 border-t border-gray-600 mt-1 pt-1">
+                Doğum Tarihi: {new Date(s.birthDate).toLocaleDateString('tr-TR')} (Yaş: {calculateAge(s.birthDate)})
+              </span>
+            ) : (
+              <span className="block text-gray-400 italic border-t border-gray-600 mt-1 pt-1">Doğum Tarihi Belirtilmemiş</span>
+            )}
+            {s.notes && (
+              <span className="block text-gray-200 border-t border-gray-600 mt-2 pt-2 max-w-[200px] whitespace-normal break-words text-left self-start w-full">
+                <strong className="text-gray-400 block mb-0.5">Not:</strong>{s.notes}
+              </span>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   Wrench,
   Settings,
   X,
+  LayoutGrid
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useStore } from "../../store/useStore";
@@ -27,6 +28,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles) && { name: "Tesis Yönetimi", href: "/facilities", icon: Building2 },
     hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles) && { name: "Oda Yönetimi", href: "/rooms", icon: BedDouble },
+    hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles) && { name: "Oda Doluluk", href: "/rack", icon: LayoutGrid },
     hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles) && { 
       name: "Personel Yönetimi", 
       href: pendingStaffCount > 0 ? "/staff?filter=pending" : "/staff", 
