@@ -11,6 +11,21 @@ interface CheckInWizardProps {
   onClose: () => void;
 }
 
+export const getEffectiveRoomGender = (
+  room: { genderType: string }, 
+  currentResidents: { gender: string }[]
+): 'male' | 'female' | 'mixed' | 'Aile' => {
+  if (room.genderType !== 'mixed') return room.genderType as any;
+  
+  const hasFemale = currentResidents.some(r => r.gender === 'female');
+  const hasMale = currentResidents.some(r => r.gender === 'male');
+  
+  if (hasFemale && hasMale) return 'mixed';
+  if (hasFemale) return 'female';
+  if (hasMale) return 'male';
+  return 'mixed';
+};
+
 export default function CheckInWizard({ staffMember, onClose }: CheckInWizardProps) {
   const { facilities, rooms, accommodations, hotels, staff, placeStaff, currentUser, maintenanceTickets } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,6 +56,15 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       const facility = facilities.find(f => f.id === room.facilityId);
       const roomAccs = accommodations.filter(a => a.roomId === room.id && a.status === 'active');
       const currentResidents = staff.filter(s => roomAccs.some(a => a.staffId === s.id));
+      
+      const effectiveGender = getEffectiveRoomGender(room, currentResidents);
+      let isCompatible = false;
+      if (room.genderType === staffMember.gender) isCompatible = true;
+      if (room.genderType === 'mixed' && (effectiveGender === 'mixed' || effectiveGender === staffMember.gender)) isCompatible = true;
+      if (room.genderType === 'Aile') isCompatible = true;
+      
+      if (!isCompatible) return null;
+
       const availableBeds = room.bedCount - currentResidents.length;
       
       const requiresCrossDormApproval = !facility?.allowedHotelIds.includes(staffMember.hotelId);
@@ -69,6 +93,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       return {
         ...room,
         facilityName: facility?.name || 'Bilinmeyen Lojman',
+        effectiveGender,
         currentResidents,
         availableBeds,
         requiresApproval,
@@ -80,7 +105,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
         isRecommended: recommendedScore > 0,
         recommendedScore
       };
-    }).filter(r => r.availableBeds > 0);
+    }).filter((r): r is any => r !== null && r.availableBeds > 0);
   }, [rooms, assignedFacilities, staffMember, facilities, accommodations, staff, maintenanceTickets]);
 
   const filteredAndSortedRooms = useMemo(() => {
@@ -220,11 +245,29 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                   
                   {/* Room Status/Info */}
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
                       <h4 className="font-bold text-[#2D332D] text-lg">{room.roomNumber}</h4>
                       <span className="text-sm font-medium text-stone-500">· {room.facilityName}</span>
+                      
+                      {room.genderType === 'mixed' && (
+                        <span className={cn(
+                           "px-2 py-0.5 text-xs font-bold rounded flex items-center gap-1",
+                           room.effectiveGender === 'mixed' ? "bg-stone-100 text-stone-600 border border-stone-200" :
+                           room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border border-pink-200" :
+                           "bg-blue-100 text-blue-700 border border-blue-200"
+                        )}>
+                           {room.effectiveGender === 'mixed' ? 'Karma (Boş)' : `Karma ➔ ${room.effectiveGender === 'female' ? 'Kadın' : 'Erkek'}`}
+                        </span>
+                      )}
+                      
+                      {room.genderType === 'Aile' && (
+                         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded">
+                            Aile Odası
+                         </span>
+                      )}
+
                       {room.isRecommended && (
-                        <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center gap-1">
+                        <span className="ml-0 md:ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Önerilen
                         </span>
                       )}

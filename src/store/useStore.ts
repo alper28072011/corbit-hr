@@ -316,8 +316,36 @@ export const useStore = create<AppState>((set, get) => ({
       },
         
       placeStaff: async (staffId, facilityId, roomId) => {
+         const state = get();
+         
+         // Çift Doğrulama (Store Guard): Cinsiyet uyuşmazlığı kontrolü
+         const targetRoom = state.rooms.find(r => r.id === roomId);
+         const targetStaff = state.staff.find(s => s.id === staffId);
+         
+         if (targetRoom && targetStaff) {
+           const roomAccs = state.accommodations.filter(a => a.roomId === roomId && a.status === 'active');
+           const currentResidents = state.staff.filter(s => roomAccs.some(a => a.staffId === s.id));
+           
+           let effectiveGender = targetRoom.genderType;
+           if (targetRoom.genderType === 'mixed') {
+             const hasFemale = currentResidents.some(r => r.gender === 'female');
+             const hasMale = currentResidents.some(r => r.gender === 'male');
+             if (hasFemale && hasMale) effectiveGender = 'mixed';
+             else if (hasFemale) effectiveGender = 'female';
+             else if (hasMale) effectiveGender = 'male';
+             else effectiveGender = 'mixed';
+           }
+           
+           if (
+             targetRoom.genderType !== 'Aile' && 
+             effectiveGender !== 'mixed' && 
+             effectiveGender !== targetStaff.gender
+           ) {
+             throw new Error("Kritik Hata: Bu odadaki mevcut konaklayanların cinsiyeti (" + effectiveGender + "), yerleştirilmek istenen personel ile uyuşmuyor. İşlem güvenlik gereği durduruldu.");
+           }
+         }
+
          try {
-           const state = get();
            const accData = {
               staffId,
               facilityId,
