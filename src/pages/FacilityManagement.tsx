@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, Hotel as HotelIcon, Building, Trash2, Edit2, Check, X, ShieldAlert } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
-import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
+import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 
 export default function FacilityManagement() {
@@ -12,7 +12,7 @@ export default function FacilityManagement() {
   const [showHotelForm, setShowHotelForm] = useState(false);
   const [showDormForm, setShowDormForm] = useState(false);
 
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.facilities, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -22,7 +22,7 @@ export default function FacilityManagement() {
     );
   }
 
-  const canManage = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_hotel_management, roles);
+  const canManage = can(currentUser?.role, 'edit_facilities', PAGE_KEYS.facilities, useStore.getState().rolesPermissions);
 
   return (
     <div className="w-full flex flex-col p-6 gap-6">

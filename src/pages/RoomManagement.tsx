@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X, Search, Filter, Upload, Download } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
-import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
+import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 import * as XLSX from "xlsx";
 
@@ -21,10 +21,10 @@ export default function RoomManagement() {
   const [filterGender, setFilterGender] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
-  const canEdit = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_room_management, roles);
+  const canEdit = can(currentUser?.role, 'edit_room', PAGE_KEYS.rooms, useStore.getState().rolesPermissions);
 
   // Security check
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.rooms, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -140,7 +140,7 @@ export default function RoomManagement() {
     XLSX.writeFile(wb, "rooms_template.xlsx");
   };
 
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.rooms, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />

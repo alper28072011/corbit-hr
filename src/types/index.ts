@@ -32,11 +32,28 @@ export interface User {
   fullName: string;
   email: string;
   role: Role;
-  assignedHotelId?: string; // Legacy
-  assignedFacilityId?: string; // Legacy
   assignedHotelIds?: string[];
   assignedFacilityIds?: string[];
   status?: 'active' | 'inactive';
+}
+
+export interface FeaturePermission {
+  key: string;       // Fonksiyon/Aksiyon anahtarı (Örn: 'change_room')
+  name: string;      // Kullanıcı dostu adı
+  description: string; // Ne işe yaradığını açıklayan tek cümle
+}
+
+export interface PagePermission {
+  pageKey: string;   // Sayfa anahtarı (Örn: 'staff', 'rooms', 'maintenance')
+  pageName: string;  // Sayfa başlığı
+  features: FeaturePermission[]; // O sayfanın altındaki kritik fonksiyonlar
+}
+
+export interface RolePermissions {
+  id?: string;
+  roleKey: string;   // 'ik_muduru', 'lojman_sorumlusu' vb.
+  allowedPages: string[]; // İzin verilen sayfa key'leri
+  allowedFeatures: string[]; // İzin verilen fonksiyon key'leri
 }
 
 export interface Room {

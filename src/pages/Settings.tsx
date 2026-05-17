@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { Plus, Edit2, Trash2, ShieldAlert, Check } from "lucide-react";
+import React, { useState } from "react";
+import { Plus, Edit2, Trash2, ShieldAlert, Check, X, Shield, Lock, LayoutGrid, Users, Wrench } from "lucide-react";
 import { useStore } from "../store/useStore";
-import { Role } from "../types";
-import { PERMISSION_KEYS, PERMISSION_LABELS, PermissionKey, hasPermission } from "../lib/permissions";
+import { PagePermission } from "../types";
+import { canViewPage, PAGE_KEYS } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
+import { cn } from "../lib/utils";
 
 const ROLE_NAMES: Record<string, string> = {
   super_admin: 'Süper Admin',
@@ -12,20 +13,68 @@ const ROLE_NAMES: Record<string, string> = {
   facility_manager: 'Lojman Sorumlusu'
 };
 
+const PERMISSIONS_MATRIX: PagePermission[] = [
+  {
+    pageKey: 'dashboard',
+    pageName: 'Dashboard (Ana Ekran)',
+    features: []
+  },
+  {
+    pageKey: 'staff',
+    pageName: 'Personel Yönetimi',
+    features: [
+      { key: 'create_staff', name: 'Personel Ekle', description: 'Yeni personel kaydı oluşturabilir.' },
+      { key: 'edit_staff', name: 'Personel Düzenle', description: 'Personel bilgilerini düzenleyebilir.' },
+      { key: 'delete_staff', name: 'Personel Sil', description: 'Personeli veritabanından tamamen silebilir.' },
+      { key: 'change_room', name: 'Oda - Yerleşim Değiştir', description: 'Personelin odasını değiştirebilir (Room Change).' },
+      { key: 'view_sensitive_info', name: 'Hassas Verileri Gör', description: 'Tooltip ile TC ve Telefon numarası gibi hassas verileri görebilir.' }
+    ]
+  },
+  {
+    pageKey: 'rooms',
+    pageName: 'Oda Yönetimi',
+    features: [
+      { key: 'add_room', name: 'Oda Ekle', description: 'Tekli veya Excel ile içe aktararak yeni oda tanımlayabilir.' },
+      { key: 'edit_room', name: 'Oda Düzenle', description: 'Oda özelliklerini, blok/kat ve cinsiyet kilitlerini değiştirebilir.' }
+    ]
+  },
+  {
+    pageKey: 'maintenance',
+    pageName: 'Arıza ve Bakım',
+    features: [
+      { key: 'create_ticket', name: 'Kayıt Aç', description: 'Yeni arıza kaydı açabilir.' },
+      { key: 'update_ticket_status', name: 'Durum Değiştir', description: 'Arıza durumunu (Açık, İşlemde, Kapalı) değiştirebilir.' },
+      { key: 'edit_ticket', name: 'Kayıt Düzenle', description: 'Kayıt içeriğini değiştirebilir.' },
+      { key: 'delete_ticket', name: 'Kayıt Sil', description: 'Arıza kaydını silebilir.' }
+    ]
+  },
+  {
+    pageKey: 'facilities',
+    pageName: 'Tesis Yönetimi',
+    features: [
+      { key: 'edit_facilities', name: 'Tesis Düzenle', description: 'Tesis ekleme, silme, düzenleme yapabilir.' }
+    ]
+  },
+  {
+    pageKey: 'rack',
+    pageName: 'Oda Doluluk (Rack)',
+    features: []
+  },
+  {
+    pageKey: 'settings',
+    pageName: 'Ayarlar ve Sistem',
+    features: [
+      { key: 'view_logs', name: 'Sistem Logları', description: 'Kullanıcı hareketlerini (Action Logs) görebilir.' }
+    ]
+  }
+];
+
 export default function Settings() {
-  const { users, roles, currentUser, addUser, updateUser, deleteUser, hotels, facilities, addRole, updateRole, deleteRole } = useStore();
+  const { users, rolesPermissions, currentUser, addUser, updateUser, deleteUser, hotels, facilities, updateRolePermissions } = useStore();
   const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
   
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<string | null>(null);
-
-  const [showRoleForm, setShowRoleForm] = useState(false);
-  const [editingRole, setEditingRole] = useState<string | null>(null);
-
-  const [roleFormData, setRoleFormData] = useState({
-    name: '',
-    key: ''
-  });
 
   const [formData, setFormData] = useState<{
     fullName: string;
@@ -43,8 +92,10 @@ export default function Settings() {
     status: 'active'
   });
 
+  const [selectedRole, setSelectedRole] = useState<string>('hr_director');
+
   // Security check
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_settings, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.settings, rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -54,32 +105,14 @@ export default function Settings() {
     );
   }
 
-  const handleSubmit = (e: import('react').FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.fullName || !formData.email) return;
 
-    // Both hr_manager and facility_manager might need these now, or we just save what's selected
-    const hotelIds = formData.assignedHotelIds;
-    const facilityIds = formData.assignedFacilityIds;
-
     if (editingUser) {
-      updateUser(editingUser, {
-        fullName: formData.fullName,
-        email: formData.email,
-        role: formData.role,
-        assignedHotelIds: hotelIds,
-        assignedFacilityIds: facilityIds,
-        status: formData.status
-      });
+      updateUser(editingUser, formData);
     } else {
-      addUser({
-        fullName: formData.fullName,
-        email: formData.email,
-        role: formData.role,
-        assignedHotelIds: hotelIds,
-        assignedFacilityIds: facilityIds,
-        status: formData.status
-      });
+      addUser(formData);
     }
     closeForm();
   };
@@ -97,376 +130,341 @@ export default function Settings() {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
-      assignedHotelIds: user.assignedHotelIds || (user.assignedHotelId ? [user.assignedHotelId] : []),
-      assignedFacilityIds: user.assignedFacilityIds || (user.assignedFacilityId ? [user.assignedFacilityId] : []),
+      assignedHotelIds: user.assignedHotelIds || [],
+      assignedFacilityIds: user.assignedFacilityIds || [],
       status: user.status || 'active'
     });
     setEditingUser(userId);
     setShowAddForm(true);
   };
 
-  const handleRoleSubmit = (e: import('react').FormEvent) => {
-    e.preventDefault();
-    if (!roleFormData.name || !roleFormData.key) return;
+  const handleRolePermissionChange = async (roleKey: string, pageKey: string, featureKey?: string) => {
+    if (roleKey === 'super_admin') return; // Cannot edit super_admin
 
-    if (editingRole) {
-      updateRole(editingRole, {
-        name: roleFormData.name,
-        key: roleFormData.key
-      });
+    const currentPerm = rolesPermissions.find(r => r.roleKey === roleKey) || {
+      roleKey, allowedPages: [], allowedFeatures: []
+    };
+
+    let newPages = [...currentPerm.allowedPages];
+    let newFeatures = [...currentPerm.allowedFeatures];
+
+    if (!featureKey) {
+      // Toggle Page
+      if (newPages.includes(pageKey)) {
+        newPages = newPages.filter(p => p !== pageKey);
+        // Remove all features of this page too
+        const pageFeatures = PERMISSIONS_MATRIX.find(p => p.pageKey === pageKey)?.features.map(f => f.key) || [];
+        newFeatures = newFeatures.filter(f => !pageFeatures.includes(f));
+      } else {
+        newPages.push(pageKey);
+      }
     } else {
-      addRole({
-        name: roleFormData.name,
-        key: roleFormData.key,
-        permissions: [] // default empty
-      });
+      // Toggle Feature
+      if (newFeatures.includes(featureKey)) {
+        newFeatures = newFeatures.filter(f => f !== featureKey);
+      } else {
+        newFeatures.push(featureKey);
+        // Ensure page is enabled if a feature is enabled
+        if (!newPages.includes(pageKey)) newPages.push(pageKey);
+      }
     }
-    closeRoleForm();
+
+    await updateRolePermissions(roleKey, newPages, newFeatures);
   };
 
-  const closeRoleForm = () => {
-    setShowRoleForm(false);
-    setEditingRole(null);
-    setRoleFormData({ name: '', key: '' });
-  };
-
-  const startEditRole = (roleId: string) => {
-    const role = roles.find(r => r.id === roleId);
-    if (!role) return;
-    setRoleFormData({
-      name: role.name,
-      key: role.key
-    });
-    setEditingRole(roleId);
-    setShowRoleForm(true);
-  };
-
-  const handlePermissionToggle = (roleId: string, permission: string, currentPermissions: string[] = []) => {
-    const newPermissions = currentPermissions.includes(permission)
-      ? currentPermissions.filter(p => p !== permission)
-      : [...currentPermissions, permission];
-      
-    updateRole(roleId, { permissions: newPermissions });
-  };
+  const currentSelectedPerm = rolesPermissions.find(r => r.roleKey === selectedRole) || { allowedPages: [], allowedFeatures: [] };
 
   return (
     <div className="w-full flex flex-col p-6 space-y-6">
       <PageHeader
-        title="Ayarlar"
-        description="Sistem kullanıcıları ve yetkilerini yönetin."
+        title="Sistem & Kullanıcı Ayarları"
+        description="Sistem erişimlerini ve granüler yetki matrisini yönetin."
       />
 
-      <div className="flex gap-4 border-b border-[#E8E6E1]">
+      <div className="flex gap-2 border-b border-[#E8E6E1]">
         <button 
           onClick={() => setActiveTab('users')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'users' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600"}`}
+          className={cn(
+            "px-6 py-3 font-semibold text-sm transition-colors relative",
+            activeTab === 'users' ? "text-[#7C8363]" : "text-stone-500 hover:text-stone-700"
+          )}
         >
           Kullanıcı Yönetimi
+          {activeTab === 'users' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#7C8363]" />}
         </button>
         <button 
           onClick={() => setActiveTab('roles')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'roles' ? "border-[#2D332D] text-[#2D332D]" : "border-transparent text-stone-400 hover:text-stone-600"}`}
+          className={cn(
+            "px-6 py-3 font-semibold text-sm transition-colors relative",
+            activeTab === 'roles' ? "text-[#7C8363]" : "text-stone-500 hover:text-stone-700"
+          )}
         >
-          Rol Yetkileri (Matris)
+          Rol ve Yetki Matrisi
+          {activeTab === 'roles' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#7C8363]" />}
         </button>
       </div>
 
       {activeTab === 'users' && (
-        <>
-          <div className="flex justify-end mb-4">
-            <button 
-              onClick={() => setShowAddForm(true)}
-              className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2"
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-bold text-stone-800">Sistem Kullanıcıları</h3>
+            <button
+              onClick={() => { closeForm(); setShowAddForm(true); }}
+              className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" />
-              Yeni Kullanıcı
+              <Plus className="w-4 h-4" /> Yeni Kullanıcı
             </button>
           </div>
 
-      {showAddForm && (
-        <div className="card-standard p-6 mb-8">
-          <h3 className="text-lg font-bold mb-4">{editingUser ? 'Kullanıcı Düzenle' : 'Yeni Kullanıcı Ekle'}</h3>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-stone-500 mb-1">Ad Soyad</label>
-              <input required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-stone-500 mb-1">E-posta</label>
-              <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-stone-500 mb-1">Rol</label>
-              <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]">
-                {roles.length > 0 ? (
-                  roles.map((role) => (
-                    <option key={role.id} value={role.key}>{role.name}</option>
-                  ))
-                ) : (
-                  Object.entries(ROLE_NAMES).map(([key, value]) => (
-                    <option key={key} value={key}>{value}</option>
-                  ))
-                )}
-              </select>
-            </div>
-
-            {['hotel_hr_manager', 'facility_manager'].includes(formData.role) && (
-              <div className="md:col-span-2 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500 mb-2">Sorumlu Olduğu Otel(ler)</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {hotels.map(h => (
-                      <label key={h.id} className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-stone-50">
-                        <input
-                          type="checkbox"
-                          checked={formData.assignedHotelIds.includes(h.id)}
-                          onChange={(e) => {
-                            const newIds = e.target.checked 
-                              ? [...formData.assignedHotelIds, h.id] 
-                              : formData.assignedHotelIds.filter(id => id !== h.id);
-                            
-                            // Also clear facility ids that aren't in the selected hotels anymore
-                            const activeHotelIds = newIds;
-                            const newFacilityIds = formData.assignedFacilityIds.filter(fId => {
-                              const f = facilities.find(fac => fac.id === fId);
-                              return f && activeHotelIds.some(activeId => f.allowedHotelIds?.includes(activeId));
-                            });
-
-                            setFormData({...formData, assignedHotelIds: newIds, assignedFacilityIds: newFacilityIds});
-                          }}
-                          className="rounded border-[#E8E6E1] text-[#7C8363] focus:ring-[#7C8363] w-4 h-4"
-                        />
-                        <span className="text-sm text-stone-700">{h.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {formData.assignedHotelIds.length === 0 && (
-                    <p className="text-xs text-red-500 mt-1">Lütfen en az bir otel seçin.</p>
-                  )}
-                </div>
-
-                {formData.role === 'facility_manager' && formData.assignedHotelIds.length > 0 && (
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-500 mb-2">Sorumlu Olduğu Lojman(lar)</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {facilities.filter(f => formData.assignedHotelIds.some(hId => f.allowedHotelIds?.includes(hId))).map(f => (
-                        <label key={f.id} className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-stone-50">
-                          <input
-                            type="checkbox"
-                            checked={formData.assignedFacilityIds.includes(f.id)}
-                            onChange={(e) => {
-                              const newIds = e.target.checked 
-                                ? [...formData.assignedFacilityIds, f.id] 
-                                : formData.assignedFacilityIds.filter(id => id !== f.id);
-                              setFormData({...formData, assignedFacilityIds: newIds});
-                            }}
-                            className="rounded border-[#E8E6E1] text-[#7C8363] focus:ring-[#7C8363] w-4 h-4"
-                          />
-                          <span className="text-sm text-stone-700">{f.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-stone-500 mb-1">Durum</label>
-              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as 'active' | 'inactive'})} className="w-1/2 border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]">
-                <option value="active">Aktif</option>
-                <option value="inactive">Pasif</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-2 flex justify-end gap-2 mt-4">
-              <button type="button" onClick={closeForm} className="px-4 py-2 border border-stone-200 hover:bg-stone-50 rounded-xl text-stone-600 font-semibold transition-colors">İptal</button>
-              <button type="submit" className="px-4 py-2 bg-[#2D332D] hover:bg-black text-white rounded-xl font-semibold transition-colors">Kaydet</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="card-standard p-6 overflow-hidden flex flex-col">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-[#E8E6E1] uppercase text-xs text-stone-400">
-                <th className="pb-4 font-semibold">Kullanıcı</th>
-                <th className="pb-4 font-semibold">Durum</th>
-                <th className="pb-4 font-semibold">Rol</th>
-                <th className="pb-4 font-semibold">Sorumluluk Alanı</th>
-                <th className="pb-4 font-semibold text-right">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100 text-sm">
-              {users.map(user => (
-                <tr key={user.id} className="hover:bg-stone-50/50 transition-colors">
-                  <td className="py-4">
-                    <p className="font-bold text-[#2D332D]">{user.fullName}</p>
-                    <p className="text-stone-500 text-xs mt-0.5">{user.email}</p>
-                  </td>
-                  <td className="py-4">
-                    <span className={`px-2 py-1 rounded text-[11px] font-bold ${user.status === 'inactive' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                      {user.status === 'inactive' ? 'Pasif' : 'Aktif'}
-                    </span>
-                  </td>
-                  <td className="py-4 font-semibold text-stone-600">
-                    {roles.length > 0 ? roles.find(r => r.key === user.role)?.name || user.role : ROLE_NAMES[user.role] || user.role}
-                  </td>
-                  <td className="py-4 text-stone-500">
-                    {['super_admin', 'hr_director'].includes(user.role) ? 'Tüm Tesisler' : (
-                      <div className="flex flex-col gap-1">
-                        {user.role === 'hotel_hr_manager' && (
-                          <span className="text-sm">
-                            {(user.assignedHotelIds || (user.assignedHotelId ? [user.assignedHotelId] : []))
-                              .map(id => hotels.find(h => h.id === id)?.name)
-                              .filter(Boolean)
-                              .join(', ') || '-'}
-                          </span>
-                        )}
-                        {user.role === 'facility_manager' && (
-                          <>
-                            <span className="text-xs text-stone-400 font-semibold uppercase">Oteller:</span>
-                            <span className="text-sm mb-1">
-                              {(user.assignedHotelIds || (user.assignedHotelId ? [user.assignedHotelId] : []))
-                                .map(id => hotels.find(h => h.id === id)?.name)
-                                .filter(Boolean)
-                                .join(', ') || '-'}
-                            </span>
-                            <span className="text-xs text-stone-400 font-semibold uppercase">Lojmanlar:</span>
-                            <span className="text-sm">
-                              {(user.assignedFacilityIds || (user.assignedFacilityId ? [user.assignedFacilityId] : []))
-                                .map(id => facilities.find(f => f.id === id)?.name)
-                                .filter(Boolean)
-                                .join(', ') || '-'}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-4 text-right">
-                    <div className="flex justify-end gap-2">
-                       {user.id !== currentUser.id && (
-                         <button onClick={() => { if(confirm('Silmek istediğinize emin misiniz?')) deleteUser(user.id); }} className="p-2 hover:bg-red-50 rounded-lg text-red-400 transition-colors" title="Sil">
-                           <Trash2 className="w-4 h-4" />
-                         </button>
-                       )}
-                      <button onClick={() => startEdit(user.id)} className="p-2 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-stone-600 transition-colors" title="Düzenle">
+          <div className="card-standard overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-stone-50/50 border-b border-[#E8E6E1] text-xs uppercase tracking-wider text-stone-500">
+                  <th className="px-6 py-4 font-semibold">Ad Soyad</th>
+                  <th className="px-6 py-4 font-semibold">E-posta</th>
+                  <th className="px-6 py-4 font-semibold">Rol</th>
+                  <th className="px-6 py-4 font-semibold">Durum</th>
+                  <th className="px-6 py-4 font-semibold text-right">İşlemler</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E8E6E1]">
+                {users.map(user => (
+                  <tr key={user.id} className="hover:bg-stone-50/30 transition-colors">
+                    <td className="px-6 py-4 font-medium text-stone-800">{user.fullName}</td>
+                    <td className="px-6 py-4 text-sm text-stone-600">{user.email}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 bg-stone-100 text-stone-600 rounded text-xs font-semibold">
+                        {ROLE_NAMES[user.role] || user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={cn(
+                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
+                        user.status === 'active' ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-600"
+                      )}>
+                        {user.status === 'active' ? 'Aktif' : 'Pasif'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button onClick={() => startEdit(user.id)} className="p-2 text-stone-400 hover:text-[#7C8363] transition-colors" title="Düzenle">
                         <Edit2 className="w-4 h-4" />
                       </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-stone-500 italic">Hiç kullanıcı bulunamadı.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                      <button onClick={() => { if(window.confirm('Silmek istediğinize emin misiniz?')) deleteUser(user.id); }} className="p-2 text-stone-400 hover:text-red-500 transition-colors" title="Sil">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-stone-500 font-medium">Kayıtlı kullanıcı bulunamadı.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-        </>
       )}
 
       {activeTab === 'roles' && (
-        <>
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-stone-500">Rollerin yetki matrisini detaylı şekilde düzenleyebilirsiniz. "Süper Admin" rolünün tüm yetkileri varsayılan olarak açıktır.</p>
-            <button 
-              onClick={() => setShowRoleForm(!showRoleForm)}
-              className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Yeni Rol
-            </button>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="md:col-span-1 space-y-2">
+            <h3 className="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-4">Sistem Rolleri</h3>
+            {Object.entries(ROLE_NAMES).map(([key, name]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedRole(key)}
+                className={cn(
+                  "w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all border",
+                  selectedRole === key 
+                    ? "bg-[#7C8363] text-white border-[#7C8363] shadow-md shadow-[#7C8363]/20" 
+                    : "bg-white text-stone-700 border-[#E8E6E1] hover:border-stone-300"
+                )}
+              >
+                {name}
+              </button>
+            ))}
           </div>
 
-          {showRoleForm && (
-            <div className="card-standard p-6 mb-8 relative">
-              <h3 className="text-lg font-bold mb-4">{editingRole ? 'Rol Düzenle' : 'Yeni Rol Ekle'}</h3>
-              <form onSubmit={handleRoleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500 mb-1">Rol Adı (Görünür)</label>
-                  <input required type="text" value={roleFormData.name} onChange={e => setRoleFormData({...roleFormData, name: e.target.value})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]" placeholder="Örn: İK Yöneticisi" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500 mb-1">Rol Anahtarı (Kod, boşluksuz)</label>
-                  <input required type="text" value={roleFormData.key} onChange={e => setRoleFormData({...roleFormData, key: e.target.value})} className="w-full border px-3 py-2 rounded-lg focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363]" placeholder="Örn: ik_yoneticisi" disabled={!!editingRole} />
-                </div>
-                <div className="md:col-span-2 flex justify-end gap-2 mt-4">
-                  <button type="button" onClick={closeRoleForm} className="px-4 py-2 border border-stone-200 hover:bg-stone-50 rounded-xl text-stone-600 font-semibold transition-colors">İptal</button>
-                  <button type="submit" className="px-4 py-2 bg-[#2D332D] hover:bg-black text-white rounded-xl font-semibold transition-colors">Kaydet</button>
-                </div>
-              </form>
-              
-              {editingRole && roles.length > 1 && (
-                <button type="button" onClick={() => { if(confirm('Simek istediğinize emin misiniz? Bu role sahip kullanıcılar sisteme erişemeyebilir.')) deleteRole(editingRole); closeRoleForm(); }} className="absolute top-6 right-6 text-red-500 hover:text-red-700 font-semibold text-sm flex items-center gap-1">
-                  <Trash2 className="w-4 h-4" /> Rolü Sil
-                </button>
-              )}
-            </div>
-          )}
+          <div className="md:col-span-3 card-standard p-6">
+            <h3 className="text-xl font-bold text-stone-800 mb-2">{ROLE_NAMES[selectedRole]} Yetki Matrisi</h3>
+            <p className="text-sm text-stone-500 mb-6">Bu rolün sayfa erişimlerini ve detaylı yetkilerini aşağıdan ayarlayabilirsiniz. Sistemdeki tüm deşifre edilmiş eylemler otomatik tanımlanmıştır.</p>
 
-          <div className="card-standard overflow-hidden flex flex-col">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b uppercase text-xs text-stone-500 bg-[#FDFCFB]">
-                    <th className="py-4 px-6 font-semibold sticky left-0 bg-[#FDFCFB] z-10 border-r border-[#E8E6E1]">Yetki Modülü / Açıklama</th>
-                    {roles.map(role => (
-                      <th key={role.id} className="py-4 px-6 font-semibold text-center min-w-[140px] whitespace-nowrap">
-                         <div className="flex flex-col items-center gap-1">
-                           <span className="text-[#2D332D]">{role.name}</span>
-                           <button onClick={() => startEditRole(role.id)} className="text-[10px] text-stone-400 hover:text-stone-600 normal-case tracking-normal">Ayarla</button>
-                         </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100 text-sm">
-                  {Object.entries(PERMISSION_LABELS).map(([permKey, label]) => (
-                    <tr key={permKey} className="hover:bg-stone-50/50 transition-colors">
-                      <td className="py-4 px-6 font-medium text-stone-700 sticky left-0 bg-white group-hover:bg-stone-50/50 border-r border-stone-100 z-10">
-                         {label}
-                         <div className="text-[10px] text-stone-400 font-normal mt-0.5 font-mono">{permKey}</div>
-                      </td>
-                      {roles.map(role => {
-                         const isSuperAdmin = role.key === 'super_admin';
-                         const hasPerm = isSuperAdmin || (role.permissions || []).includes(permKey as PermissionKey);
-                         return (
-                           <td key={role.id} className="py-4 px-6 text-center">
-                              <label className={`inline-flex items-center justify-center p-2 rounded-lg cursor-pointer transition-colors ${isSuperAdmin ? 'opacity-50 cursor-not-allowed' : 'hover:bg-stone-100'}`}>
+            {selectedRole === 'super_admin' ? (
+              <div className="p-6 bg-amber-50 text-amber-800 rounded-xl border border-amber-200 flex items-start gap-4">
+                <ShieldAlert className="w-6 h-6 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold mb-1">Süper Admin Sınırsızdır</h4>
+                  <p className="text-sm">Süper admin rolünün yetkileri sabittir, hiçbir şekilde kısıtlanamaz ve değiştirilemez. Tüm sayfalara ve tüm aksiyonlara limitsiz erişim hakkı vardır.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {PERMISSIONS_MATRIX.map(page => {
+                  const isPageAllowed = currentSelectedPerm.allowedPages.includes(page.pageKey);
+                  
+                  return (
+                    <div key={page.pageKey} className="border border-[#E8E6E1] rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-stone-50 p-4 border-b border-[#E8E6E1] flex justify-between items-center">
+                        <div>
+                          <h4 className="font-bold text-stone-800">{page.pageName}</h4>
+                          <p className="text-xs text-stone-500">/{page.pageKey} rotasına ait görünümler ve işlemler</p>
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 border border-[#E8E6E1] rounded-lg hover:bg-stone-50 transition-colors">
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded text-[#7C8363] focus:ring-[#7C8363]"
+                            checked={isPageAllowed}
+                            onChange={() => handleRolePermissionChange(selectedRole, page.pageKey)}
+                          />
+                          <span className="text-sm font-semibold text-stone-700">Sayfayı Görebilir</span>
+                        </label>
+                      </div>
+                      
+                      {page.features.length > 0 && (
+                        <div className={cn("p-4 space-y-4", !isPageAllowed && "opacity-50 pointer-events-none")}>
+                          {page.features.map(feature => {
+                            const isFeatureAllowed = currentSelectedPerm.allowedFeatures.includes(feature.key);
+                            return (
+                              <label key={feature.key} className="flex items-start gap-4 cursor-pointer hover:bg-stone-50 p-2 rounded-lg -mx-2 transition-colors">
                                 <input 
                                   type="checkbox" 
-                                  className="sr-only" 
-                                  checked={hasPerm}
-                                  disabled={isSuperAdmin}
-                                  onChange={() => handlePermissionToggle(role.id, permKey, role.permissions)} 
+                                  className="w-4 h-4 mt-1 rounded text-[#7C8363] focus:ring-[#7C8363]"
+                                  checked={isFeatureAllowed}
+                                  onChange={() => handleRolePermissionChange(selectedRole, page.pageKey, feature.key)}
                                 />
-                                <div className={`w-6 h-6 rounded flex items-center justify-center border transition-colors ${hasPerm ? 'bg-[#7C8363] border-[#7C8363] text-white' : 'bg-white border-stone-300'}`}>
-                                  {hasPerm && <Check className="w-4 h-4" />}
+                                <div>
+                                  <div className="font-semibold text-sm text-stone-800">{feature.name}</div>
+                                  <div className="text-xs text-stone-500 mt-0.5">{feature.description}</div>
                                 </div>
                               </label>
-                           </td>
-                         )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            
-            {roles.length === 0 && (
-              <div className="p-12 text-center text-stone-500 italic border-t border-stone-100">
-                Rolleri dinamik olarak düzenleyebilmek için lütfen Firestore tarafında roles kayıtlarının yüklendiğinden emin olun.
+                            );
+                          })}
+                        </div>
+                      )}
+                      {page.features.length === 0 && (
+                        <div className="p-4 text-xs text-stone-400 italic">
+                          Bu sayfada özel bir fonksiyon kısıtlaması bulunmuyor. Sayfa görüntüleme yetkisi yeterlidir.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
-        </>
+        </div>
+      )}
+
+      {/* User Modal */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-[#E8E6E1] flex justify-between items-center bg-[#FDFCFB]">
+              <h2 className="text-xl font-bold text-stone-800">{editingUser ? 'Kullanıcıyı Düzenle' : 'Yeni Kullanıcı Ekle'}</h2>
+              <button onClick={closeForm} className="p-2 text-stone-400 hover:text-stone-600 transition-colors rounded-full hover:bg-stone-100"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Ad Soyad</label>
+                  <input required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Örn: Ahmet Yılmaz" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">E-posta</label>
+                  <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Örn: ahmet@otel.com" />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Rol</label>
+                    <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm font-medium">
+                      {Object.entries(ROLE_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Durum</label>
+                    <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-3 py-2 border rounded-lg text-sm font-medium">
+                      <option value="active">Aktif</option>
+                      <option value="inactive">Pasif</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-[#E8E6E1]">
+                  <h4 className="font-semibold text-sm text-stone-800 mb-3">Yetkili Olunan Tesisler</h4>
+                  
+                  {['hr_director', 'super_admin'].includes(formData.role) ? (
+                    <div className="p-3 bg-stone-50 border border-[#E8E6E1] rounded-lg text-xs text-stone-600 font-medium">
+                      Bu rol sistemsel olarak tüm otel ve lojmanlarda tam yetkilidir. Seçim yapmanıza gerek yoktur.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {formData.role === 'hotel_hr_manager' && (
+                        <div>
+                          <label className="block text-xs font-semibold text-stone-500 uppercase mb-2">Sorumlu Olduğu Oteller</label>
+                          <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                            {hotels.map(h => (
+                              <label key={h.id} className="flex items-center gap-2 text-sm p-2 bg-stone-50 rounded-lg cursor-pointer hover:bg-stone-100 border border-transparent hover:border-stone-200">
+                                <input 
+                                  type="checkbox" 
+                                  className="w-4 h-4 rounded text-[#7C8363] focus:ring-[#7C8363]"
+                                  checked={formData.assignedHotelIds.includes(h.id)}
+                                  onChange={(e) => {
+                                    const newIds = e.target.checked 
+                                      ? [...formData.assignedHotelIds, h.id] 
+                                      : formData.assignedHotelIds.filter(id => id !== h.id);
+                                    setFormData({...formData, assignedHotelIds: newIds});
+                                  }}
+                                />
+                                <span className="font-medium text-stone-700">{h.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {formData.role === 'facility_manager' && (
+                        <div>
+                          <label className="block text-xs font-semibold text-stone-500 uppercase mb-2">Sorumlu Olduğu Lojmanlar</label>
+                          <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                            {facilities.map(f => (
+                              <label key={f.id} className="flex items-center gap-2 text-sm p-2 bg-stone-50 rounded-lg cursor-pointer hover:bg-stone-100 border border-transparent hover:border-stone-200">
+                                <input 
+                                  type="checkbox" 
+                                  className="w-4 h-4 rounded text-[#7C8363] focus:ring-[#7C8363]"
+                                  checked={formData.assignedFacilityIds.includes(f.id)}
+                                  onChange={(e) => {
+                                    const newIds = e.target.checked 
+                                      ? [...formData.assignedFacilityIds, f.id] 
+                                      : formData.assignedFacilityIds.filter(id => id !== f.id);
+                                    setFormData({...formData, assignedFacilityIds: newIds});
+                                  }}
+                                />
+                                <span className="font-medium text-stone-700">{f.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E8E6E1]">
+                <button type="button" onClick={closeForm} className="px-5 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 rounded-xl transition-colors">
+                  İptal
+                </button>
+                <button type="submit" className="px-5 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors">
+                  {editingUser ? 'Değişiklikleri Kaydet' : 'Kullanıcı Oluştur'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

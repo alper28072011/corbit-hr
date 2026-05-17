@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest } from '../types';
+import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 interface AppState {
   users: User[];
-  roles: RoleConfig[];
+  roles: RoleConfig[]; // legacy
+  rolesPermissions: RolePermissions[];
   currentUser: User | null;
   hotels: Hotel[];
   facilities: Facility[];
@@ -17,6 +18,7 @@ interface AppState {
   
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleConfig[]) => void;
+  setRolesPermissions: (perms: RolePermissions[]) => void;
   setHotels: (hotels: Hotel[]) => void;
   setFacilities: (facilities: Facility[]) => void;
   setRooms: (rooms: Room[]) => void;
@@ -63,6 +65,8 @@ interface AppState {
   addApprovalRequest: (reqData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
   resolveApprovalRequest: (id: string, status: 'Onaylandı' | 'Reddedildi') => Promise<void>;
   
+  updateRolePermissions: (roleKey: string, allowedPages: string[], allowedFeatures: string[]) => Promise<void>;
+
   // Logs
   logs: ActionLog[];
   setLogs: (logs: ActionLog[]) => void;
@@ -76,6 +80,7 @@ interface AppState {
 export const useStore = create<AppState>((set, get) => ({
       users: [],
       roles: [],
+      rolesPermissions: [],
       currentUser: null,
       hotels: [],
       facilities: [],
@@ -89,6 +94,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       setUsers: (users) => set({ users }),
       setRoles: (roles) => set({ roles }),
+      setRolesPermissions: (rolesPermissions) => set({ rolesPermissions }),
       setHotels: (hotels) => set({ hotels }),
       setFacilities: (facilities) => set({ facilities }),
       setRooms: (rooms) => set({ rooms }),
@@ -518,6 +524,15 @@ export const useStore = create<AppState>((set, get) => ({
           await setDoc(doc(db, "settings", "general"), { version }, { merge: true });
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, "settings/general");
+        }
+      },
+
+      updateRolePermissions: async (roleKey, allowedPages, allowedFeatures) => {
+        try {
+          const docRef = doc(db, "roles_permissions", roleKey);
+          await setDoc(docRef, { roleKey, allowedPages, allowedFeatures }, { merge: true });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `roles_permissions/${roleKey}`);
         }
       }
 }));

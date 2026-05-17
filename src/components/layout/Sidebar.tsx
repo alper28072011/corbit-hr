@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useStore } from "../../store/useStore";
-import { PERMISSION_KEYS, hasPermission } from "../../lib/permissions";
+import { PAGE_KEYS, canViewPage } from "../../lib/permissions";
 
 interface SidebarProps {
   open: boolean;
@@ -23,7 +23,7 @@ interface SidebarProps {
 
 export default function Sidebar({ open, setOpen }: SidebarProps) {
   const currentUser = useStore(state => state.currentUser);
-  const roles = useStore(state => state.roles);
+  const rolesPermissions = useStore(state => state.rolesPermissions);
   const staff = useStore(state => state.staff);
   const appSettings = useStore(state => state.appSettings);
   const updateAppVersion = useStore(state => state.updateAppVersion);
@@ -47,18 +47,18 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
 
 
   const navigation = [
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_dashboard, roles) && { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_hotel_management, roles) && { name: "Tesis Yönetimi", href: "/facilities", icon: Building2 },
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles) && { name: "Oda Yönetimi", href: "/rooms", icon: BedDouble },
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_rack_management, roles) && { name: "Oda Doluluk", href: "/rack", icon: LayoutGrid },
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles) && { 
+    canViewPage(currentUser?.role, PAGE_KEYS.dashboard, rolesPermissions) && { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    canViewPage(currentUser?.role, PAGE_KEYS.facilities, rolesPermissions) && { name: "Tesis Yönetimi", href: "/facilities", icon: Building2 },
+    canViewPage(currentUser?.role, PAGE_KEYS.rooms, rolesPermissions) && { name: "Oda Yönetimi", href: "/rooms", icon: BedDouble },
+    canViewPage(currentUser?.role, PAGE_KEYS.rack, rolesPermissions) && { name: "Oda Doluluk", href: "/rack", icon: LayoutGrid },
+    canViewPage(currentUser?.role, PAGE_KEYS.staff, rolesPermissions) && { 
       name: "Personel Yönetimi", 
       href: pendingStaffCount > 0 ? "/staff?filter=pending" : "/staff", 
       icon: Users,
       badge: pendingStaffCount
     },
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles) && { name: "Arıza ve Bakım", href: "/maintenance", icon: Wrench },
-    hasPermission(currentUser?.role, PERMISSION_KEYS.view_settings, roles) && { name: "Ayarlar", href: "/settings", icon: Settings },
+    canViewPage(currentUser?.role, PAGE_KEYS.maintenance, rolesPermissions) && { name: "Arıza ve Bakım", href: "/maintenance", icon: Wrench },
+    canViewPage(currentUser?.role, PAGE_KEYS.settings, rolesPermissions) && { name: "Ayarlar", href: "/settings", icon: Settings },
   ].filter(Boolean) as { name: string, href: string, icon: any, badge?: number }[];
 
   return (

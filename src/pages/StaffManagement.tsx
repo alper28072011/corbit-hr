@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn, calculateAge } from "../lib/utils";
-import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
+import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 import CheckInWizard from "../components/staff/CheckInWizard";
 
@@ -53,7 +53,7 @@ export default function StaffManagement() {
   const { hotels, facilities, rooms, staff, accommodations, addStaff, placeStaff, checkoutStaff, undoCheckoutStaff, deleteStaff, currentUser, roles } = useStore();
 
   // Security check
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.staff, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -114,7 +114,7 @@ export default function StaffManagement() {
     }
   }, [searchParams, staff]);
 
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.staff, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -124,14 +124,15 @@ export default function StaffManagement() {
     );
   }
 
-  const canAddStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.add_staff_request, roles);
-  const canPlaceStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.place_staff, roles);
-  const canCheckoutStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.checkout_staff, roles);
-  const canEditStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_staff, roles);
-  const canDeleteStaff = hasPermission(currentUser?.role, PERMISSION_KEYS.delete_staff, roles);
-  const canChangeRoom = hasPermission(currentUser?.role, PERMISSION_KEYS.change_room, roles);
-  const canViewDoc = hasPermission(currentUser?.role, PERMISSION_KEYS.view_document, roles);
-  const canViewLogs = hasPermission(currentUser?.role, 'view_logs', roles);
+  const rp = useStore.getState().rolesPermissions;
+  const canAddStaff = can(currentUser?.role, 'create_staff', PAGE_KEYS.staff, rp);
+  const canPlaceStaff = can(currentUser?.role, 'change_room', PAGE_KEYS.staff, rp);
+  const canCheckoutStaff = can(currentUser?.role, 'change_room', PAGE_KEYS.staff, rp);
+  const canEditStaff = can(currentUser?.role, 'edit_staff', PAGE_KEYS.staff, rp);
+  const canDeleteStaff = can(currentUser?.role, 'delete_staff', PAGE_KEYS.staff, rp);
+  const canChangeRoom = can(currentUser?.role, 'change_room', PAGE_KEYS.staff, rp);
+  const canViewDoc = can(currentUser?.role, 'view_sensitive_info', PAGE_KEYS.staff, rp);
+  const canViewLogs = can(currentUser?.role, 'view_logs', 'settings', rp);
 
   const availableHotels = useMemo(() => {
     if (!currentUser) return [];

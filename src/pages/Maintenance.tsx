@@ -6,7 +6,7 @@ import {
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { MaintenanceTicket, ActionLog } from "../types";
-import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
+import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 
 function formatTimeDiff(startTime: number, endTime: number = Date.now()) {
@@ -35,7 +35,7 @@ export default function Maintenance() {
   } = useStore();
   
   // Security check
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.maintenance, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -45,11 +45,12 @@ export default function Maintenance() {
     );
   }
 
-  const canCreate = hasPermission(currentUser?.role, PERMISSION_KEYS.create_ticket, roles);
-  const canEdit = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_ticket, roles);
-  const canDelete = hasPermission(currentUser?.role, PERMISSION_KEYS.delete_ticket, roles);
-  const canUpdateStatus = hasPermission(currentUser?.role, PERMISSION_KEYS.update_ticket_status, roles);
-  const canViewLogs = hasPermission(currentUser?.role, PERMISSION_KEYS.view_logs, roles);
+  const rp = useStore.getState().rolesPermissions;
+  const canCreate = can(currentUser?.role, 'create_ticket', PAGE_KEYS.maintenance, rp);
+  const canEdit = can(currentUser?.role, 'edit_ticket', PAGE_KEYS.maintenance, rp);
+  const canDelete = can(currentUser?.role, 'delete_ticket', PAGE_KEYS.maintenance, rp);
+  const canUpdateStatus = can(currentUser?.role, 'update_ticket_status', PAGE_KEYS.maintenance, rp);
+  const canViewLogs = can(currentUser?.role, 'view_logs', 'settings', rp);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -229,7 +230,7 @@ export default function Maintenance() {
   };
 
   return (
-    <div className="w-full flex flex-col p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="w-full flex flex-col p-6 space-y-6">
       <PageHeader
         title="Arıza ve Bakım Yönetimi"
         description="Tesislerdeki teknik talepleri ve arızaları merkezi olarak takip edin."

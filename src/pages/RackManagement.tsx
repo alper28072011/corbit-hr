@@ -6,13 +6,13 @@ import {
   Search, X, LayoutGrid, LayoutList, Grip, Users, 
   BedSingle, AlertTriangle, LogOut, CheckCircle, Wrench, ShieldAlert
 } from 'lucide-react';
-import { hasPermission, PERMISSION_KEYS } from '../lib/permissions';
+import { canViewPage, PAGE_KEYS } from '../lib/permissions';
 
 export default function RackManagement() {
   const { facilities, rooms, staff, accommodations, maintenanceTickets, currentUser, roles } = useStore();
 
   // Security check
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_rack_management, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.rack, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />

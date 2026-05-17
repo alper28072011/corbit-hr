@@ -19,7 +19,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from "recharts";
 import { useStore } from "../store/useStore";
-import { hasPermission, PERMISSION_KEYS } from "../lib/permissions";
+import { canViewPage, can, PAGE_KEYS } from "../lib/permissions";
 import { cn } from "../lib/utils";
 import { PageHeader } from "../components/layout/PageHeader";
 
@@ -53,7 +53,7 @@ export default function Dashboard() {
   const { facilities, rooms, accommodations, staff, hotels, roles, currentUser } = useStore();
 
   // Security check
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_dashboard, roles)) {
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.dashboard, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
@@ -214,13 +214,13 @@ export default function Dashboard() {
           : 'Zincir genelindeki konaklama istatistikleri ve analizler.'}
         actions={
           <>
-            {hasPermission(currentUser?.role, PERMISSION_KEYS.add_staff_request, roles) && (
+            {can(currentUser?.role, 'create_staff', PAGE_KEYS.staff, useStore.getState().rolesPermissions) && (
               <Link to="/staff" className="px-4 py-2 border border-[#E8E6E1] rounded-xl bg-white hover:bg-stone-50 text-sm font-semibold transition-colors flex items-center gap-2">
                 <UserPlus className="w-4 h-4" />
                 Yeni Talep
               </Link>
             )}
-            {hasPermission(currentUser?.role, PERMISSION_KEYS.place_staff, roles) && (
+            {can(currentUser?.role, 'change_room', PAGE_KEYS.staff, useStore.getState().rolesPermissions) && (
               <Link to="/staff" className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2">
                 <BedDouble className="w-4 h-4" />
                 Yerleşim Yap
