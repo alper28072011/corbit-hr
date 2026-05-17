@@ -25,7 +25,7 @@ export default function FacilityManagement() {
   const canManage = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_hotel_management, roles);
 
   return (
-    <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
+    <div className="w-full flex flex-col p-6 gap-6">
       <div className="shrink-0">
         <PageHeader
           title="Tesis Yönetimi"
@@ -158,8 +158,8 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel, show
         </form>
       )}
 
-      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
-        <div className="flex-1 overflow-auto">
+      <div className="card-standard flex flex-col bg-white">
+        <div className="overflow-x-auto">
           <table className="min-w-full text-left relative">
           <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
             <tr>
@@ -383,8 +383,8 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
         </form>
       )}
 
-      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
-        <div className="flex-1 overflow-auto">
+      <div className="card-standard flex flex-col bg-white">
+        <div className="overflow-x-auto">
           <table className="min-w-full text-left relative">
           <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
             <tr>

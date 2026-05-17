@@ -4,12 +4,23 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { cn } from '../lib/utils';
 import { 
   Search, X, LayoutGrid, LayoutList, Grip, Users, 
-  BedSingle, AlertTriangle, LogOut, CheckCircle, Wrench 
+  BedSingle, AlertTriangle, LogOut, CheckCircle, Wrench, ShieldAlert
 } from 'lucide-react';
 import { hasPermission, PERMISSION_KEYS } from '../lib/permissions';
 
 export default function RackManagement() {
   const { facilities, rooms, staff, accommodations, maintenanceRequests, currentUser, roles } = useStore();
+
+  // Security check
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_rack_management, roles)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -96,7 +107,7 @@ export default function RackManagement() {
   }, [selectedRoomId, EnrichedRooms]);
 
   return (
-    <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
+    <div className="w-full flex flex-col p-6 gap-6">
       <div className="shrink-0">
         <PageHeader
           title="Oda Doluluk (Rack)"
@@ -165,8 +176,8 @@ export default function RackManagement() {
           </div>
       </div>
 
-      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
-          <div className="flex-1 overflow-auto p-6 bg-[#FDFCFB]">
+      <div className="card-standard flex flex-col bg-white">
+          <div className="p-6 bg-[#FDFCFB]">
             {availableFacilities.map(facility => {
                const facRooms = filteredRooms.filter(r => r.facilityId === facility.id && r.status === 'active');
                if (facRooms.length === 0) return null;

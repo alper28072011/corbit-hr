@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus, Edit2, Trash2, ShieldAlert, Check } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { Role } from "../types";
-import { PERMISSION_KEYS, PERMISSION_LABELS, PermissionKey } from "../lib/permissions";
+import { PERMISSION_KEYS, PERMISSION_LABELS, PermissionKey, hasPermission } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 
 const ROLE_NAMES: Record<string, string> = {
@@ -44,12 +44,12 @@ export default function Settings() {
   });
 
   // Security check
-  if (currentUser?.role !== 'super_admin') {
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_settings, roles)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
         <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
         <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
-        <p>Bu sayfayı görüntüleme yetkiniz yok. Sadece Süper Adminler erişebilir.</p>
+        <p>Bu sayfayı görüntüleme yetkiniz yok. Yönetici ile iletişime geçin.</p>
       </div>
     );
   }
@@ -150,7 +150,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-6 space-y-6">
+    <div className="w-full flex flex-col p-6 space-y-6">
       <PageHeader
         title="Ayarlar"
         description="Sistem kullanıcıları ve yetkilerini yönetin."
@@ -287,8 +287,8 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="card-standard p-6 min-h-0 flex-1 overflow-hidden flex flex-col">
-        <div className="overflow-x-auto flex-1">
+      <div className="card-standard p-6 overflow-hidden flex flex-col">
+        <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-[#E8E6E1] uppercase text-xs text-stone-400">
@@ -411,8 +411,8 @@ export default function Settings() {
             </div>
           )}
 
-          <div className="card-standard overflow-hidden min-h-0 flex-1 flex flex-col">
-            <div className="overflow-x-auto flex-1">
+          <div className="card-standard overflow-hidden flex flex-col">
+            <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b uppercase text-xs text-stone-500 bg-[#FDFCFB]">

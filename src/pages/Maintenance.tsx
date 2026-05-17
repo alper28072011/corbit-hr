@@ -24,6 +24,17 @@ function formatTimeAgo(dateString: string) {
 export default function Maintenance() {
   const { hotels, facilities, rooms, maintenanceRequests, addMaintenanceRequest, updateMaintenanceStatus, deleteMaintenanceRequest, currentUser, roles } = useStore();
   
+  // Security check
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
+  
   const [showForm, setShowForm] = useState(false);
   const [newRequest, setNewRequest] = useState({
     facilityId: '',
@@ -167,7 +178,7 @@ export default function Maintenance() {
   );
 
   return (
-    <div className="w-full h-full flex flex-col p-6 space-y-6">
+    <div className="w-full flex flex-col p-6 space-y-6">
       <PageHeader
         title="Arıza ve Bakım"
         description="Lojmanlardaki arıza bildirimleri ve teknik servis takibi."

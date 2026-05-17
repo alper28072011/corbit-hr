@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, query, where, orderBy, doc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
 import { useStore } from "../../store/useStore";
 import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceRequest, ActionLog } from "../../types";
@@ -28,6 +28,15 @@ export default function DataSync() {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         useStore.getState().setRoles(data);
       }, (error) => handleFirestoreError(error, OperationType.LIST, "roles"))
+    );
+
+    // App Settings
+    unsubs.push(
+      onSnapshot(doc(db, "settings", "general"), (doc) => {
+        if (doc.exists()) {
+          useStore.getState().setAppSettings(doc.data());
+        }
+      }, (error) => handleFirestoreError(error, OperationType.LIST, "settings/general"))
     );
 
     // 1. Users sync (only for super_admin or hr_director normally, but we might need it for Navbar names. 

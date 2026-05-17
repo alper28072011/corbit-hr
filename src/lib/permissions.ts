@@ -1,11 +1,15 @@
 import { Role, RoleConfig } from '../types';
 
 export const PERMISSION_KEYS = {
+  view_dashboard: 'view_dashboard',
+
   view_hotel_management: 'view_hotel_management',
   edit_hotel_management: 'edit_hotel_management',
   
   view_room_management: 'view_room_management',
   edit_room_management: 'edit_room_management',
+
+  view_rack_management: 'view_rack_management',
   
   view_staff_management: 'view_staff_management',
   add_staff_request: 'add_staff_request',
@@ -27,10 +31,12 @@ export const PERMISSION_KEYS = {
 export type PermissionKey = keyof typeof PERMISSION_KEYS;
 
 export const PERMISSION_LABELS: Record<PermissionKey, string> = {
+  view_dashboard: 'Dashboard (Ana Ekran) Görüntüle',
   view_hotel_management: 'Tesisleri Görüntüle',
   edit_hotel_management: 'Tesis Düzenle / Sil',
   view_room_management: 'Odaları Görüntüle',
   edit_room_management: 'Odaları Düzenle / Ekle',
+  view_rack_management: 'Oda Doluluk (Rack) Görüntüle',
   view_staff_management: 'Personeli Görüntüle',
   add_staff_request: 'Personel Talep Et',
   place_staff: 'Personel Yerleştir',
@@ -47,9 +53,9 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   super_admin: Object.values(PERMISSION_KEYS) as PermissionKey[],
-  hr_director: ['view_hotel_management', 'view_room_management', 'view_staff_management', 'edit_staff', 'view_logs', 'view_maintenance'],
-  hotel_hr_manager: ['view_staff_management', 'add_staff_request'],
-  facility_manager: ['view_room_management', 'edit_room_management', 'view_staff_management', 'place_staff', 'checkout_staff', 'edit_staff', 'view_logs', 'view_maintenance', 'manage_maintenance']
+  hr_director: ['view_dashboard', 'view_hotel_management', 'view_room_management', 'view_rack_management', 'view_staff_management', 'edit_staff', 'view_logs', 'view_maintenance'],
+  hotel_hr_manager: ['view_dashboard', 'view_staff_management', 'add_staff_request'],
+  facility_manager: ['view_dashboard', 'view_room_management', 'edit_room_management', 'view_rack_management', 'view_staff_management', 'place_staff', 'checkout_staff', 'edit_staff', 'view_logs', 'view_maintenance', 'manage_maintenance']
 };
 
 export function hasPermission(userRole: Role | undefined, permissionKey: string | string[], rolesConfig?: RoleConfig[]): boolean {

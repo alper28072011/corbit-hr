@@ -29,7 +29,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   };
 
   return (
-    <header className="flex h-20 shrink-0 items-center justify-between border-b border-[#E8E6E1] bg-white px-8 z-10 sticky top-0">
+    <header className="flex h-20 shrink-0 items-center justify-between border-b border-[#E8E6E1] bg-white px-8 z-40 sticky top-0">
       <button
         type="button"
         className="-m-2.5 p-2.5 text-stone-700 lg:hidden"

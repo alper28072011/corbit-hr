@@ -11,7 +11,8 @@ import {
   ListVideo,
   DoorOpen,
   LogOut,
-  Building
+  Building,
+  ShieldAlert
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -50,6 +51,17 @@ function CardContent({ className = "", children }: { className?: string, childre
 
 export default function Dashboard() {
   const { facilities, rooms, accommodations, staff, hotels, roles, currentUser } = useStore();
+
+  // Security check
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_dashboard, roles)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok. Yönetici ile iletişime geçin.</p>
+      </div>
+    );
+  }
 
   const authorizedFacilities = useMemo(() => {
     if (!currentUser) return [];
@@ -193,7 +205,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-6 space-y-6 overflow-y-auto">
+    <div className="w-full flex flex-col p-6 space-y-6">
       
       <PageHeader 
         title="Raporlama Merkezi"

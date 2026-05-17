@@ -52,6 +52,17 @@ const ActionMenu = ({ children }: { children: ReactNode }) => {
 export default function StaffManagement() {
   const { hotels, facilities, rooms, staff, accommodations, addStaff, placeStaff, checkoutStaff, undoCheckoutStaff, deleteStaff, currentUser, roles } = useStore();
 
+  // Security check
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_staff_management, roles)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
+
   // Form states
   const [showAddStaffForm, setShowAddStaffForm] = useState(false);
   const defaultHotelId = currentUser?.role === 'hotel_hr_manager' 
@@ -356,7 +367,7 @@ export default function StaffManagement() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
+    <div className="w-full flex flex-col p-6 gap-6">
       <div className="shrink-0">
         <PageHeader
           title="Personel Yönetimi"
@@ -420,8 +431,8 @@ export default function StaffManagement() {
           </div>
         </div>
 
-      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
-          <div className="flex-1 overflow-auto">
+      <div className="card-standard flex flex-col bg-white">
+          <div className="overflow-x-auto">
             <table className="min-w-full text-left relative">
               <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
                 <tr>

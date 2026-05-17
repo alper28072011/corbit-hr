@@ -62,6 +62,10 @@ interface AppState {
   logs: ActionLog[];
   setLogs: (logs: ActionLog[]) => void;
   addLog: (log: Omit<ActionLog, 'id'>) => Promise<void>;
+  
+  appSettings: any;
+  setAppSettings: (settings: any) => void;
+  updateAppVersion: (version: string) => Promise<void>;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -75,6 +79,7 @@ export const useStore = create<AppState>((set, get) => ({
       accommodations: [],
       maintenanceRequests: [],
       logs: [],
+      appSettings: {},
 
       setUsers: (users) => set({ users }),
       setRoles: (roles) => set({ roles }),
@@ -85,6 +90,7 @@ export const useStore = create<AppState>((set, get) => ({
       setAccommodations: (accommodations) => set({ accommodations }),
       setMaintenanceRequests: (maintenanceRequests) => set({ maintenanceRequests }),
       setLogs: (logs) => set({ logs }),
+      setAppSettings: (appSettings) => set({ appSettings }),
 
       setCurrentUser: (user) => set({ currentUser: user }),
 
@@ -453,6 +459,14 @@ export const useStore = create<AppState>((set, get) => ({
            handleFirestoreError(error, OperationType.DELETE, `maintenanceRequests/${id}`);
          }
       },
+
+      updateAppVersion: async (version: string) => {
+        try {
+          await setDoc(doc(db, "settings", "general"), { version }, { merge: true });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, "settings/general");
+        }
+      }
 }));
 
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs, setDoc } from "firebase/firestore";
 import { auth, db, handleFirestoreError, OperationType } from "../../lib/firebase";
 import { useStore } from "../../store/useStore";
 import Login from "./Login";
@@ -26,7 +26,22 @@ export default function AuthProvider({ children }: { children: import('react').R
                setCurrentUser({ id: userDoc.id, ...userData });
             }
           } else {
-            if (user.email === 'kubilay.alper.aktas@rubiplatinum.com') {
+            // Check if a user with this email was created through settings
+            const usersRef = collection(db, "users");
+            const q = query(usersRef, where("email", "==", user.email));
+            const querySnapshot = await getDocs(q);
+            
+            if (!querySnapshot.empty) {
+              const userRecord = querySnapshot.docs[0];
+              const userData = userRecord.data() as User;
+              
+              if (userData.status === 'inactive') {
+                 auth.signOut();
+                 setCurrentUser(null);
+              } else {
+                 setCurrentUser({ id: userRecord.id, ...userData });
+              }
+            } else if (user.email === 'kubilay.alper.aktas@rubiplatinum.com') {
               const seedData: Omit<User, 'id'> = {
                 email: 'kubilay.alper.aktas@rubiplatinum.com',
                 role: 'super_admin',
@@ -34,8 +49,6 @@ export default function AuthProvider({ children }: { children: import('react').R
                 assignedHotelId: 'all',
                 status: 'active'
               };
-              // Note: setDoc must be imported from firebase/firestore
-              const { setDoc } = await import("firebase/firestore");
               await setDoc(doc(db, "users", user.uid), seedData);
               setCurrentUser({ id: user.uid, ...seedData } as User);
             } else {

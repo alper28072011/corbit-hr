@@ -23,6 +23,17 @@ export default function RoomManagement() {
 
   const canEdit = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_room_management, roles);
 
+  // Security check
+  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_room_management, roles)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
+
   const availableFacilities = useMemo(() => {
     if (!currentUser) return [];
     if (['super_admin', 'hr_director'].includes(currentUser.role)) return facilities;
@@ -228,7 +239,7 @@ export default function RoomManagement() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-6 gap-6 overflow-hidden">
+    <div className="w-full flex flex-col p-6 gap-6">
       <div className="shrink-0">
         <PageHeader
           title="Oda Yönetimi"
@@ -453,15 +464,15 @@ export default function RoomManagement() {
       )}
 
       {/* Main Table Content */}
-      <div className="card-standard flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
+      <div className="card-standard flex flex-col bg-white">
         {!selectedFacilityId ? (
-           <div className="flex flex-col items-center justify-center flex-1 text-center text-stone-400 p-6">
+           <div className="flex flex-col items-center justify-center text-center text-stone-400 p-6 min-h-[300px]">
              <Search className="w-12 h-12 mb-4 opacity-30" />
              <h3 className="text-xl font-bold text-[#2D332D] mb-2">Lojman Seçimi Bekleniyor</h3>
              <p className="text-sm">Odaları görüntülemek veya filtrelemek için üst bölümden bir lojman seçin.</p>
            </div>
         ) : (
-            <div className="flex-1 overflow-auto">
+            <div className="overflow-x-auto">
               <table className="min-w-full text-left relative">
                 <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
                   <tr>
