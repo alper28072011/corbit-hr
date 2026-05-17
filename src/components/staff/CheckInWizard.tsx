@@ -16,6 +16,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'empty' | 'partial'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [approvalModal, setApprovalModal] = useState<{isOpen: boolean, roomId: string, facilityId: string, reason: string, requestType: 'family_placement' | 'cross_dorm_placement'} | null>(null);
 
   // Facility availability check based on user role and assignment
   const assignedFacilities = useMemo(() => {
@@ -33,8 +34,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
   const matchingRooms = useMemo(() => {
     let result = rooms.filter(r => 
       assignedFacilities.some(f => f.id === r.facilityId) && 
-      r.status === 'active' && 
-      (r.genderType === staffMember.gender || r.genderType === 'mixed')
+      r.status === 'active'
     );
     
     return result.map(room => {
@@ -43,7 +43,21 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       const currentResidents = staff.filter(s => roomAccs.some(a => a.staffId === s.id));
       const availableBeds = room.bedCount - currentResidents.length;
       
-      const requiresApproval = !facility?.allowedHotelIds.includes(staffMember.hotelId);
+      const requiresCrossDormApproval = !facility?.allowedHotelIds.includes(staffMember.hotelId);
+      const isFamilyRoom = room.genderType === 'Aile';
+      
+      // Determine if there is a gender mismatch
+      // Example: placing male into female room, or into mixed/family room that currently has females.
+      let hasGenderMismatch = false;
+      if (room.genderType !== 'mixed' && room.genderType !== 'Aile' && room.genderType !== staffMember.gender) {
+        hasGenderMismatch = true;
+      }
+      if (currentResidents.some(r => r.gender !== staffMember.gender)) {
+        hasGenderMismatch = true;
+      }
+
+      const requiresFamilyApproval = isFamilyRoom || hasGenderMismatch;
+      const requiresApproval = requiresCrossDormApproval || requiresFamilyApproval;
       
       const hasMaintenance = maintenanceTickets.some(m => m.roomId === room.id && (m.status === 'Açık' || m.status === 'İşlemde'));
 
@@ -58,6 +72,10 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
         currentResidents,
         availableBeds,
         requiresApproval,
+        requiresCrossDormApproval,
+        requiresFamilyApproval,
+        isFamilyRoom,
+        hasGenderMismatch,
         hasMaintenance,
         isRecommended: recommendedScore > 0,
         recommendedScore
@@ -85,25 +103,38 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
   }, [matchingRooms, searchQuery, filterType]);
 
 
-  const handlePlaceStaff = async (roomId: string, facilityId: string, requiresApproval: boolean) => {
+  const handleInitPlacement = (roomId: string, facilityId: string, requiresApproval: boolean, isFamily: boolean) => {
+     if (requiresApproval) {
+        setApprovalModal({
+           isOpen: true,
+           roomId,
+           facilityId,
+           reason: '',
+           requestType: isFamily ? 'family_placement' : 'cross_dorm_placement'
+        });
+     } else {
+        handlePlaceStaff(roomId, facilityId, false);
+     }
+  };
+
+  const handlePlaceStaff = async (roomId: string, facilityId: string, requiresApproval: boolean, requestType?: 'family_placement' | 'cross_dorm_placement', reason?: string) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     
     try {
       if (requiresApproval) {
         // Create approval request instead of direct placement
-        await addDoc(collection(db, 'approvalRequests'), {
-          type: 'cross_dorm_placement',
+        await useStore.getState().addApprovalRequest({
           staffId: staffMember.id,
-          targetFacilityId: facilityId,
           targetRoomId: roomId,
-          requestedBy: currentUser?.id,
-          requestedAt: new Date().toISOString(),
-          status: 'pending',
-          staffName: staffMember.fullName,
-          hotelId: staffMember.hotelId,
-          department: staffMember.department
+          requestType: requestType || 'cross_dorm_placement',
+          requestedBy: currentUser?.id || 'System',
+          note: reason || ''
         });
+        
+        // Update staff status to pending_approval
+        await useStore.getState().updateStaff(staffMember.id, { status: 'pending_approval' });
+        
         alert("İK Onayı Gerekiyor! Talep gönderildi.");
       } else {
         await placeStaff(staffMember.id, facilityId, roomId);
@@ -114,6 +145,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       alert("İşlem sırasında bir hata oluştu.");
     } finally {
       setIsSubmitting(false);
+      setApprovalModal(null);
     }
   };
 
@@ -134,6 +166,22 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {staffMember.specialNote && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 shrink-0">
+             <div className="flex">
+                <div className="flex-shrink-0">
+                   <AlertTriangle className="h-5 w-5 text-red-400" aria-hidden="true" />
+                </div>
+                <div className="ml-3">
+                   <h3 className="text-sm font-bold text-red-800">İK Özel Notu / Lütfen Dikkat!</h3>
+                   <div className="mt-1 text-sm text-red-700">
+                      <p>{staffMember.specialNote}</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+        )}
 
         {/* Toolbar */}
         <div className="p-4 bg-white border-b border-[#E8E6E1] flex gap-3 shrink-0 flex-col md:flex-row">
@@ -211,13 +259,28 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
 
                   {/* Actions */}
                   <div className="w-full md:w-auto shrink-0 flex flex-col items-center gap-2">
-                    {room.requiresApproval && (
-                      <div className="text-xs text-orange-600 font-semibold bg-orange-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center">
-                        <AlertTriangle className="w-3 h-3 shrink-0"/> İK Onayı Gerekli
+                    {room.hasGenderMismatch && !room.isFamilyRoom && (
+                      <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0"/> Cinsiyet Uyuşmazlığı
+                      </div>
+                    )}
+                    {room.requiresFamilyApproval && !room.hasGenderMismatch && (
+                      <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0"/> Aile Odası (Onay Gerekli)
+                      </div>
+                    )}
+                    {room.requiresFamilyApproval && room.hasGenderMismatch && (
+                       <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                          <AlertTriangle className="w-3 h-3 shrink-0"/> İstisnai Yerleşim
+                       </div>
+                    )}
+                    {room.requiresCrossDormApproval && !room.requiresFamilyApproval && (
+                      <div className="text-xs text-orange-600 font-semibold bg-orange-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0"/> Farklı Lojman (Onay Gerekli)
                       </div>
                     )}
                     <button 
-                      onClick={() => handlePlaceStaff(room.id, room.facilityId, room.requiresApproval)}
+                      onClick={() => handleInitPlacement(room.id, room.facilityId, room.requiresApproval, room.requiresFamilyApproval || room.hasGenderMismatch)}
                       disabled={isSubmitting}
                       className={cn("w-full md:w-auto px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-colors disabled:opacity-50",
                         room.requiresApproval 
@@ -225,7 +288,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                           : "bg-[#7C8363] hover:bg-[#6A7152] text-white"
                       )}
                     >
-                      {room.requiresApproval ? "Onaya Gönder" : "Yerleştir"}
+                      {room.requiresApproval ? "İK Onayına Gönder" : "Yerleştir"}
                     </button>
                   </div>
                 </div>
@@ -234,6 +297,42 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
           )}
         </div>
       </div>
+
+      {/* Approval Modal */}
+      {approvalModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/60 p-4">
+           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+              <h3 className="text-lg font-bold text-[#2D332D] mb-2">İK Onayına Gönder</h3>
+              <p className="text-sm text-stone-500 mb-4">
+                 Bu yerleşim için İnsan Kaynakları departmanının onayı gerekmektedir. Lütfen onay talebiniz için bir gerekçe/not yazın.
+              </p>
+              <textarea
+                 autoFocus
+                 className="w-full border border-[#E8E6E1] rounded-xl p-3 text-sm focus:outline-none focus:border-[#7C8363] resize-none mb-4"
+                 rows={4}
+                 placeholder="Örn: Eşi Ayşe ile aile odası tahsisi..."
+                 value={approvalModal.reason}
+                 onChange={(e) => setApprovalModal({...approvalModal, reason: e.target.value})}
+              />
+              <div className="flex gap-2 justify-end">
+                 <button 
+                    onClick={() => setApprovalModal(null)}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 text-stone-600 font-semibold text-sm hover:bg-stone-50 rounded-xl"
+                 >
+                    İptal
+                 </button>
+                 <button 
+                    onClick={() => handlePlaceStaff(approvalModal.roomId, approvalModal.facilityId, true, approvalModal.requestType, approvalModal.reason)}
+                    disabled={isSubmitting || !approvalModal.reason.trim()}
+                    className="px-4 py-2 bg-amber-500 text-white font-bold text-sm hover:bg-amber-600 rounded-xl disabled:opacity-50"
+                 >
+                    Onaya Gönder
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 }

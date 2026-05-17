@@ -1,6 +1,8 @@
-import { Bell, Menu, UserCircle, LogOut } from "lucide-react";
+import { useState } from "react";
+import { Bell, Menu, UserCircle, LogOut, ShieldAlert, Check, X } from "lucide-react";
 import { useStore } from "../../store/useStore";
-import { auth } from "../../lib/firebase";
+import { auth, db } from "../../lib/firebase";
+import { cn } from "../../lib/utils";
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -14,7 +16,12 @@ const ROLE_NAMES: Record<string, string> = {
 };
 
 export default function Navbar({ onMenuClick }: NavbarProps) {
-  const { currentUser, roles } = useStore();
+  const { currentUser, roles, approvalRequests, resolveApprovalRequest, placeStaff, updateStaff, staff, rooms, facilities, addLog } = useStore();
+  const [showApprovals, setShowApprovals] = useState(false);
+
+  // Sadece yetkili kisiler approval görebilecek
+  const canManageApprovals = currentUser?.role === 'super_admin' || currentUser?.role === 'hr_director';
+  const pendingApprovals = approvalRequests.filter(r => r.status === 'Bekliyor');
 
   const handleLogout = () => {
     auth.signOut();
@@ -26,6 +33,25 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
       if (found) return found.name;
     }
     return ROLE_NAMES[roleKey] || roleKey;
+  };
+
+  const handleApprove = async (approvalId: string, staffId: string, facilityId: string, roomId: string) => {
+    // resolve then place staff then log
+    await resolveApprovalRequest(approvalId, 'Onaylandı');
+    await placeStaff(staffId, facilityId, roomId);
+    await addLog({
+      entityId: staffId,
+      entityType: 'staff',
+      action: 'update',
+      changes: 'İK Onayı ile yerleşti.',
+      performedBy: currentUser?.fullName || 'System',
+      timestamp: Date.now()
+    });
+  };
+
+  const handleReject = async (approvalId: string, staffId: string) => {
+    await resolveApprovalRequest(approvalId, 'Reddedildi');
+    await updateStaff(staffId, { status: 'pending_placement' });
   };
 
   return (
@@ -55,14 +81,68 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
           </div>
         </div>
         <div className="flex items-center gap-x-6">
-          <button
-            type="button"
-            className="relative p-2 text-stone-400 hover:bg-stone-50 rounded-full transition-colors"
-          >
-            <span className="sr-only">Bildirimleri göster</span>
-            <Bell className="h-6 w-6" aria-hidden="true" />
-            <span className="absolute top-1 max-right-1 w-2.5 h-2.5 bg-orange-500 rounded-full border-2 border-white"></span>
-          </button>
+          <div className="relative">
+             <button
+               type="button"
+               onClick={() => canManageApprovals && setShowApprovals(!showApprovals)}
+               className={cn("relative p-2 rounded-full transition-colors", canManageApprovals ? "text-stone-600 hover:bg-stone-50" : "text-stone-400")}
+               disabled={!canManageApprovals}
+             >
+               <span className="sr-only">Bildirimleri göster</span>
+               <Bell className="h-6 w-6" aria-hidden="true" />
+               {canManageApprovals && pendingApprovals.length > 0 && (
+                 <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white flex items-center justify-center text-[9px] font-bold rounded-full border-2 border-white">
+                   {pendingApprovals.length}
+                 </span>
+               )}
+             </button>
+
+             {/* Approvals Dropdown */}
+             {showApprovals && canManageApprovals && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-[#E8E6E1] py-2 z-50">
+                   <div className="px-4 py-2 border-b border-stone-100">
+                      <h4 className="font-bold text-sm text-[#2D332D]">Onay Bekleyen İşlemler</h4>
+                   </div>
+                   <div className="max-h-[300px] overflow-y-auto">
+                      {pendingApprovals.length === 0 ? (
+                         <div className="p-4 text-center text-sm text-stone-500">Bekleyen onay talebi yok.</div>
+                      ) : (
+                         <div className="divide-y divide-stone-100">
+                            {pendingApprovals.map(req => {
+                               const reqStaff = staff.find(s => s.id === req.staffId);
+                               const reqRoom = rooms.find(r => r.id === req.targetRoomId);
+                               const reqFacility = facilities.find(f => f.id === reqRoom?.facilityId);
+                               
+                               return (
+                                  <div key={req.id} className="p-4 flex flex-col gap-2 relative group hover:bg-stone-50 transition-colors">
+                                     <div className="flex items-start gap-2">
+                                        <ShieldAlert className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                           <div className="text-sm text-stone-700">
+                                              <strong>Lojman Görevlisi</strong>, <strong>{reqStaff?.fullName || 'Bilinmeyen'}</strong> personelini <strong>{reqFacility?.name} - {reqRoom?.roomNumber}</strong> odasına yerleştirmek istiyor.
+                                           </div>
+                                           <div className="text-xs text-stone-500 bg-stone-100 p-2 rounded mt-2 border border-stone-200">
+                                              " {req.note} "
+                                           </div>
+                                        </div>
+                                     </div>
+                                     <div className="flex gap-2 justify-end mt-2">
+                                        <button onClick={() => handleReject(req.id, req.staffId)} className="w-8 h-8 rounded-full flex items-center justify-center border border-red-200 text-red-500 hover:bg-red-50" title="Reddet">
+                                           <X className="w-4 h-4" />
+                                        </button>
+                                        <button onClick={() => reqRoom && handleApprove(req.id, req.staffId, reqRoom.facilityId, reqRoom.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-green-200 text-green-500 hover:bg-green-50" title="Onayla">
+                                           <Check className="w-4 h-4" />
+                                        </button>
+                                     </div>
+                                  </div>
+                               );
+                            })}
+                         </div>
+                      )}
+                   </div>
+                </div>
+             )}
+          </div>
 
           {/* User Profile */}
           <div className="flex items-center gap-x-3 pl-6 border-l border-stone-200">

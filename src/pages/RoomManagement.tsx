@@ -196,9 +196,10 @@ export default function RoomManagement() {
          let bedCount = parseInt(item['Kapasite (Yatak)']) || 1;
          totalBedsToImport += bedCount;
          let genderInput = (item['Cinsiyet (Erkek/Kadin/Karma)'] || '').toLowerCase();
-         let gType = 'male';
+         let gType: any = 'male';
          if (genderInput.includes('kadin') || genderInput.includes('kadın')) gType = 'female';
          if (genderInput.includes('karma')) gType = 'mixed';
+         if (genderInput.includes('aile')) gType = 'Aile';
 
          newRooms.push({
            facilityId: selectedFacilityId,
@@ -405,6 +406,7 @@ export default function RoomManagement() {
                         <option value="male">Erkek</option>
                         <option value="female">Kadın</option>
                         <option value="mixed">Karma</option>
+                        <option value="Aile">Aile</option>
                       </select>
                     </div>
                     <div className="md:col-span-3">
@@ -507,6 +509,7 @@ export default function RoomManagement() {
                                 <option value="male">Erkek</option>
                                 <option value="female">Kadın</option>
                                 <option value="mixed">Karma</option>
+                                <option value="Aile">Aile</option>
                               </select>
                             </td>
                             <td className="px-6 py-3">
@@ -535,9 +538,10 @@ export default function RoomManagement() {
                                 "inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold",
                                 room.genderType === 'female' ? "bg-pink-100 text-pink-700" :
                                 room.genderType === 'male' ? "bg-blue-100 text-blue-700" :
+                                room.genderType === 'Aile' ? "bg-emerald-100 text-emerald-700" :
                                 "bg-purple-100 text-purple-700"
                               )}>
-                                {room.genderType === 'female' ? 'Kadın' : room.genderType === 'male' ? 'Erkek' : 'Karma'}
+                                {room.genderType === 'female' ? 'Kadın' : room.genderType === 'male' ? 'Erkek' : room.genderType === 'Aile' ? 'Aile' : 'Karma'}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">

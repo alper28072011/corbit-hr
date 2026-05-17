@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog } from '../types';
+import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
@@ -13,6 +13,7 @@ interface AppState {
   staff: Staff[];
   accommodations: Accommodation[];
   maintenanceTickets: MaintenanceTicket[];
+  approvalRequests: ApprovalRequest[];
   
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleConfig[]) => void;
@@ -22,6 +23,7 @@ interface AppState {
   setStaff: (staff: Staff[]) => void;
   setAccommodations: (accs: Accommodation[]) => void;
   setMaintenanceTickets: (tickets: MaintenanceTicket[]) => void;
+  setApprovalRequests: (reqs: ApprovalRequest[]) => void;
   
   // Actions
   addUser: (user: Omit<User, 'id'>) => Promise<void>;
@@ -58,6 +60,9 @@ interface AppState {
   updateMaintenanceTicket: (id: string, updates: Partial<MaintenanceTicket>) => Promise<void>;
   deleteMaintenanceTicket: (id: string) => Promise<void>;
   
+  addApprovalRequest: (reqData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
+  resolveApprovalRequest: (id: string, status: 'Onaylandı' | 'Reddedildi') => Promise<void>;
+  
   // Logs
   logs: ActionLog[];
   setLogs: (logs: ActionLog[]) => void;
@@ -78,6 +83,7 @@ export const useStore = create<AppState>((set, get) => ({
       staff: [],
       accommodations: [],
       maintenanceTickets: [],
+      approvalRequests: [],
       logs: [],
       appSettings: {},
 
@@ -89,6 +95,7 @@ export const useStore = create<AppState>((set, get) => ({
       setStaff: (staff) => set({ staff }),
       setAccommodations: (accommodations) => set({ accommodations }),
       setMaintenanceTickets: (maintenanceTickets) => set({ maintenanceTickets }),
+      setApprovalRequests: (approvalRequests) => set({ approvalRequests }),
       setLogs: (logs) => set({ logs }),
       setAppSettings: (appSettings) => set({ appSettings }),
 
@@ -455,6 +462,27 @@ export const useStore = create<AppState>((set, get) => ({
          } catch (error) {
            handleFirestoreError(error, OperationType.DELETE, `maintenanceTickets/${id}`);
          }
+      },
+
+      addApprovalRequest: async (reqData) => {
+        try {
+          const payload = {
+            ...reqData,
+            createdAt: Date.now(),
+            status: 'Bekliyor',
+          };
+          await addDoc(collection(db, "approvalRequests"), payload);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.CREATE, "approvalRequests");
+        }
+      },
+
+      resolveApprovalRequest: async (id, status) => {
+        try {
+          await updateDoc(doc(db, "approvalRequests", id), { status });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `approvalRequests/${id}`);
+        }
       },
 
       updateAppVersion: async (version: string) => {

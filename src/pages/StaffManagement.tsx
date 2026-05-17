@@ -70,7 +70,7 @@ export default function StaffManagement() {
     : '';
 
   const [newStaff, setNewStaff] = useState({
-    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const, notes: ''
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const, notes: '', specialNote: ''
   });
 
   // Placement modal state
@@ -81,7 +81,7 @@ export default function StaffManagement() {
   // Edit Modal State
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: '', notes: ''
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: '', notes: '', specialNote: ''
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -283,7 +283,7 @@ export default function StaffManagement() {
     const dHotelId = currentUser?.role === 'hotel_hr_manager' 
       ? (currentUser.assignedHotelIds?.[0] || currentUser.assignedHotelId || '') 
       : '';
-    setNewStaff({ fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: dHotelId, gender: 'male', notes: '' });
+    setNewStaff({ fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: dHotelId, gender: 'male', notes: '', specialNote: '' });
   };
 
   const handlePlaceStaff = () => {
@@ -305,7 +305,8 @@ export default function StaffManagement() {
       hotelId: staffData.hotelId,
       gender: staffData.gender,
       status: staffData.status,
-      notes: staffData.notes || ''
+      notes: staffData.notes || '',
+      specialNote: staffData.specialNote || ''
     });
     setEditingStaffId(staffData.id);
   };
@@ -683,6 +684,10 @@ export default function StaffManagement() {
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Notlar / Açıklama</label>
                 <textarea value={newStaff.notes} onChange={e => setNewStaff({...newStaff, notes: e.target.value})} placeholder="Personel ile ilgili notlar..." className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] min-h-[80px]" />
               </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Sıra Dışı Yerleşim (İK Notu)</label>
+                <textarea value={newStaff.specialNote} onChange={e => setNewStaff({...newStaff, specialNote: e.target.value})} placeholder="Örn: Eşi Ayşe Yılmaz ile Aile odasında kalacak." className="w-full px-4 py-2 border border-red-200 bg-red-50 rounded-xl text-sm focus:outline-none focus:border-red-400 min-h-[60px]" />
+              </div>
               
               <div className="md:col-span-2 flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowAddStaffForm(false)} className="px-6 py-2 border border-[#E8E6E1] bg-white text-stone-600 rounded-xl hover:bg-stone-50 font-semibold text-sm">İptal</button>
@@ -750,6 +755,10 @@ export default function StaffManagement() {
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Notlar / Açıklama</label>
                 <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} placeholder="Personel ile ilgili notlar..." className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] min-h-[80px]" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Sıra Dışı Yerleşim (İK Notu)</label>
+                <textarea value={editForm.specialNote} onChange={e => setEditForm({...editForm, specialNote: e.target.value})} placeholder="Örn: Eşi Ayşe Yılmaz ile Aile odasında kalacak." className="w-full px-4 py-2 border border-red-200 bg-red-50 rounded-xl text-sm focus:outline-none focus:border-red-400 min-h-[60px]" />
               </div>
               
               <div className="md:col-span-2 flex justify-end gap-3 mt-4">

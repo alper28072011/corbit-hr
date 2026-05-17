@@ -15,7 +15,7 @@ export interface Facility {
   contactPerson?: string;
 }
 
-export type GenderType = 'male' | 'female' | 'mixed';
+export type GenderType = 'male' | 'female' | 'mixed' | 'Aile';
 export type RoomStatus = 'active' | 'passive' | 'maintenance';
 
 export type Role = string;
@@ -61,8 +61,9 @@ export interface Staff {
   position: string;
   hotelId: string;
   gender: 'male' | 'female';
-  status: 'pending_placement' | 'placed' | 'left';
+  status: 'pending_placement' | 'placed' | 'left' | 'pending_approval';
   notes?: string;
+  specialNote?: string;
 }
 
 export interface Accommodation {
@@ -87,14 +88,13 @@ export interface ActionLog {
 
 export interface ApprovalRequest {
   id: string;
-  type: 'cross_dorm_placement';
   staffId: string;
-  targetFacilityId: string;
   targetRoomId: string;
-  requestedBy: string; // UserId
-  requestedAt: string;
-  status: 'pending' | 'approved' | 'rejected';
-  reason?: string;
+  requestType: 'family_placement' | 'cross_dorm_placement';
+  requestedBy: string; // Lojman görevlisinin ID/E-posta
+  status: 'Bekliyor' | 'Onaylandı' | 'Reddedildi';
+  createdAt: number;
+  note: string; // Örn: "A Otelinden X kişisi ile evli, Aile odası talebi."
 }
 
 export interface MaintenanceTicket {

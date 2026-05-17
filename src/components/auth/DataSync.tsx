@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { collection, onSnapshot, query, where, orderBy, doc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
 import { useStore } from "../../store/useStore";
-import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, ActionLog } from "../../types";
+import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, ActionLog, ApprovalRequest } from "../../types";
 import { hasPermission } from "../../lib/permissions";
 
 export default function DataSync() {
@@ -14,7 +14,8 @@ export default function DataSync() {
     setRooms, 
     setStaff, 
     setAccommodations, 
-    setMaintenanceTickets 
+    setMaintenanceTickets,
+    setApprovalRequests
   } = useStore();
 
   useEffect(() => {
@@ -114,6 +115,14 @@ export default function DataSync() {
         }
         setMaintenanceTickets(data);
       }, (error: any) => handleFirestoreError(error, OperationType.LIST, "maintenanceTickets"))
+    );
+
+    // Approval Requests
+    unsubs.push(
+      onSnapshot(collection(db, "approvalRequests"), (snapshot: any) => {
+        const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as ApprovalRequest));
+        useStore.getState().setApprovalRequests(data);
+      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "approvalRequests"))
     );
 
     // 8. Logs
