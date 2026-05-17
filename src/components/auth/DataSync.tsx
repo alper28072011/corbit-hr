@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { collection, onSnapshot, query, where, orderBy, doc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
 import { useStore } from "../../store/useStore";
-import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceRequest, ActionLog } from "../../types";
+import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, ActionLog } from "../../types";
 import { hasPermission } from "../../lib/permissions";
 
 export default function DataSync() {
@@ -14,7 +14,7 @@ export default function DataSync() {
     setRooms, 
     setStaff, 
     setAccommodations, 
-    setMaintenanceRequests 
+    setMaintenanceTickets 
   } = useStore();
 
   useEffect(() => {
@@ -105,15 +105,15 @@ export default function DataSync() {
       }, (error: any) => handleFirestoreError(error, OperationType.LIST, "accommodations"))
     );
 
-    // 7. Maintenance Requests
+    // 7. Maintenance Tickets
     unsubs.push(
-      onSnapshot(collection(db, "maintenanceRequests"), (snapshot: any) => {
-        let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as MaintenanceRequest));
+      onSnapshot(collection(db, "maintenanceTickets"), (snapshot: any) => {
+        let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as MaintenanceTicket));
         if (currentUser.role === 'facility_manager') {
-          data = data.filter(d => facilityIds.includes(d.facilityId));
+          data = data.filter(d => facilityIds.includes(d.dormId)); // In MaintenanceTicket, we use dormId instead of facilityId
         }
-        setMaintenanceRequests(data);
-      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "maintenanceRequests"))
+        setMaintenanceTickets(data);
+      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "maintenanceTickets"))
     );
 
     // 8. Logs

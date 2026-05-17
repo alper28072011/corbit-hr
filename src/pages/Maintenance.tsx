@@ -1,28 +1,38 @@
-import { useState } from "react";
-import { Plus, Wrench, Clock, CheckCircle2, AlertCircle, MapPin, Trash2, ChevronRight } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { 
+  Plus, Wrench, Search, Filter, Trash2, Edit2, History, AlertCircle, MapPin, 
+  X, Check, ChevronDown, ListFilter, AlignLeft, ShieldAlert
+} from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
-import { MaintenanceStatus } from "../types";
+import { MaintenanceTicket, ActionLog } from "../types";
 import { PERMISSION_KEYS, hasPermission } from "../lib/permissions";
-import { ShieldAlert } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 
-function formatTimeAgo(dateString: string) {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+function formatTimeDiff(startTime: number, endTime: number = Date.now()) {
+  const diffInSeconds = Math.floor((endTime - startTime) / 1000);
   
-  if (diffInSeconds < 60) return "Az önce";
+  if (diffInSeconds < 60) return "1 dakikadan az";
   const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) return `${diffInMinutes} Dakika Önce`;
+  if (diffInMinutes < 60) return `${diffInMinutes} d`;
   const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) return `${diffInHours} Saat Önce`;
+  if (diffInHours < 24) return `${diffInHours} s ${diffInMinutes % 60} d`;
   const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays} Gün Önce`;
+  return `${diffInDays} g ${diffInHours % 24} s`;
+}
+
+function formatDateLabel(timestamp: number) {
+  return new Date(timestamp).toLocaleString('tr-TR', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
 }
 
 export default function Maintenance() {
-  const { hotels, facilities, rooms, maintenanceRequests, addMaintenanceRequest, updateMaintenanceStatus, deleteMaintenanceRequest, currentUser, roles } = useStore();
+  const { 
+    hotels, facilities, rooms, maintenanceTickets, 
+    addMaintenanceTicket, updateMaintenanceTicket, deleteMaintenanceTicket, 
+    addLog, logs, currentUser, roles 
+  } = useStore();
   
   // Security check
   if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles)) {
@@ -34,159 +44,200 @@ export default function Maintenance() {
       </div>
     );
   }
+
+  const canCreate = hasPermission(currentUser?.role, PERMISSION_KEYS.create_ticket, roles);
+  const canEdit = hasPermission(currentUser?.role, PERMISSION_KEYS.edit_ticket, roles);
+  const canDelete = hasPermission(currentUser?.role, PERMISSION_KEYS.delete_ticket, roles);
+  const canUpdateStatus = hasPermission(currentUser?.role, PERMISSION_KEYS.update_ticket_status, roles);
+  const canViewLogs = hasPermission(currentUser?.role, PERMISSION_KEYS.view_logs, roles);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterPriority, setFilterPriority] = useState("all");
+  const [filterFacility, setFilterFacility] = useState("all");
+  const [filterHotel, setFilterHotel] = useState("all");
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTicket, setEditingTicket] = useState<MaintenanceTicket | null>(null);
   
-  const [showForm, setShowForm] = useState(false);
-  const [newRequest, setNewRequest] = useState({
-    facilityId: '',
-    roomId: '',
-    reporterName: '',
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedTicketForStatus, setSelectedTicketForStatus] = useState<MaintenanceTicket | null>(null);
+  const [statusUpdateForm, setStatusUpdateForm] = useState({
+    status: '',
     description: ''
   });
 
-  if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_maintenance, roles)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
-        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
-        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
-        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
-      </div>
-    );
-  }
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [selectedTicketForLog, setSelectedTicketForLog] = useState<MaintenanceTicket | null>(null);
 
-  const canManage = hasPermission(currentUser?.role, PERMISSION_KEYS.manage_maintenance, roles);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    hotelId: '',
+    dormId: '',
+    roomId: '',
+    priority: 'Düşük' as "Düşük" | "Orta" | "Acil",
+    reportedBy: currentUser?.fullName || '',
+  });
 
-  const handleAddRequest = (e: import('react').FormEvent) => {
-    e.preventDefault();
-    if (!newRequest.facilityId || !newRequest.reporterName || !newRequest.description || !canManage) return;
+  // Filter Data
+  const visibleTickets = useMemo(() => {
+    let results = maintenanceTickets;
+
+    if (currentUser?.role === 'facility_manager') {
+      const allowedFacIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      results = results.filter(t => allowedFacIds.includes(t.dormId));
+    }
     
-    addMaintenanceRequest({
-      facilityId: newRequest.facilityId,
-      roomId: newRequest.roomId || undefined,
-      reporterName: newRequest.reporterName,
-      description: newRequest.description
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      results = results.filter(t => 
+        t.title.toLowerCase().includes(q) || 
+        t.id.toLowerCase().includes(q)
+      );
+    }
+
+    if (filterStatus !== 'all') results = results.filter(t => t.status === filterStatus);
+    if (filterPriority !== 'all') results = results.filter(t => t.priority === filterPriority);
+    if (filterFacility !== 'all') results = results.filter(t => t.dormId === filterFacility);
+    if (filterHotel !== 'all') results = results.filter(t => t.hotelId === filterHotel);
+
+    // Sort: Open items first, then by priority, then newest
+    return results.sort((a, b) => {
+      if (a.status !== b.status) {
+         if (a.status === 'İşlemde') return -1;
+         if (a.status === 'Açık') return -1;
+         return 1;
+      }
+      const pmap = { 'Acil': 3, 'Orta': 2, 'Düşük': 1 };
+      if (pmap[a.priority] !== pmap[b.priority]) return pmap[b.priority] - pmap[a.priority];
+      return b.createdAt - a.createdAt;
+    });
+  }, [maintenanceTickets, currentUser, searchQuery, filterStatus, filterPriority, filterFacility, filterHotel]);
+
+  const handleAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title || !formData.dormId) return;
+
+    if (editingTicket) {
+      await updateMaintenanceTicket(editingTicket.id, {
+        title: formData.title,
+        description: formData.description,
+        hotelId: formData.hotelId,
+        dormId: formData.dormId,
+        roomId: formData.roomId || undefined,
+        priority: formData.priority,
+      });
+      await addLog({
+        entityId: editingTicket.id,
+        entityType: 'maintenance',
+        action: 'update',
+        changes: `Kayıt detayları güncellendi.`,
+        performedBy: currentUser?.fullName || 'Unknown',
+        timestamp: Date.now()
+      });
+    } else {
+      await addMaintenanceTicket({
+        title: formData.title,
+        description: formData.description,
+        hotelId: formData.hotelId,
+        dormId: formData.dormId,
+        roomId: formData.roomId || undefined,
+        reportedBy: formData.reportedBy,
+        priority: formData.priority,
+      });
+    }
+
+    setShowAddModal(false);
+    setEditingTicket(null);
+  };
+
+  const handleStatusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicketForStatus || !statusUpdateForm.status) return;
+
+    await updateMaintenanceTicket(selectedTicketForStatus.id, {
+      status: statusUpdateForm.status as any
     });
     
-    setShowForm(false);
-    setNewRequest({ facilityId: '', roomId: '', reporterName: '', description: '' });
+    await addLog({
+      entityId: selectedTicketForStatus.id,
+      entityType: 'maintenance',
+      action: 'update',
+      changes: `Durum değişti: ${statusUpdateForm.status}. Açıklama: ${statusUpdateForm.description || '-'}`,
+      performedBy: currentUser?.fullName || 'Unknown',
+      timestamp: Date.now()
+    });
+
+    setShowStatusModal(false);
+    setSelectedTicketForStatus(null);
   };
 
-  const visibleRequests = currentUser?.role === 'facility_manager' 
-    ? maintenanceRequests.filter(req => {
-        const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
-        return facIds.includes(req.facilityId);
-      })
-    : maintenanceRequests;
-
-  const getColItems = (status: MaintenanceStatus) => {
-    return visibleRequests.filter(req => req.status === status).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const openAddModal = (ticket?: MaintenanceTicket) => {
+    if (ticket) {
+      setEditingTicket(ticket);
+      setFormData({
+        title: ticket.title,
+        description: ticket.description,
+        hotelId: ticket.hotelId,
+        dormId: ticket.dormId,
+        roomId: ticket.roomId || '',
+        priority: ticket.priority,
+        reportedBy: ticket.reportedBy,
+      });
+    } else {
+      setEditingTicket(null);
+      setFormData({
+        title: '',
+        description: '',
+        hotelId: '',
+        dormId: '',
+        roomId: '',
+        priority: 'Düşük',
+        reportedBy: currentUser?.fullName || '',
+      });
+    }
+    setShowAddModal(true);
   };
 
-  const openTickets = getColItems('open');
-  const inProgressTickets = getColItems('in_progress');
-  const resolvedTickets = getColItems('resolved');
+  const openStatusModal = (ticket: MaintenanceTicket) => {
+    setSelectedTicketForStatus(ticket);
+    setStatusUpdateForm({
+      status: ticket.status,
+      description: ''
+    });
+    setShowStatusModal(true);
+  };
 
-  const facilityRoomsForForm = rooms.filter(r => r.facilityId === newRequest.facilityId);
+  const StatusBadge = ({ status }: { status: string }) => {
+    const colors: Record<string, string> = {
+      'Açık': 'bg-red-50 text-red-700 border-red-200',
+      'İşlemde': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+      'Kapalı': 'bg-green-50 text-green-700 border-green-200',
+      'İptal Edildi': 'bg-stone-50 text-stone-600 border-stone-200',
+    };
+    return <span className={cn("px-2.5 py-1 rounded-lg text-xs font-bold border", colors[status] || colors['Açık'])}>{status}</span>;
+  };
 
-  const getFacilityName = (id: string) => facilities.find(f => f.id === id)?.name || 'Bilinmiyor';
-  const getRoomName = (id?: string) => rooms.find(r => r.id === id)?.roomNumber || 'Ortak Alan';
-
-  const KanbanColumn = ({ title, status, items, icon: Icon, colorClass, borderClass }: { title: string, status: MaintenanceStatus, items: typeof openTickets, icon: any, colorClass: string, borderClass: string }) => (
-    <div className="flex flex-col card-standard bg-stone-50 p-6 h-full">
-      <div className="flex justify-between items-center mb-6 px-2">
-        <h3 className="font-bold text-lg text-[#1A1C18] flex items-center gap-2">
-          <Icon className={cn("w-5 h-5", colorClass)} />
-          {title}
-        </h3>
-        <span className="bg-white border border-[#E8E6E1] text-[#2D332D] font-bold text-sm px-3 py-1 rounded-full shadow-sm">
-          {items.length}
-        </span>
-      </div>
-      
-      <div className="flex-1 space-y-4 overflow-y-auto pr-2 pb-4">
-        {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-stone-400 border-2 border-dashed border-[#E8E6E1] rounded-2xl">
-            <p className="text-sm">Kayıt Bulunmuyor</p>
-          </div>
-        ) : (
-          items.map(item => (
-            <div key={item.id} className={cn("bg-white p-5 rounded-2xl shadow-sm border-l-4 hover:shadow-md transition-shadow relative group", borderClass)}>
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-stone-400">
-                  {formatTimeAgo(item.createdAt)}
-                </span>
-                
-                {canManage && (
-                  <button 
-                    onClick={() => deleteMaintenanceRequest(item.id)}
-                    className="p-1.5 bg-red-50 text-red-500 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              
-              <p className="font-semibold text-[#1A1C18] mb-4 text-sm leading-relaxed">{item.description}</p>
-              
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-50 p-2 rounded-lg">
-                  <MapPin className="w-3.5 h-3.5 text-stone-400" />
-                  <span className="font-medium">{getFacilityName(item.facilityId)}</span>
-                  <span className="text-stone-300">•</span>
-                  <span className="font-mono">{getRoomName(item.roomId)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-stone-600 px-2">
-                  <span className="font-bold text-[#7C8363]">Bildiren:</span>
-                  <span>{item.reporterName}</span>
-                </div>
-              </div>
-
-              {/* Actions based on status */}
-              <div className="flex border-t border-stone-100 pt-3 mt-auto gap-2">
-                {status === 'open' && canManage && (
-                   <button 
-                     onClick={() => updateMaintenanceStatus(item.id, 'in_progress')}
-                     className="flex-1 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition-colors"
-                   >
-                     İşleme Al
-                   </button>
-                )}
-                {status === 'open' && !canManage && (
-                   <span className="flex-1 text-center py-2 text-xs font-bold text-stone-400">Bekliyor</span>
-                )}
-                {status === 'in_progress' && canManage && (
-                   <button 
-                     onClick={() => updateMaintenanceStatus(item.id, 'resolved')}
-                     className="flex-1 py-2 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl text-xs font-bold transition-colors"
-                   >
-                     Çözüldü İşaretle
-                   </button>
-                )}
-                {status === 'in_progress' && !canManage && (
-                   <span className="flex-1 text-center py-2 text-xs font-bold text-stone-400">Onarımda</span>
-                )}
-                {status === 'resolved' && (
-                  <div className="flex-1 text-center py-2 text-xs font-bold text-stone-400">
-                    Çözüm: {formatTimeAgo(item.resolvedAt || item.createdAt)}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
+  const PriorityBadge = ({ priority }: { priority: string }) => {
+    const colors: Record<string, string> = {
+      'Acil': 'bg-red-500 text-white',
+      'Orta': 'bg-orange-500 text-white',
+      'Düşük': 'bg-[#7C8363] text-white',
+    };
+    return <span className={cn("px-2 py-0.5 rounded text-[10px] uppercase font-bold", colors[priority] || colors['Düşük'])}>{priority}</span>;
+  };
 
   return (
-    <div className="w-full flex flex-col p-6 space-y-6">
+    <div className="w-full flex flex-col p-6 space-y-6 max-w-7xl mx-auto">
       <PageHeader
-        title="Arıza ve Bakım"
-        description="Lojmanlardaki arıza bildirimleri ve teknik servis takibi."
+        title="Arıza ve Bakım Yönetimi"
+        description="Tesislerdeki teknik talepleri ve arızaları merkezi olarak takip edin."
         actions={
-          canManage && (
+          canCreate && (
             <button 
-              onClick={() => setShowForm(true)}
-              className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2"
+              onClick={() => openAddModal()}
+              className="px-4 py-2 bg-[#2D332D] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-black transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               Yeni Arıza Kaydı
@@ -195,75 +246,310 @@ export default function Maintenance() {
         }
       />
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 shrink-0 overflow-y-auto">
-          <div className="bg-white rounded-[32px] p-8 max-w-2xl w-full shadow-2xl">
-            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <Wrench className="w-5 h-5 text-[#7C8363]" /> 
-              Yeni Arıza Bildirimi
-            </h3>
-            <form onSubmit={handleAddRequest} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Lojman Binası</label>
-                <select required value={newRequest.facilityId} onChange={e => { setNewRequest({...newRequest, facilityId: e.target.value, roomId: ''}); }} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]">
-                  <option value="">Seçiniz...</option>
-                  {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+      <div className="card-standard p-4">
+        <div className="flex flex-col xl:flex-row xl:items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+              <input 
+                type="text" 
+                placeholder="Başlık veya ID ile ara..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-stone-50 border-none rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#7C8363]/20 transition-all font-medium"
+              />
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex items-center bg-stone-50 rounded-xl px-3 py-2">
+                <ListFilter className="w-4 h-4 text-stone-400 mr-2" />
+                <select 
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value)}
+                  className="bg-transparent text-sm font-semibold text-stone-600 focus:outline-none appearance-none pr-6 cursor-pointer"
+                >
+                  <option value="all">Tüm Durumlar</option>
+                  <option value="Açık">Açık</option>
+                  <option value="İşlemde">İşlemde</option>
+                  <option value="Kapalı">Kapalı</option>
+                  <option value="İptal Edildi">İptal Edildi</option>
                 </select>
+                <ChevronDown className="w-3 h-3 text-stone-400 absolute right-3 pointer-events-none" />
+              </div>
+
+              <div className="relative flex items-center bg-stone-50 rounded-xl px-3 py-2">
+                <select 
+                  value={filterPriority}
+                  onChange={e => setFilterPriority(e.target.value)}
+                  className="bg-transparent text-sm font-semibold text-stone-600 focus:outline-none appearance-none pr-6 cursor-pointer"
+                >
+                  <option value="all">Tüm Öncelikler</option>
+                  <option value="Düşük">Düşük</option>
+                  <option value="Orta">Orta</option>
+                  <option value="Acil">Acil</option>
+                </select>
+                <ChevronDown className="w-3 h-3 text-stone-400 absolute right-3 pointer-events-none" />
+              </div>
+
+              <div className="relative flex items-center bg-stone-50 rounded-xl px-3 py-2">
+                <MapPin className="w-4 h-4 text-stone-400 mr-2" />
+                <select 
+                  value={filterFacility}
+                  onChange={e => setFilterFacility(e.target.value)}
+                  className="bg-transparent text-sm font-semibold text-stone-600 focus:outline-none appearance-none pr-6 cursor-pointer max-w-[150px] truncate"
+                >
+                  <option value="all">Tüm Lojmanlar</option>
+                  {facilities.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3 h-3 text-stone-400 absolute right-3 pointer-events-none" />
+              </div>
+            </div>
+        </div>
+      </div>
+
+      <div className="card-standard overflow-hidden bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-[#FDFCFB] border-b border-[#E8E6E1]">
+              <tr>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Arıza Özeti</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Öncelik</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Lojman / Konum</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Bildiren</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Açılış</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Süre</th>
+                <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E8E6E1]">
+              {visibleTickets.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-stone-500">
+                    Kriterlere uygun arıza kaydı bulunamadı.
+                  </td>
+                </tr>
+              ) : (
+                visibleTickets.map(ticket => {
+                  const facilityName = facilities.find(f => f.id === ticket.dormId)?.name || 'Bilinmeyen Lojman';
+                  const roomName = rooms.find(r => r.id === ticket.roomId)?.roomNumber;
+                  const isClosed = ticket.status === 'Kapalı' || ticket.status === 'İptal Edildi';
+                  
+                  return (
+                    <tr key={ticket.id} className="hover:bg-stone-50/50 transition-colors group">
+                      <td className="px-6 py-4 w-[140px]">
+                        <StatusBadge status={ticket.status} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-[#2D332D] text-sm line-clamp-1">{ticket.title}</div>
+                        <div className="text-xs text-stone-500 font-mono mt-1 w-20 truncate">{ticket.id.substring(0, 8)}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <PriorityBadge priority={ticket.priority} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-semibold text-stone-700">{facilityName}</div>
+                        <div className="text-xs text-stone-500 mt-1">{roomName ? `Oda: ${roomName}` : 'Ortak Alan'}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-stone-600">{ticket.reportedBy}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-xs text-stone-600 font-mono">{formatDateLabel(ticket.createdAt)}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {isClosed ? (
+                          <div className="text-xs font-medium text-stone-500">
+                            Çözüm: {formatTimeDiff(ticket.createdAt, ticket.resolvedAt)}
+                          </div>
+                        ) : (
+                          <div className="text-xs font-bold text-orange-600 hover:text-orange-700" title="Açık kaldığı süre">
+                            {formatTimeDiff(ticket.createdAt)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {canUpdateStatus && !isClosed && (
+                            <button 
+                              onClick={() => openStatusModal(ticket)}
+                              className="p-1.5 text-stone-500 hover:text-[#7C8363] hover:bg-[#7C8363]/10 rounded-lg transition-colors"
+                              title="Durum Güncelle"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button 
+                              onClick={() => openAddModal(ticket)}
+                              className="p-1.5 text-stone-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Düzenle"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canViewLogs && (
+                            <button 
+                              onClick={() => { setSelectedTicketForLog(ticket); setShowLogModal(true); }}
+                              className="p-1.5 text-stone-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                              title="Geçmiş Logs"
+                            >
+                              <History className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button 
+                              onClick={async () => {
+                                if (confirm('Silmek istediğinize emin misiniz?')) {
+                                  await deleteMaintenanceTicket(ticket.id);
+                                }
+                              }}
+                              className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-[#2D332D]">
+                {editingTicket ? 'Arıza Kaydını Düzenle' : 'Yeni Arıza Kaydı'}
+              </h2>
+              <button onClick={() => setShowAddModal(false)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <form onSubmit={handleAddSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 mb-1">Arıza Başlığı / Özeti</label>
+                <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]" placeholder="Örn: Banyo tavanı akıyor" />
               </div>
               
               <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Oda Numarası (Opsiyonel)</label>
-                <select value={newRequest.roomId} onChange={e => setNewRequest({...newRequest, roomId: e.target.value})} disabled={!newRequest.facilityId} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363] disabled:opacity-50">
-                  <option value="">Ortak Alan / Bina Geneli</option>
-                  {facilityRoomsForForm.map(r => <option key={r.id} value={r.id}>{r.roomNumber}</option>)}
-                </select>
+                <label className="block text-xs font-semibold text-stone-500 mb-1">Detaylı Açıklama</label>
+                <textarea required rows={3} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363] resize-none" placeholder="..." />
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Bildiren Kişi / Personel</label>
-                <input required type="text" value={newRequest.reporterName} onChange={e => setNewRequest({...newRequest, reporterName: e.target.value})} placeholder="Örn: Ahmet Yılmaz" className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 mb-1">Lojman / Tesis</label>
+                  <select required value={formData.dormId} onChange={e => setFormData({...formData, dormId: e.target.value, roomId: ''})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]">
+                    <option value="">Seçiniz...</option>
+                    {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 mb-1">Oda Numarası</label>
+                  <select value={formData.roomId} onChange={e => setFormData({...formData, roomId: e.target.value})} disabled={!formData.dormId} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]">
+                    <option value="">Ortak Alan</option>
+                    {rooms.filter(r => r.facilityId === formData.dormId).map(r => <option key={r.id} value={r.id}>{r.roomNumber}</option>)}
+                  </select>
+                </div>
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Arıza Açıklaması</label>
-                <textarea required rows={4} value={newRequest.description} onChange={e => setNewRequest({...newRequest, description: e.target.value})} placeholder="Örn: 2. kat koridor tavanından su damlıyor..." className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363] resize-none" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 mb-1">Öncelik</label>
+                  <select required value={formData.priority} onChange={e => setFormData({...formData, priority: e.target.value as any})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]">
+                    <option value="Düşük">Düşük</option>
+                    <option value="Orta">Orta</option>
+                    <option value="Acil">Acil</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 mb-1">Bildiren Kişi</label>
+                  <input required type="text" value={formData.reportedBy} onChange={e => setFormData({...formData, reportedBy: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]" />
+                </div>
               </div>
-              
-              <div className="sm:col-span-2 flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setShowForm(false)} className="px-5 py-2 border text-stone-600 rounded-xl hover:bg-stone-50 font-semibold text-sm">İptal</button>
-                <button type="submit" className="px-5 py-2 bg-[#2D332D] text-white rounded-xl hover:bg-[#1A1C18] font-semibold text-sm">Talebi Oluştur</button>
+
+              <div className="flex justify-end gap-2 mt-8 pt-4 border-t">
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 border rounded-xl text-stone-600 font-semibold hover:bg-stone-50">İptal</button>
+                <button type="submit" className="px-4 py-2 bg-[#2D332D] text-white rounded-xl font-semibold hover:bg-black">Kaydet</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[500px]">
-        <KanbanColumn 
-          title="Açık Talepler" 
-          status="open" 
-          items={openTickets} 
-          icon={AlertCircle} 
-          colorClass="text-orange-500" 
-          borderClass="border-orange-500" 
-        />
-        <KanbanColumn 
-          title="İşlemde" 
-          status="in_progress" 
-          items={inProgressTickets} 
-          icon={Clock} 
-          colorClass="text-blue-500" 
-          borderClass="border-blue-500" 
-        />
-        <KanbanColumn 
-          title="Çözüldü" 
-          status="resolved" 
-          items={resolvedTickets} 
-          icon={CheckCircle2} 
-          colorClass="text-green-500" 
-          borderClass="border-green-500" 
-        />
-      </div>
+      {showStatusModal && selectedTicketForStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold text-[#2D332D]">Durum Güncelle</h2>
+              <button onClick={() => setShowStatusModal(false)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <form onSubmit={handleStatusSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 mb-1">Yeni Durum</label>
+                <select required value={statusUpdateForm.status} onChange={e => setStatusUpdateForm({...statusUpdateForm, status: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]">
+                  <option value="Açık">Açık</option>
+                  <option value="İşlemde">İşlemde</option>
+                  <option value="Kapalı">Kapalı</option>
+                  <option value="İptal Edildi">İptal Edildi</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 mb-1">İşlem Açıklaması</label>
+                <textarea required rows={3} value={statusUpdateForm.description} onChange={e => setStatusUpdateForm({...statusUpdateForm, description: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363] resize-none" placeholder="Yapılan işlemi veya notları buraya girin..." />
+              </div>
+              
+              <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+                <button type="button" onClick={() => setShowStatusModal(false)} className="px-4 py-2 border rounded-xl text-stone-600 font-semibold hover:bg-stone-50">İptal</button>
+                <button type="submit" className="px-4 py-2 bg-[#7C8363] text-white rounded-xl font-semibold hover:bg-[#6A7152]">Güncelle</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showLogModal && selectedTicketForLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-[#2D332D] flex items-center gap-2">
+                <History className="w-5 h-5 text-stone-400" />
+                İşlem Geçmişi
+              </h2>
+              <button onClick={() => setShowLogModal(false)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <div className="space-y-6">
+              {logs.filter(l => l.entityId === selectedTicketForLog.id).sort((a,b) => b.timestamp - a.timestamp).length === 0 ? (
+                <div className="text-center text-sm text-stone-500 py-8">Kayıtlı işlem bulunamadı.</div>
+              ) : (
+                <div className="relative border-l border-stone-200 ml-3 space-y-6">
+                  {logs.filter(l => l.entityId === selectedTicketForLog.id).sort((a,b) => b.timestamp - a.timestamp).map((log, i) => (
+                    <div key={log.id} className="relative pl-6">
+                      <div className="absolute w-3 h-3 bg-white border-2 border-stone-300 rounded-full -left-[1.5px] top-1"></div>
+                      <div className="text-xs font-semibold text-stone-400 mb-1">{formatDateLabel(log.timestamp)}</div>
+                      <div className="text-sm font-medium text-stone-800 bg-stone-50 p-3 rounded-xl border border-stone-100">
+                        {log.changes}
+                        <div className="text-xs text-stone-500 mt-2 flex items-center gap-1">
+                          <Check className="w-3 h-3 text-[#7C8363]"/> İşlemi Yapan: {log.performedBy}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

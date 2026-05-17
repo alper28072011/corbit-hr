@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceRequest, User, RoleConfig, ActionLog } from '../types';
+import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
@@ -12,7 +12,7 @@ interface AppState {
   rooms: Room[];
   staff: Staff[];
   accommodations: Accommodation[];
-  maintenanceRequests: MaintenanceRequest[];
+  maintenanceTickets: MaintenanceTicket[];
   
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleConfig[]) => void;
@@ -21,7 +21,7 @@ interface AppState {
   setRooms: (rooms: Room[]) => void;
   setStaff: (staff: Staff[]) => void;
   setAccommodations: (accs: Accommodation[]) => void;
-  setMaintenanceRequests: (reqs: MaintenanceRequest[]) => void;
+  setMaintenanceTickets: (tickets: MaintenanceTicket[]) => void;
   
   // Actions
   addUser: (user: Omit<User, 'id'>) => Promise<void>;
@@ -54,9 +54,9 @@ interface AppState {
   checkoutStaff: (accommodationId: string, checkoutDate: string) => Promise<void>;
   undoCheckoutStaff: (accommodationId: string) => Promise<void>;
 
-  addMaintenanceRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status' | 'resolvedAt'>) => Promise<void>;
-  updateMaintenanceStatus: (id: string, status: MaintenanceRequest['status']) => Promise<void>;
-  deleteMaintenanceRequest: (id: string) => Promise<void>;
+  addMaintenanceTicket: (ticket: Omit<MaintenanceTicket, 'id' | 'createdAt' | 'status' | 'resolvedAt'>) => Promise<void>;
+  updateMaintenanceTicket: (id: string, updates: Partial<MaintenanceTicket>) => Promise<void>;
+  deleteMaintenanceTicket: (id: string) => Promise<void>;
   
   // Logs
   logs: ActionLog[];
@@ -77,7 +77,7 @@ export const useStore = create<AppState>((set, get) => ({
       rooms: [],
       staff: [],
       accommodations: [],
-      maintenanceRequests: [],
+      maintenanceTickets: [],
       logs: [],
       appSettings: {},
 
@@ -88,7 +88,7 @@ export const useStore = create<AppState>((set, get) => ({
       setRooms: (rooms) => set({ rooms }),
       setStaff: (staff) => set({ staff }),
       setAccommodations: (accommodations) => set({ accommodations }),
-      setMaintenanceRequests: (maintenanceRequests) => set({ maintenanceRequests }),
+      setMaintenanceTickets: (maintenanceTickets) => set({ maintenanceTickets }),
       setLogs: (logs) => set({ logs }),
       setAppSettings: (appSettings) => set({ appSettings }),
 
@@ -423,40 +423,37 @@ export const useStore = create<AppState>((set, get) => ({
          }
       },
 
-      addMaintenanceRequest: async (reqData) => {
+      addMaintenanceTicket: async (reqData) => {
          try {
            const payload = {
              ...reqData,
-             createdAt: new Date().toISOString(),
-             status: 'open',
+             createdAt: Date.now(),
+             status: 'Açık',
            };
-           await addDoc(collection(db, "maintenanceRequests"), payload);
+           await addDoc(collection(db, "maintenanceTickets"), payload);
          } catch (error) {
-           handleFirestoreError(error, OperationType.CREATE, "maintenanceRequests");
+           handleFirestoreError(error, OperationType.CREATE, "maintenanceTickets");
          }
       },
 
-      updateMaintenanceStatus: async (id, status) => {
+      updateMaintenanceTicket: async (id, updates) => {
          try {
-           const state = get();
-           const req = state.maintenanceRequests.find(r => r.id === id);
-           const payload: any = { status };
-           if (status === 'resolved') {
-               payload.resolvedAt = new Date().toISOString();
-           } else if (req && req.resolvedAt) {
-               payload.resolvedAt = null;
+           if (updates.status === 'Kapalı' || updates.status === 'İptal Edildi') {
+               updates.resolvedAt = Date.now();
+           } else if (updates.status === 'Açık' || updates.status === 'İşlemde') {
+               updates.resolvedAt = null as unknown as undefined; // Assuming you might want to clear it, but let's just delete the field if we don't want it, or just use null
            }
-           await updateDoc(doc(db, "maintenanceRequests", id), payload);
+           await updateDoc(doc(db, "maintenanceTickets", id), updates);
          } catch (error) {
-           handleFirestoreError(error, OperationType.UPDATE, `maintenanceRequests/${id}`);
+           handleFirestoreError(error, OperationType.UPDATE, `maintenanceTickets/${id}`);
          }
       },
 
-      deleteMaintenanceRequest: async (id) => {
+      deleteMaintenanceTicket: async (id) => {
          try {
-           await deleteDoc(doc(db, "maintenanceRequests", id));
+           await deleteDoc(doc(db, "maintenanceTickets", id));
          } catch (error) {
-           handleFirestoreError(error, OperationType.DELETE, `maintenanceRequests/${id}`);
+           handleFirestoreError(error, OperationType.DELETE, `maintenanceTickets/${id}`);
          }
       },
 

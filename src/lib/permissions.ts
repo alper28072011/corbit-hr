@@ -23,6 +23,10 @@ export const PERMISSION_KEYS = {
   view_logs: 'view_logs',
   
   view_maintenance: 'view_maintenance',
+  create_ticket: 'create_ticket',
+  edit_ticket: 'edit_ticket',
+  delete_ticket: 'delete_ticket',
+  update_ticket_status: 'update_ticket_status',
   manage_maintenance: 'manage_maintenance',
   
   view_settings: 'view_settings',
@@ -47,6 +51,10 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   view_document: 'Belge Görüntüle',
   view_logs: 'İşlem Geçmişi Görüntüle',
   view_maintenance: 'Arızaları Görüntüle',
+  create_ticket: 'Arıza Kaydı Aç',
+  edit_ticket: 'Arıza Kaydı Düzenle',
+  delete_ticket: 'Arıza Kaydı Sil',
+  update_ticket_status: 'Arıza Durumu Güncelle',
   manage_maintenance: 'Arıza Kapat / Yönet',
   view_settings: 'Ayarları Görüntüle',
 };
@@ -54,8 +62,8 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   super_admin: Object.values(PERMISSION_KEYS) as PermissionKey[],
   hr_director: ['view_dashboard', 'view_hotel_management', 'view_room_management', 'view_rack_management', 'view_staff_management', 'edit_staff', 'view_logs', 'view_maintenance'],
-  hotel_hr_manager: ['view_dashboard', 'view_staff_management', 'add_staff_request'],
-  facility_manager: ['view_dashboard', 'view_room_management', 'edit_room_management', 'view_rack_management', 'view_staff_management', 'place_staff', 'checkout_staff', 'edit_staff', 'view_logs', 'view_maintenance', 'manage_maintenance']
+  hotel_hr_manager: ['view_dashboard', 'view_staff_management', 'add_staff_request', 'view_maintenance', 'create_ticket'],
+  facility_manager: ['view_dashboard', 'view_room_management', 'edit_room_management', 'view_rack_management', 'view_staff_management', 'place_staff', 'checkout_staff', 'edit_staff', 'view_logs', 'view_maintenance', 'create_ticket', 'edit_ticket', 'update_ticket_status', 'manage_maintenance']
 };
 
 export function hasPermission(userRole: Role | undefined, permissionKey: string | string[], rolesConfig?: RoleConfig[]): boolean {

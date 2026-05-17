@@ -78,7 +78,7 @@ export interface Accommodation {
 export interface ActionLog {
   id: string;
   entityId: string;
-  entityType: 'staff' | 'room' | 'facility';
+  entityType: 'staff' | 'room' | 'facility' | 'maintenance';
   action: 'create' | 'update' | 'delete' | 'check_in' | 'check_out' | 'room_change';
   changes: string;
   performedBy: string;
@@ -97,15 +97,16 @@ export interface ApprovalRequest {
   reason?: string;
 }
 
-export type MaintenanceStatus = 'open' | 'in_progress' | 'resolved';
-
-export interface MaintenanceRequest {
+export interface MaintenanceTicket {
   id: string;
-  facilityId: string;
-  roomId?: string; // Optional for common areas
-  reporterName: string;
+  title: string;
   description: string;
-  createdAt: string;
-  status: MaintenanceStatus;
-  resolvedAt?: string;
+  hotelId: string;
+  dormId: string;
+  roomId?: string;
+  status: 'Açık' | 'İşlemde' | 'Kapalı' | 'İptal Edildi';
+  reportedBy: string;
+  createdAt: number;
+  resolvedAt?: number;
+  priority: 'Düşük' | 'Orta' | 'Acil';
 }

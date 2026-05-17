@@ -12,7 +12,7 @@ interface CheckInWizardProps {
 }
 
 export default function CheckInWizard({ staffMember, onClose }: CheckInWizardProps) {
-  const { facilities, rooms, accommodations, hotels, staff, placeStaff, currentUser, maintenanceRequests } = useStore();
+  const { facilities, rooms, accommodations, hotels, staff, placeStaff, currentUser, maintenanceTickets } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'empty' | 'partial'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +45,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       
       const requiresApproval = !facility?.allowedHotelIds.includes(staffMember.hotelId);
       
-      const hasMaintenance = maintenanceRequests.some(m => m.roomId === room.id && m.status !== 'resolved');
+      const hasMaintenance = maintenanceTickets.some(m => m.roomId === room.id && (m.status === 'Açık' || m.status === 'İşlemde'));
 
       // Smart Suggest Logic: matching hotel, department, or position
       let recommendedScore = 0;
@@ -63,7 +63,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
         recommendedScore
       };
     }).filter(r => r.availableBeds > 0);
-  }, [rooms, assignedFacilities, staffMember, facilities, accommodations, staff, maintenanceRequests]);
+  }, [rooms, assignedFacilities, staffMember, facilities, accommodations, staff, maintenanceTickets]);
 
   const filteredAndSortedRooms = useMemo(() => {
     let filtered = matchingRooms.filter(r => {

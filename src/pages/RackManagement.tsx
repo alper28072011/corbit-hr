@@ -9,7 +9,7 @@ import {
 import { hasPermission, PERMISSION_KEYS } from '../lib/permissions';
 
 export default function RackManagement() {
-  const { facilities, rooms, staff, accommodations, maintenanceRequests, currentUser, roles } = useStore();
+  const { facilities, rooms, staff, accommodations, maintenanceTickets, currentUser, roles } = useStore();
 
   // Security check
   if (!hasPermission(currentUser?.role, PERMISSION_KEYS.view_rack_management, roles)) {
@@ -45,7 +45,7 @@ export default function RackManagement() {
     return rooms.map(room => {
       const activeAccs = accommodations.filter(a => a.roomId === room.id && a.status === 'active');
       const currentResidents = staff.filter(s => activeAccs.some(a => a.staffId === s.id));
-      const openMaintenance = maintenanceRequests.filter(m => m.roomId === room.id && m.status !== 'resolved');
+      const openMaintenance = maintenanceTickets.filter(m => m.roomId === room.id && (m.status === 'Açık' || m.status === 'İşlemde'));
       const hasMaintenance = openMaintenance.length > 0;
 
       const currentOccupancy = currentResidents.length;
@@ -70,7 +70,7 @@ export default function RackManagement() {
         hasMaintenance
       };
     });
-  }, [rooms, accommodations, staff, maintenanceRequests]);
+  }, [rooms, accommodations, staff, maintenanceTickets]);
 
   const filteredRooms = useMemo(() => {
     return EnrichedRooms.filter(room => {
