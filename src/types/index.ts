@@ -35,6 +35,9 @@ export interface User {
   assignedHotelIds?: string[];
   assignedFacilityIds?: string[];
   status?: 'active' | 'inactive';
+  phone?: string;
+  avatarUrl?: string;
+  createdAt?: number;
 }
 
 export interface FeaturePermission {

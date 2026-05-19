@@ -2,72 +2,9 @@ import React, { useState } from "react";
 import { Plus, Edit2, Trash2, ShieldAlert, Check, X, Shield, Lock, LayoutGrid, Users, Wrench } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { PagePermission } from "../types";
-import { canViewPage, PAGE_KEYS } from "../lib/permissions";
+import { canViewPage, PAGE_KEYS, ROLE_NAMES, PERMISSIONS_MATRIX } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 import { cn } from "../lib/utils";
-
-const ROLE_NAMES: Record<string, string> = {
-  super_admin: 'Süper Admin',
-  hr_director: 'İK Direktörü',
-  hotel_hr_manager: 'Otel İK Yöneticisi',
-  facility_manager: 'Lojman Sorumlusu'
-};
-
-const PERMISSIONS_MATRIX: PagePermission[] = [
-  {
-    pageKey: 'dashboard',
-    pageName: 'Dashboard (Ana Ekran)',
-    features: []
-  },
-  {
-    pageKey: 'staff',
-    pageName: 'Personel Yönetimi',
-    features: [
-      { key: 'create_staff', name: 'Personel Ekle', description: 'Yeni personel kaydı oluşturabilir.' },
-      { key: 'edit_staff', name: 'Personel Düzenle', description: 'Personel bilgilerini düzenleyebilir.' },
-      { key: 'delete_staff', name: 'Personel Sil', description: 'Personeli veritabanından tamamen silebilir.' },
-      { key: 'change_room', name: 'Oda - Yerleşim Değiştir', description: 'Personelin odasını değiştirebilir (Room Change).' },
-      { key: 'view_sensitive_info', name: 'Hassas Verileri Gör', description: 'Tooltip ile TC ve Telefon numarası gibi hassas verileri görebilir.' }
-    ]
-  },
-  {
-    pageKey: 'rooms',
-    pageName: 'Oda Yönetimi',
-    features: [
-      { key: 'add_room', name: 'Oda Ekle', description: 'Tekli veya Excel ile içe aktararak yeni oda tanımlayabilir.' },
-      { key: 'edit_room', name: 'Oda Düzenle', description: 'Oda özelliklerini, blok/kat ve cinsiyet kilitlerini değiştirebilir.' }
-    ]
-  },
-  {
-    pageKey: 'maintenance',
-    pageName: 'Arıza ve Bakım',
-    features: [
-      { key: 'create_ticket', name: 'Kayıt Aç', description: 'Yeni arıza kaydı açabilir.' },
-      { key: 'update_ticket_status', name: 'Durum Değiştir', description: 'Arıza durumunu (Açık, İşlemde, Kapalı) değiştirebilir.' },
-      { key: 'edit_ticket', name: 'Kayıt Düzenle', description: 'Kayıt içeriğini değiştirebilir.' },
-      { key: 'delete_ticket', name: 'Kayıt Sil', description: 'Arıza kaydını silebilir.' }
-    ]
-  },
-  {
-    pageKey: 'facilities',
-    pageName: 'Tesis Yönetimi',
-    features: [
-      { key: 'edit_facilities', name: 'Tesis Düzenle', description: 'Tesis ekleme, silme, düzenleme yapabilir.' }
-    ]
-  },
-  {
-    pageKey: 'rack',
-    pageName: 'Oda Doluluk (Rack)',
-    features: []
-  },
-  {
-    pageKey: 'settings',
-    pageName: 'Ayarlar ve Sistem',
-    features: [
-      { key: 'view_logs', name: 'Sistem Logları', description: 'Kullanıcı hareketlerini (Action Logs) görebilir.' }
-    ]
-  }
-];
 
 export default function Settings() {
   const { users, rolesPermissions, currentUser, addUser, updateUser, deleteUser, hotels, facilities, updateRolePermissions } = useStore();

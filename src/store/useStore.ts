@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions } from '../types';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { updatePassword } from 'firebase/auth';
 
 interface AppState {
   users: User[];
@@ -32,6 +33,8 @@ interface AppState {
   updateUser: (id: string, data: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   setCurrentUser: (user: User | null) => void;
+  updateProfile: (profileData: Partial<User>) => Promise<void>;
+  changeUserPassword: (newPassword: string) => Promise<void>;
 
   addRole: (role: Omit<RoleConfig, 'id'>) => Promise<void>;
   updateRole: (id: string, data: Partial<RoleConfig>) => Promise<void>;
@@ -160,6 +163,34 @@ export const useStore = create<AppState>((set, get) => ({
           await deleteDoc(doc(db, "users", id));
         } catch (error) {
           handleFirestoreError(error, OperationType.DELETE, `users/${id}`);
+        }
+      },
+
+      updateProfile: async (profileData) => {
+        try {
+          const state = get();
+          if (!state.currentUser) throw new Error('Not authenticated');
+          
+          // Secure: Do not allow modifying restricted fields
+          const safeData = {
+            fullName: profileData.fullName,
+            phone: profileData.phone,
+            avatarUrl: profileData.avatarUrl,
+          };
+          
+          await updateDoc(doc(db, "users", state.currentUser.id), Object.fromEntries(Object.entries(safeData).filter(([_, v]) => v !== undefined)));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `users/profile`);
+        }
+      },
+
+      changeUserPassword: async (newPassword) => {
+        try {
+          if (!auth.currentUser) throw new Error('Not authenticated');
+          await updatePassword(auth.currentUser, newPassword);
+        } catch (error: any) {
+          // If requires recent login, this might throw 'auth/requires-recent-login'
+          throw new Error(error.message || 'Şifre güncellenemedi. Lütfen tekrar giriş yapıp deneyin.');
         }
       },
 

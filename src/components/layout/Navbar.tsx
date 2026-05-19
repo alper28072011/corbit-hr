@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Bell, Menu, UserCircle, LogOut, ShieldAlert, Check, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Bell, Menu, UserCircle, LogOut, ShieldAlert, Check, X, User as UserIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useStore } from "../../store/useStore";
 import { auth, db } from "../../lib/firebase";
 import { cn } from "../../lib/utils";
@@ -18,6 +19,18 @@ const ROLE_NAMES: Record<string, string> = {
 export default function Navbar({ onMenuClick }: NavbarProps) {
   const { currentUser, roles, approvalRequests, resolveApprovalRequest, placeStaff, updateStaff, staff, rooms, facilities, addLog } = useStore();
   const [showApprovals, setShowApprovals] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Sadece yetkili kisiler approval görebilecek
   const canManageApprovals = currentUser?.role === 'super_admin' || currentUser?.role === 'hr_director';
@@ -145,25 +158,59 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
           </div>
 
           {/* User Profile */}
-          <div className="flex items-center gap-x-3 pl-6 border-l border-stone-200">
-            {currentUser && (
-               <div className="text-right hidden sm:block">
-                 <p className="text-sm font-bold text-[#1A1C18]">{currentUser.fullName}</p>
-                 <p className="text-[10px] text-stone-500 uppercase font-bold tracking-tighter">{getRoleName(currentUser.role)}</p>
-               </div>
-            )}
-            
-            <div className="w-10 h-10 bg-[#E8E6E1] rounded-full overflow-hidden border-2 border-[#7C8363] flex items-center justify-center">
-              <UserCircle className="h-8 w-8 text-stone-400" aria-hidden="true" />
-            </div>
-
+          <div className="flex items-center gap-x-3 pl-6 border-l border-stone-200 relative" ref={profileMenuRef}>
             <button 
-              onClick={handleLogout}
-              className="p-2 text-stone-400 text-sm hover:text-red-500 hover:bg-red-50 rounded-full transition-colors ml-2"
-              title="Çıkış Yap"
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="flex items-center gap-x-3 text-left hover:bg-stone-50 p-2 rounded-xl transition-colors focus:outline-none focus:bg-stone-50"
             >
-              <LogOut className="w-5 h-5" />
+              {currentUser && (
+                 <div className="text-right hidden sm:block">
+                   <p className="text-sm font-bold text-[#1A1C18]">{currentUser.fullName}</p>
+                   <p className="text-[10px] text-stone-500 uppercase font-bold tracking-tighter">{getRoleName(currentUser.role)}</p>
+                 </div>
+              )}
+              
+              <div className="w-10 h-10 bg-[#E8E6E1] rounded-full overflow-hidden border-2 border-[#7C8363] flex items-center justify-center shrink-0">
+                {currentUser?.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <UserCircle className="h-8 w-8 text-stone-400" aria-hidden="true" />
+                )}
+              </div>
             </button>
+
+            {showProfileMenu && (
+              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[#E8E6E1] py-2 z-50 overflow-hidden transform origin-top-right transition-all">
+                <div className="px-4 py-3 border-b border-stone-100">
+                  <p className="text-sm font-bold text-stone-800 truncate">{currentUser?.fullName}</p>
+                  <p className="text-xs text-stone-500 truncate">{currentUser?.email}</p>
+                </div>
+                
+                <div className="py-1">
+                  <Link 
+                    to="/profile" 
+                    onClick={() => setShowProfileMenu(false)}
+                    className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors"
+                  >
+                    <UserIcon className="w-4 h-4 text-stone-400" />
+                    Profilim
+                  </Link>
+                </div>
+                
+                <div className="border-t border-stone-100 py-1">
+                  <button 
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      handleLogout();
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Güvenli Çıkış
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
