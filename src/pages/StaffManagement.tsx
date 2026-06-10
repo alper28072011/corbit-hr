@@ -2,10 +2,12 @@ import React, { useState, useMemo, ReactNode, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useStore } from "../store/useStore";
+import { Staff } from "../types";
 import { cn, calculateAge } from "../lib/utils";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 import CheckInWizard from "../components/staff/CheckInWizard";
+import RoomChangeWizard from "../components/staff/RoomChangeWizard";
 
 const ActionMenu = ({ children }: { children: ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -90,6 +92,9 @@ export default function StaffManagement() {
 
   // Logs Modal State
   const [logsModalStaffId, setLogsModalStaffId] = useState<string | null>(null);
+
+  // Room Change Wizard state
+  const [changingRoomStaffInfo, setChangingRoomStaffInfo] = useState<{ staff: Staff, currentRoomId: string, currentFacilityId: string } | null>(null);
 
   // Global Search & Filters
   const [globalSearch, setGlobalSearch] = useState('');
@@ -568,7 +573,11 @@ export default function StaffManagement() {
                             )}
                             {s.status === 'placed' && canChangeRoom && (
                                <button 
-                                 onClick={() => alert("Oda değiştirme ekranı geliştirme aşamasındadır.")}
+                                 onClick={() => {
+                                   if(acc) {
+                                     setChangingRoomStaffInfo({ staff: s, currentRoomId: acc.roomId, currentFacilityId: acc.facilityId });
+                                   }
+                                 }}
                                  className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
                                >
                                  <Replace className="w-4 h-4" /> Oda Değiştir
@@ -807,6 +816,15 @@ export default function StaffManagement() {
           </div>
         );
       })()}
+        {/* Room Change Wizard */}
+      {changingRoomStaffInfo && (
+        <RoomChangeWizard 
+          staff={changingRoomStaffInfo.staff}
+          currentRoomId={changingRoomStaffInfo.currentRoomId}
+          currentFacilityId={changingRoomStaffInfo.currentFacilityId}
+          onClose={() => setChangingRoomStaffInfo(null)}
+        />
+      )}
     </div>
   );
 }

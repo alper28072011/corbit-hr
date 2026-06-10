@@ -230,6 +230,7 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
     name: '',
     address: '',
     contactPerson: '',
+    contactPhone: '',
     roomCapacity: 0,
     bedCapacity: 0,
     status: 'active' as const,
@@ -267,6 +268,7 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
         name: formData.name.trim(),
         address: formData.address,
         contactPerson: formData.contactPerson,
+        contactPhone: formData.contactPhone,
         roomCapacity: Number(formData.roomCapacity),
         bedCapacity: Number(formData.bedCapacity),
         status: formData.status,
@@ -278,6 +280,7 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
         name: formData.name.trim(),
         address: formData.address,
         contactPerson: formData.contactPerson,
+        contactPhone: formData.contactPhone,
         roomCapacity: Number(formData.roomCapacity),
         bedCapacity: Number(formData.bedCapacity),
         status: formData.status,
@@ -294,6 +297,7 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
       name: fac.name,
       address: fac.address || '',
       contactPerson: fac.contactPerson || '',
+      contactPhone: fac.contactPhone || '',
       roomCapacity: fac.roomCapacity || 0,
       bedCapacity: fac.bedCapacity || 0,
       status: fac.status || 'active',
@@ -333,8 +337,8 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Yekili İletişim</label>
-                  <input type="text" value={formData.contactPerson} onChange={e => setFormData({...formData, contactPerson: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Ad Soyad veya Tel" />
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Yetkili İletişim</label>
+                  <input type="text" value={formData.contactPhone} onChange={e => setFormData({...formData, contactPhone: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Telefon numarası..." />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Durum *</label>
@@ -346,7 +350,7 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">İlgili Kişi / İletişim</label>
-                <input type="text" value={formData.contactPerson} onChange={e => setFormData({...formData, contactPerson: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Ad Soyad, Telefon..." />
+                <input type="text" value={formData.contactPerson} onChange={e => setFormData({...formData, contactPerson: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Ad Soyad..." />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Adres</label>
@@ -419,7 +423,12 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-stone-600 truncate max-w-[150px]">{fac.contactPerson || '-'}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-stone-700 truncate max-w-[150px]">{fac.contactPerson || '-'}</span>
+                        {fac.contactPhone && <span className="text-xs text-stone-500 truncate max-w-[150px]">{fac.contactPhone}</span>}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col items-center">
                         <span className="font-semibold text-[#2D332D]">{fac.roomCapacity} Oda</span>

@@ -13,6 +13,7 @@ export interface Facility {
   status: 'active' | 'passive';
   address?: string;
   contactPerson?: string;
+  contactPhone?: string;
 }
 
 export type GenderType = 'male' | 'female' | 'mixed' | 'Aile';
@@ -34,6 +35,8 @@ export interface User {
   role: Role;
   assignedHotelIds?: string[];
   assignedFacilityIds?: string[];
+  assignedHotelId?: string;
+  assignedFacilityId?: string;
   status?: 'active' | 'inactive';
   phone?: string;
   avatarUrl?: string;
@@ -110,7 +113,8 @@ export interface ApprovalRequest {
   id: string;
   staffId: string;
   targetRoomId: string;
-  requestType: 'family_placement' | 'cross_dorm_placement';
+  sourceRoomId?: string; // Eklenen alan
+  requestType: 'check_in' | 'room_change' | 'dorm_change' | 'family_placement' | 'cross_dorm_placement';
   requestedBy: string; // Lojman görevlisinin ID/E-posta
   status: 'Bekliyor' | 'Onaylandı' | 'Reddedildi';
   createdAt: number;

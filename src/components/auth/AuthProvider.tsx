@@ -10,6 +10,7 @@ import DataSync from "./DataSync";
 
 export default function AuthProvider({ children }: { children: import('react').ReactNode }) {
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const { currentUser, setCurrentUser } = useStore();
 
   useEffect(() => {
@@ -57,13 +58,26 @@ export default function AuthProvider({ children }: { children: import('react').R
               setCurrentUser(null);
             }
           }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+        } catch (error: any) {
+          console.error("Auth provider getDoc error:", error);
+          if (error?.message?.includes("Missing or insufficient permissions") || String(error).includes("Missing or insufficient permissions")) {
+            setAuthError("Firestore izinleri yetersiz (Missing or insufficient permissions). Lütfen Firebase Console üzerinden firestore.rules dosyanızı güncelleyiniz.");
+          } else {
+             try {
+                handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+             } catch(handledError) {
+                // caught to prevent crashing the async function
+             }
+          }
+          auth.signOut();
+          setCurrentUser(null);
+        } finally {
+          setLoading(false);
         }
       } else {
         setCurrentUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     }, (error) => {
         handleFirestoreError(error, OperationType.GET, 'auth');
     });
@@ -81,6 +95,25 @@ export default function AuthProvider({ children }: { children: import('react').R
 
   // To check if a user is currently logged
   if (!currentUser) {
+    if (authError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-[#E8E6E1] p-6 text-center">
+             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+               <span className="text-3xl">⚠️</span>
+             </div>
+             <h2 className="text-xl font-bold text-stone-800 mb-2">Giriş Yapılamadı</h2>
+             <p className="text-stone-600 mb-6">{authError}</p>
+             <button 
+               onClick={() => { setAuthError(null); auth.signOut(); }}
+               className="w-full bg-[#7C8363] text-white py-3 rounded-xl hover:bg-[#6A7152] transition-colors"
+             >
+               Tekrar Dene
+             </button>
+          </div>
+        </div>
+      );
+    }
     return <Login />;
   }
 

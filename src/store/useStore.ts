@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
 
 interface AppState {
@@ -57,6 +57,7 @@ interface AppState {
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
   placeStaff: (staffId: string, facilityId: string, roomId: string) => Promise<void>;
+  changeStaffRoom: (staffId: string, oldRoomId: string, newRoomId: string, newFacilityId?: string) => Promise<void>;
   changeRoom: (accommodationId: string, newFacilityId: string, newRoomId: string) => Promise<void>;
   checkoutStaff: (accommodationId: string, checkoutDate: string) => Promise<void>;
   undoCheckoutStaff: (accommodationId: string) => Promise<void>;
@@ -466,6 +467,49 @@ export const useStore = create<AppState>((set, get) => ({
          }
       },
 
+      changeStaffRoom: async (staffId, oldRoomId, newRoomId, newFacilityId) => {
+         try {
+           const state = get();
+           const acc = state.accommodations.find(a => a.staffId === staffId && a.roomId === oldRoomId && a.status === 'active');
+           if (!acc) throw new Error("Aktif konaklama kaydı bulunamadı.");
+
+           const targetRoom = state.rooms.find(r => r.id === newRoomId);
+           const fac = state.facilities.find(f => f.id === (newFacilityId || acc.facilityId));
+           const oldRoom = state.rooms.find(r => r.id === oldRoomId);
+           const oldFac = state.facilities.find(f => f.id === acc.facilityId);
+
+           if (!targetRoom || !fac) throw new Error("Hedef oda veya tesis bulunamadı.");
+
+           const batch = writeBatch(db);
+           const accRef = doc(db, "accommodations", acc.id);
+           
+           batch.update(accRef, {
+             roomId: newRoomId,
+             facilityId: newFacilityId || acc.facilityId
+           });
+
+           // Note: We don't directly track people count on Room, it's calculated. 
+           // Staff document status is already 'placed'.
+
+           await batch.commit();
+
+           if (state.currentUser) {
+              const oldRoomStr = oldFac && oldRoom ? `${oldFac.name} ${oldRoom.roomNumber}` : 'Bilinmeyen Oda';
+              const newRoomStr = `${fac.name} ${targetRoom.roomNumber}`;
+              
+              await get().addLog({
+                 entityId: staffId,
+                 entityType: 'staff',
+                 action: 'room_change',
+                 changes: `${oldRoomStr} Odasından ${newRoomStr} Odasına taşındı.`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
+         } catch (error) {
+           handleFirestoreError(error, OperationType.UPDATE, "accommodations");
+         }
+      },
       changeRoom: async (accommodationId, newFacilityId, newRoomId) => {
          try {
            const state = get();

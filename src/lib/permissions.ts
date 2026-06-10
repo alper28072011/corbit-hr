@@ -21,6 +21,7 @@ export const PERMISSIONS_MATRIX: PagePermission[] = [
       { key: 'edit_staff', name: 'Personel Düzenle', description: 'Personel bilgilerini düzenleyebilir.' },
       { key: 'delete_staff', name: 'Personel Sil', description: 'Personeli veritabanından tamamen silebilir.' },
       { key: 'change_room', name: 'Oda - Yerleşim Değiştir', description: 'Personelin odasını değiştirebilir (Room Change).' },
+      { key: 'approve_exceptions', name: 'İstisna Onaylama', description: 'Çapraz lojman yerleşimi ve Aile odası gibi istisnai durumları onaylama veya doğrudan uygulama yetkisi.' },
       { key: 'view_sensitive_info', name: 'Hassas Verileri Gör', description: 'Tooltip ile TC ve Telefon numarası gibi hassas verileri görebilir.' }
     ]
   },
