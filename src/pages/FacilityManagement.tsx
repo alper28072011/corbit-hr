@@ -362,7 +362,7 @@ function DormsTab({ facilities, hotels, canManage, addFacility, updateFacility, 
               <label className="block text-sm font-bold text-[#2D332D] mb-1">İzin Verilen Oteller</label>
               <p className="text-xs text-stone-500 mb-4">Bu lojmanda hangi otellerin personeli konaklayabilir?</p>
               
-              <div className="flex-1 overflow-y-auto space-y-2 max-h-48 border border-stone-200 rounded-lg p-2 bg-white">
+              <div className="flex-1 overflow-y-auto space-y-2 max-h-[320px] border border-stone-200 rounded-lg p-2 bg-white">
                 {hotels.map((hotel: any) => (
                   <label key={hotel.id} className="flex items-center gap-3 p-2 hover:bg-stone-50 rounded cursor-pointer">
                     <input 

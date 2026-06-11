@@ -52,6 +52,7 @@ interface AppState {
   addRoomsBulk: (rooms: Omit<Room, 'id'>[]) => Promise<void>;
   updateRoom: (id: string, data: Partial<Room>) => Promise<void>;
   deleteRoom: (id: string) => Promise<void>;
+  bulkDeleteRooms: (roomIds: string[]) => Promise<void>;
 
   addStaff: (staffData: Omit<Staff, 'id'>) => Promise<void>;
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
@@ -277,6 +278,18 @@ export const useStore = create<AppState>((set, get) => ({
          } catch (error) {
            handleFirestoreError(error, OperationType.DELETE, `rooms/${id}`);
          }
+      },
+
+      bulkDeleteRooms: async (roomIds: string[]) => {
+        try {
+          const batch = writeBatch(db);
+          roomIds.forEach(id => {
+            batch.delete(doc(db, "rooms", id));
+          });
+          await batch.commit();
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, "bulkDeleteRooms");
+        }
       },
 
       addStaff: async (staffData) => {

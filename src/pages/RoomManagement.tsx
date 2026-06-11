@@ -7,13 +7,17 @@ import { PageHeader } from "../components/layout/PageHeader";
 import * as XLSX from "xlsx";
 
 export default function RoomManagement() {
-  const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, currentUser, roles } = useStore();
+  const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, bulkDeleteRooms, currentUser, roles } = useStore();
 
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'single' | 'excel'>('single');
   const [importing, setImporting] = useState(false);
   const [excelFile, setExcelFile] = useState<File | null>(null);
+
+  // Bulk operations
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,6 +26,7 @@ export default function RoomManagement() {
   const [filterStatus, setFilterStatus] = useState('');
 
   const canEdit = can(currentUser?.role, 'edit_room', PAGE_KEYS.rooms, useStore.getState().rolesPermissions);
+  const canDelete = can(currentUser?.role, 'delete_room', PAGE_KEYS.rooms, useStore.getState().rolesPermissions);
 
   // Security check
   if (!canViewPage(currentUser?.role, PAGE_KEYS.rooms, useStore.getState().rolesPermissions)) {
@@ -82,12 +87,12 @@ export default function RoomManagement() {
       filtered = filtered.filter(r => r.status === filterStatus);
     }
 
-    return filtered;
+    return filtered.sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
   }, [rooms, selectedFacilityId, searchQuery, filterBlock, filterGender, filterStatus]);
 
   const uniqueBlocks = useMemo(() => {
-    const blocks = rooms.filter(r => r.facilityId === selectedFacilityId).map(r => r.block).filter(Boolean);
-    return Array.from(new Set(blocks));
+    const blocks = rooms.filter(r => r.facilityId === selectedFacilityId).map(r => r.block).filter(Boolean) as string[];
+    return Array.from(new Set(blocks)).sort((a, b) => a.localeCompare(b));
   }, [rooms, selectedFacilityId]);
 
   const handleStartEdit = (room: any) => {
@@ -149,6 +154,30 @@ export default function RoomManagement() {
       </div>
     );
   }
+
+  const handleSelectAll = (e: import('react').ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedRooms(facilityRooms.map(r => r.id));
+    } else {
+      setSelectedRooms([]);
+    }
+  };
+
+  const handleSelectRoom = (roomId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedRooms(prev => [...prev, roomId]);
+    } else {
+      setSelectedRooms(prev => prev.filter(id => id !== roomId));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedRooms.length > 0 && canDelete) {
+      await bulkDeleteRooms(selectedRooms);
+      setSelectedRooms([]);
+      setShowBulkDeleteModal(false);
+    }
+  };
 
   const handleAddSingleRoom = (e: import('react').FormEvent) => {
     e.preventDefault();
@@ -466,7 +495,21 @@ export default function RoomManagement() {
       )}
 
       {/* Main Table Content */}
-      <div className="card-standard flex flex-col bg-white">
+      <div className="card-standard flex flex-col bg-white overflow-hidden">
+        {selectedRooms.length > 0 && (
+          <div className="bg-[#7C8363]/10 border-b border-[#7C8363]/20 px-6 py-3 flex items-center justify-between z-20">
+            <span className="text-sm font-bold text-[#7C8363]">{selectedRooms.length} oda seçildi</span>
+            {canDelete && (
+              <button 
+                onClick={() => setShowBulkDeleteModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors border border-red-200"
+              >
+                <Trash2 className="w-4 h-4" /> Seçilenleri Sil
+              </button>
+            )}
+          </div>
+        )}
+
         {!selectedFacilityId ? (
            <div className="flex flex-col items-center justify-center text-center text-stone-400 p-6 min-h-[300px]">
              <Search className="w-12 h-12 mb-4 opacity-30" />
@@ -478,6 +521,16 @@ export default function RoomManagement() {
               <table className="min-w-full text-left relative">
                 <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
                   <tr>
+                    {canDelete && (
+                      <th className="px-6 py-4 w-12 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="w-4 h-4 rounded text-[#7C8363] focus:ring-[#7C8363] cursor-pointer"
+                          checked={facilityRooms.length > 0 && selectedRooms.length === facilityRooms.length}
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                    )}
                     <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Oda No</th>
                     <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Blok</th>
                     <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Kat</th>
@@ -491,13 +544,23 @@ export default function RoomManagement() {
                 <tbody className="divide-y divide-[#E8E6E1] bg-white">
                   {facilityRooms.length === 0 ? (
                     <tr>
-                      <td colSpan={canEdit ? 8 : 7} className="px-6 py-12 text-center text-stone-500">
+                      <td colSpan={canEdit ? (canDelete ? 9 : 8) : (canDelete ? 8 : 7)} className="px-6 py-12 text-center text-stone-500">
                         Seçilen kriterlere uygun oda bulunamadı.
                       </td>
                     </tr>
                   ) : (
                     facilityRooms.map(room => (
                       <tr key={room.id} className="hover:bg-stone-50 transition-colors">
+                        {canDelete && (
+                          <td className="px-6 py-4 w-12 text-center">
+                            <input 
+                              type="checkbox"
+                              className="w-4 h-4 rounded text-[#7C8363] focus:ring-[#7C8363] cursor-pointer"
+                              checked={selectedRooms.includes(room.id)}
+                              onChange={(e) => handleSelectRoom(room.id, e.target.checked)}
+                            />
+                          </td>
+                        )}
                         {editingRoomId === room.id ? (
                           <>
                             <td className="px-6 py-3"><input type="text" value={editRoomData.roomNumber || ''} onChange={e => setEditRoomData({...editRoomData, roomNumber: e.target.value})} className="w-full px-2 py-1 text-sm border rounded" /></td>
@@ -580,6 +643,38 @@ export default function RoomManagement() {
             </div>
         )}
       </div>
+
+      {/* Bulk Delete Confirm Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ShieldAlert className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-stone-800 mb-2">Emin misiniz?</h3>
+              <p className="text-stone-600 text-sm">
+                Seçili <strong>{selectedRooms.length}</strong> odayı kalıcı olarak silmek üzeresiniz. Bu işlem geri alınamaz.
+              </p>
+            </div>
+            <div className="p-4 bg-stone-50 border-t border-[#E8E6E1] flex gap-3">
+              <button 
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="flex-1 py-2.5 rounded-xl font-bold text-stone-600 bg-white border border-[#E8E6E1] hover:bg-stone-50 transition-colors"
+              >
+                İptal
+              </button>
+              <button 
+                onClick={handleBulkDelete}
+                className="flex-1 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm"
+              >
+                Evet, Sil
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
