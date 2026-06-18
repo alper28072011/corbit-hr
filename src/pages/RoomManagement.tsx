@@ -3,14 +3,32 @@ import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAler
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
+import { Room } from "../types";
 import { PageHeader } from "../components/layout/PageHeader";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 
 export default function RoomManagement() {
-  const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, bulkDeleteRooms, currentUser, roles } = useStore();
+  const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, bulkDeleteRooms, bulkUpdateRooms, currentUser, roles } = useStore();
 
-  const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
+  // Read preferences
+  const uiPrefs = useStore(state => state.uiPreferences);
+  const setUiPreference = useStore(state => state.setUiPreference);
+  const pageKey = PAGE_KEYS.rooms;
+
+  const roomFilters = uiPrefs.lastFilters[pageKey] || {};
+  const selectedFacilityId = roomFilters.facilityId ?? '';
+  const searchQuery = roomFilters.search ?? '';
+  const filterBlock = roomFilters.block ?? '';
+  const filterGender = roomFilters.gender ?? '';
+  const filterStatus = roomFilters.status ?? '';
+
+  const setSelectedFacilityId = (val: string) => setUiPreference('lastFilters', pageKey, { ...roomFilters, facilityId: val });
+  const setSearchQuery = (val: string) => setUiPreference('lastFilters', pageKey, { ...roomFilters, search: val });
+  const setFilterBlock = (val: string) => setUiPreference('lastFilters', pageKey, { ...roomFilters, block: val });
+  const setFilterGender = (val: string) => setUiPreference('lastFilters', pageKey, { ...roomFilters, gender: val });
+  const setFilterStatus = (val: string) => setUiPreference('lastFilters', pageKey, { ...roomFilters, status: val });
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'single' | 'excel'>('single');
   const [importing, setImporting] = useState(false);
@@ -19,12 +37,10 @@ export default function RoomManagement() {
   // Bulk operations
   const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
+  const [bulkUpdateForm, setBulkUpdateForm] = useState<{ genderType?: 'male' | 'female' | 'mixed' | 'Aile' | '', status?: 'active' | 'passive' | 'maintenance' | '', block?: string }>({});
 
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterBlock, setFilterBlock] = useState('');
-  const [filterGender, setFilterGender] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const canEdit = can(currentUser?.role, 'edit_room', PAGE_KEYS.rooms, useStore.getState().rolesPermissions);
   const canDelete = can(currentUser?.role, 'delete_room', PAGE_KEYS.rooms, useStore.getState().rolesPermissions);
@@ -156,6 +172,22 @@ export default function RoomManagement() {
       await bulkDeleteRooms(selectedRooms);
       setSelectedRooms([]);
       setShowBulkDeleteModal(false);
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (selectedRooms.length > 0 && isSuperAdmin) {
+      const updateData: Partial<Room> = {};
+      if (bulkUpdateForm.genderType) updateData.genderType = bulkUpdateForm.genderType;
+      if (bulkUpdateForm.status) updateData.status = bulkUpdateForm.status;
+      if (bulkUpdateForm.block) updateData.block = bulkUpdateForm.block;
+
+      if (Object.keys(updateData).length > 0) {
+        await bulkUpdateRooms(selectedRooms, updateData);
+        setSelectedRooms([]);
+        setShowBulkUpdateModal(false);
+        setBulkUpdateForm({});
+      }
     }
   };
 
@@ -497,14 +529,24 @@ export default function RoomManagement() {
         {selectedRooms.length > 0 && (
           <div className="bg-[#7C8363]/10 border-b border-[#7C8363]/20 px-6 py-3 flex items-center justify-between z-20">
             <span className="text-sm font-bold text-[#7C8363]">{selectedRooms.length} oda seçildi</span>
-            {canDelete && (
-              <button 
-                onClick={() => setShowBulkDeleteModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors border border-red-200"
-              >
-                <Trash2 className="w-4 h-4" /> Seçilenleri Sil
-              </button>
-            )}
+            <div className="flex gap-2">
+              {isSuperAdmin && (
+                <button 
+                  onClick={() => setShowBulkUpdateModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-lg text-sm font-semibold hover:bg-amber-100 transition-colors border border-amber-200"
+                >
+                  <Edit2 className="w-4 h-4" /> Toplu Güncelle
+                </button>
+              )}
+              {canDelete && (
+                <button 
+                  onClick={() => setShowBulkDeleteModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors border border-red-200"
+                >
+                  <Trash2 className="w-4 h-4" /> Seçilenleri Sil
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -674,6 +716,94 @@ export default function RoomManagement() {
                 className="flex-1 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm"
               >
                 Evet, Sil
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      </AnimatePresence>
+
+      {/* Bulk Update Modal */}
+      <AnimatePresence>
+      {showBulkUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col"
+          >
+            <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1]">
+              <h2 className="text-xl font-bold text-[#2D332D]">Toplu Güncelleme ({selectedRooms.length} Oda)</h2>
+              <button onClick={() => setShowBulkUpdateModal(false)} className="text-stone-400 hover:text-stone-600 transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto" style={{ maxHeight: '70vh' }}>
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-50 text-amber-700 rounded-lg text-sm border border-amber-200">
+                  Aşağıdaki alanlardan değiştirmek istediklerinizi seçin. Boş bıraktığınız alanlar, odaların mevcut değerlerini koruyacaktır.
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-stone-700 mb-1">Cinsiyet Türü</label>
+                  <select
+                    value={bulkUpdateForm.genderType || ''}
+                    onChange={(e) => setBulkUpdateForm({ ...bulkUpdateForm, genderType: e.target.value as any })}
+                    className="w-full px-4 py-2 bg-white border border-[#E8E6E1] rounded-xl focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] transition-colors"
+                  >
+                    <option value="">Değişiklik Yapma</option>
+                    <option value="male">Erkek</option>
+                    <option value="female">Kadın</option>
+                    <option value="mixed">Karma</option>
+                    <option value="Aile">Aile</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-stone-700 mb-1">Durum</label>
+                  <select
+                    value={bulkUpdateForm.status || ''}
+                    onChange={(e) => setBulkUpdateForm({ ...bulkUpdateForm, status: e.target.value as any })}
+                    className="w-full px-4 py-2 bg-white border border-[#E8E6E1] rounded-xl focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] transition-colors"
+                  >
+                    <option value="">Değişiklik Yapma</option>
+                    <option value="active">Aktif</option>
+                    <option value="passive">Pasif</option>
+                    <option value="maintenance">Bakımda</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-stone-700 mb-1">Blok</label>
+                  <input
+                    type="text"
+                    placeholder="Değiştirmek istiyorsanız yeni blok ismini girin..."
+                    value={bulkUpdateForm.block || ''}
+                    onChange={(e) => setBulkUpdateForm({ ...bulkUpdateForm, block: e.target.value })}
+                    className="w-full px-4 py-2 bg-white border border-[#E8E6E1] rounded-xl focus:outline-none focus:border-[#7C8363] focus:ring-1 focus:ring-[#7C8363] transition-colors"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[#E8E6E1] bg-stone-50 flex gap-3">
+              <button 
+                type="button"
+                onClick={() => setShowBulkUpdateModal(false)}
+                className="flex-1 py-3 px-4 bg-white border border-[#E8E6E1] text-[#2D332D] rounded-xl font-bold hover:bg-stone-50 transition-colors"
+              >
+                İptal
+              </button>
+              <button 
+                type="button"
+                onClick={handleBulkUpdate}
+                disabled={!bulkUpdateForm.genderType && !bulkUpdateForm.status && !bulkUpdateForm.block}
+                className="flex-1 py-3 px-4 bg-[#7C8363] text-white rounded-xl font-bold hover:bg-[#6A7054] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Uygula
               </button>
             </div>
           </motion.div>

@@ -8,7 +8,13 @@ import { PageHeader } from "../components/layout/PageHeader";
 export default function FacilityManagement() {
   const { hotels, facilities, addHotel, deleteHotel, updateHotel, addFacility, updateFacility, deleteFacility, currentUser, roles } = useStore();
   
-  const [activeTab, setActiveTab] = useState<'hotels' | 'dorms'>('hotels');
+  const uiPrefs = useStore(state => state.uiPreferences);
+  const setUiPreference = useStore(state => state.setUiPreference);
+  const pageKey = PAGE_KEYS.facilities;
+
+  const activeTab = (uiPrefs.activeTabs[pageKey] as 'hotels' | 'dorms') || 'hotels';
+  const setActiveTab = (val: 'hotels' | 'dorms') => setUiPreference('activeTabs', pageKey, val);
+
   const [showHotelForm, setShowHotelForm] = useState(false);
   const [showDormForm, setShowDormForm] = useState(false);
 

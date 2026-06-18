@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { PageHeader } from '../components/layout/PageHeader';
 import { cn } from '../lib/utils';
@@ -12,30 +12,78 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function RackManagement() {
   const { facilities, rooms, staff, accommodations, maintenanceTickets, currentUser, roles } = useStore();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterFacility, setFilterFacility] = useState('');
-  const [filterGender, setFilterGender] = useState('');
-  const [viewMode, setViewMode] = useState<'rack' | 'card' | 'list'>('rack');
+  // Read preferences
+  const uiPrefs = useStore(state => state.uiPreferences);
+  const setUiPreference = useStore(state => state.setUiPreference);
+  const pageKey = PAGE_KEYS.rack;
+
+  const rackFilters = uiPrefs.lastFilters[pageKey] || {};
+  const searchQuery = rackFilters.search ?? '';
+  const filterStatus = rackFilters.status ?? 'all';
+  const filterFacility = rackFilters.facilityId ?? '';
+  const filterGender = rackFilters.gender ?? '';
+  const viewMode = (uiPrefs.viewModes[pageKey] as 'rack' | 'card' | 'list') || 'rack';
+
+  const setSearchQuery = (val: string) => setUiPreference('lastFilters', pageKey, { ...rackFilters, search: val });
+  const setFilterStatus = (val: string) => setUiPreference('lastFilters', pageKey, { ...rackFilters, status: val });
+  const setFilterFacility = (val: string) => setUiPreference('lastFilters', pageKey, { ...rackFilters, facilityId: val });
+  const setFilterGender = (val: string) => setUiPreference('lastFilters', pageKey, { ...rackFilters, gender: val });
+  const setViewMode = (val: 'rack' | 'card' | 'list') => setUiPreference('viewModes', pageKey, val);
 
   // Selected Room for Modal
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
+  // Defer heavy rendering to prevent navigation freezing
+  const [isReady, setIsReady] = useState(false);
+  useEffect(() => {
+    // Allows the route transition to complete gracefully before doing heavy DOM work
+    const t = setTimeout(() => setIsReady(true), 100);
+    return () => clearTimeout(t);
+  }, []);
+
   const availableFacilities = useMemo(() => {
     if (!currentUser) return [];
     if (['super_admin', 'hr_director'].includes(currentUser.role)) return facilities;
+    
+    let facs = facilities;
     if (currentUser.role === 'facility_manager') {
-      const userFacilityIds = currentUser.assignedFacilityIds || [];
-      return facilities.filter(f => userFacilityIds.includes(f.id));
+      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      facs = facs.filter(f => facIds.includes(f.id));
+    } else if (currentUser.role === 'hotel_hr_manager') {
+      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+      facs = facs.filter(f => f.allowedHotelIds?.some(id => hotelIds.includes(id)) || (f as any).hotelId && hotelIds.includes((f as any).hotelId));
     }
-    return facilities;
+    return facs;
   }, [facilities, currentUser]);
 
   const EnrichedRooms = useMemo(() => {
+    // 1. Map active accommodations to roomId for fast lookup
+    const accByRoom = new Map<string, typeof accommodations>();
+    accommodations.forEach(a => {
+      if (a.status !== 'active') return;
+      if (!accByRoom.has(a.roomId)) accByRoom.set(a.roomId, []);
+      accByRoom.get(a.roomId)!.push(a);
+    });
+
+    // 2. Map staff by id for fast lookup
+    const staffById = new Map<string, typeof staff[0]>();
+    staff.forEach(s => staffById.set(s.id, s));
+
+    // 3. Map open maintenance tickets to roomId
+    const maintByRoom = new Map<string, typeof maintenanceTickets>();
+    maintenanceTickets.forEach(m => {
+      if (m.status !== 'Açık' && m.status !== 'İşlemde') return;
+      if (!maintByRoom.has(m.roomId)) maintByRoom.set(m.roomId, []);
+      maintByRoom.get(m.roomId)!.push(m);
+    });
+
     return rooms.map(room => {
-      const activeAccs = accommodations.filter(a => a.roomId === room.id && a.status === 'active');
-      const currentResidents = staff.filter(s => activeAccs.some(a => a.staffId === s.id));
-      const openMaintenance = maintenanceTickets.filter(m => m.roomId === room.id && (m.status === 'Açık' || m.status === 'İşlemde'));
+      const activeAccs = accByRoom.get(room.id) || [];
+      const currentResidents = activeAccs
+        .map(a => staffById.get(a.staffId))
+        .filter((s): s is typeof staff[0] => s !== undefined);
+      
+      const openMaintenance = maintByRoom.get(room.id) || [];
       const hasMaintenance = openMaintenance.length > 0;
 
       const currentOccupancy = currentResidents.length;
@@ -178,7 +226,12 @@ export default function RackManagement() {
 
       <div className="card-standard flex flex-col bg-white">
           <div className="p-6 bg-[#FDFCFB]">
-            {availableFacilities.map(facility => {
+            {!isReady ? (
+               <div className="flex flex-col items-center justify-center p-12 text-stone-400">
+                  <div className="w-8 h-8 border-4 border-stone-200 border-t-amber-500 rounded-full animate-spin mb-4" />
+                  <p className="font-medium animate-pulse">Rack görünümü yükleniyor...</p>
+               </div>
+            ) : availableFacilities.map(facility => {
                const facRooms = filteredRooms.filter(r => r.facilityId === facility.id && r.status === 'active');
                if (facRooms.length === 0) return null;
 

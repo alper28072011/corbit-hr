@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { useLocation, useOutlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 import { motion, AnimatePresence } from "motion/react";
@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const outlet = useOutlet();
 
   return (
     <div className="flex min-h-screen w-full bg-[#FDFCFB] text-[#1A1C18] font-sans">
@@ -29,7 +30,7 @@ export default function AppLayout() {
               transition={{ duration: 0.2 }}
               className="px-8 py-8 h-full"
             >
-              <Outlet />
+              {outlet}
             </motion.div>
           </AnimatePresence>
         </main>

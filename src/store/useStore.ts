@@ -1,8 +1,16 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
+
+export interface UiPreferences {
+  activeTabs: Record<string, string>;       // Örn: { facilityPage: 'dorms', profilePage: 'security' }
+  viewModes: Record<string, 'list' | 'card' | 'rack'>; // Örn: { staffPage: 'list', rackPage: 'rack' }
+  lastFilters: Record<string, any>;         // Örn: { staffPage: { hotelId: 'xyz', search: 'Kubilay', status: 'Pending' } }
+  tableSorting: Record<string, { key: string; direction: 'asc' | 'desc' }>;
+}
 
 interface AppState {
   users: User[];
@@ -17,6 +25,10 @@ interface AppState {
   maintenanceTickets: MaintenanceTicket[];
   approvalRequests: ApprovalRequest[];
   
+  uiPreferences: UiPreferences;
+  setUiPreference: <K extends keyof UiPreferences>(key: K, pageKey: string, value: any) => void;
+  resetUiPreferences: () => void;
+
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleConfig[]) => void;
   setRolesPermissions: (perms: RolePermissions[]) => void;
@@ -53,6 +65,7 @@ interface AppState {
   updateRoom: (id: string, data: Partial<Room>) => Promise<void>;
   deleteRoom: (id: string) => Promise<void>;
   bulkDeleteRooms: (roomIds: string[]) => Promise<void>;
+  bulkUpdateRooms: (roomIds: string[], data: Partial<Room>) => Promise<void>;
 
   addStaff: (staffData: Omit<Staff, 'id'>) => Promise<void>;
   bulkAddStaffWithPlacements: (staffList: Array<{ staff: Omit<Staff, 'id'>, placement?: { facilityId: string, roomId: string } }>) => Promise<void>;
@@ -62,7 +75,7 @@ interface AppState {
   placeStaff: (staffId: string, facilityId: string, roomId: string) => Promise<void>;
   changeStaffRoom: (staffId: string, oldRoomId: string, newRoomId: string, newFacilityId?: string) => Promise<void>;
   changeRoom: (accommodationId: string, newFacilityId: string, newRoomId: string) => Promise<void>;
-  notifyCheckoutStaff: (staffId: string) => Promise<void>;
+  notifyCheckoutStaff: (staffId: string, checkOutDate: string) => Promise<void>;
   checkoutStaff: (accommodationId: string, checkoutDate: string) => Promise<void>;
   undoCheckoutStaff: (accommodationId: string) => Promise<void>;
 
@@ -85,7 +98,9 @@ interface AppState {
   updateAppVersion: (version: string) => Promise<void>;
 }
 
-export const useStore = create<AppState>((set, get) => ({
+export const useStore = create<AppState>()(
+  persist(
+    (set, get) => ({
       users: [],
       roles: [],
       rolesPermissions: [],
@@ -100,6 +115,36 @@ export const useStore = create<AppState>((set, get) => ({
       logs: [],
       appSettings: {},
 
+      uiPreferences: {
+        activeTabs: {},
+        viewModes: {},
+        lastFilters: {},
+        tableSorting: {},
+      },
+
+      setUiPreference: (key, pageKey, value) => {
+        set((state) => ({
+          uiPreferences: {
+            ...state.uiPreferences,
+            [key]: {
+              ...state.uiPreferences[key],
+              [pageKey]: value,
+            },
+          },
+        }));
+      },
+
+      resetUiPreferences: () => {
+        set({
+          uiPreferences: {
+            activeTabs: {},
+            viewModes: {},
+            lastFilters: {},
+            tableSorting: {},
+          },
+        });
+      },
+
       setUsers: (users) => set({ users }),
       setRoles: (roles) => set({ roles }),
       setRolesPermissions: (rolesPermissions) => set({ rolesPermissions }),
@@ -113,7 +158,12 @@ export const useStore = create<AppState>((set, get) => ({
       setLogs: (logs) => set({ logs }),
       setAppSettings: (appSettings) => set({ appSettings }),
 
-      setCurrentUser: (user) => set({ currentUser: user }),
+      setCurrentUser: (user) => {
+        set({ currentUser: user });
+        if (!user) {
+          get().resetUiPreferences();
+        }
+      },
 
       addLog: async (logData) => {
         try {
@@ -292,6 +342,18 @@ export const useStore = create<AppState>((set, get) => ({
           await batch.commit();
         } catch (error) {
           handleFirestoreError(error, OperationType.DELETE, "bulkDeleteRooms");
+        }
+      },
+
+      bulkUpdateRooms: async (roomIds: string[], data: Partial<Room>) => {
+        try {
+          const batch = writeBatch(db);
+          roomIds.forEach(id => {
+            batch.update(doc(db, "rooms", id), data);
+          });
+          await batch.commit();
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, "bulkUpdateRooms");
         }
       },
 
@@ -659,17 +721,17 @@ export const useStore = create<AppState>((set, get) => ({
          }
       },
 
-      notifyCheckoutStaff: async (staffId) => {
+      notifyCheckoutStaff: async (staffId, checkOutDate) => {
          try {
            const state = get();
-           await updateDoc(doc(db, "staff", staffId), { status: 'pending_checkout' });
+           await updateDoc(doc(db, "staff", staffId), { status: 'pending_checkout', checkOutDate });
            
            if (state.currentUser) {
               await get().addLog({
                  entityId: staffId,
                  entityType: 'staff',
                  action: 'update',
-                 changes: `Personel için lojmandan çıkış bildirildi (Çıkış Bekliyor).`,
+                 changes: `Personel için lojmandan çıkış bildirildi (Çıkış Tarihi: ${checkOutDate}).`,
                  performedBy: state.currentUser.fullName || state.currentUser.email,
                  timestamp: Date.now()
               });
@@ -750,6 +812,13 @@ export const useStore = create<AppState>((set, get) => ({
           handleFirestoreError(error, OperationType.UPDATE, `roles_permissions/${roleKey}`);
         }
       }
-}));
+    }),
+    {
+      name: 'corbit-ui-storage',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ uiPreferences: state.uiPreferences }),
+    }
+  )
+);
 
 

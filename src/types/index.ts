@@ -88,6 +88,8 @@ export interface Staff {
   status: 'pending_placement' | 'placed' | 'left' | 'pending_approval' | 'pending_checkout';
   notes?: string;
   specialNote?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
 }
 
 export interface Accommodation {

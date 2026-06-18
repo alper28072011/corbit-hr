@@ -1,6 +1,6 @@
 import React, { useState, useMemo, ReactNode, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, UserPlus, LogOut, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Download, UploadCloud, List, LayoutGrid } from "lucide-react";
+import { Search, X, UserPlus, LogOut, LogIn, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Download, UploadCloud, List, LayoutGrid } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useStore } from "../store/useStore";
 import { Staff } from "../types";
@@ -77,7 +77,7 @@ export default function StaffManagement() {
     : '';
 
   const [newStaff, setNewStaff] = useState({
-    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const, notes: '', specialNote: ''
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const, notes: '', specialNote: '', checkInDate: '', checkOutDate: ''
   });
 
   // Placement modal state
@@ -88,7 +88,7 @@ export default function StaffManagement() {
   // Edit Modal State
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: '', notes: '', specialNote: ''
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: '', notes: '', specialNote: '', checkInDate: '', checkOutDate: ''
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -101,29 +101,45 @@ export default function StaffManagement() {
   // Room Change Wizard state
   const [changingRoomStaffInfo, setChangingRoomStaffInfo] = useState<{ staff: Staff, currentRoomId: string, currentFacilityId: string } | null>(null);
 
-  // Global Search & Filters
-  const [globalSearch, setGlobalSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterHotel, setFilterHotel] = useState('');
-  const [filterFacility, setFilterFacility] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'grouped'>('list');
-  const [searchParams] = useSearchParams();
+  // Checkout notification state
+  const [notifyCheckoutModal, setNotifyCheckoutModal] = useState<{ open: boolean, staffId: string, staffName: string, date: string }>({ open: false, staffId: '', staffName: '', date: '' });
 
-  // Sort State
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'room', direction: 'asc' });
+  // Read preferences
+  const uiPrefs = useStore(state => state.uiPreferences);
+  const setUiPreference = useStore(state => state.setUiPreference);
+  const pageKey = PAGE_KEYS.staff;
+
+  const staffFilters = uiPrefs.lastFilters[pageKey] || {};
+  const globalSearch = staffFilters.search ?? '';
+  const filterStatus = staffFilters.status ?? '';
+  const filterHotel = staffFilters.hotelId ?? '';
+  const filterFacility = staffFilters.facilityId ?? '';
+  const filterDepartment = staffFilters.department ?? '';
+  const filterCheckIn = staffFilters.checkIn ?? '';
+  const filterCheckOut = staffFilters.checkOut ?? '';
+  const viewMode = (uiPrefs.viewModes[pageKey] as 'list' | 'grouped') || 'list';
+  const sortConfig = uiPrefs.tableSorting[pageKey] || { key: 'room', direction: 'asc' };
+
+  const setGlobalSearch = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, search: val });
+  const setFilterStatus = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, status: val });
+  const setFilterHotel = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, hotelId: val });
+  const setFilterFacility = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, facilityId: val });
+  const setFilterDepartment = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, department: val });
+  const setFilterCheckIn = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, checkIn: val });
+  const setFilterCheckOut = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, checkOut: val });
+  const setViewMode = (val: 'list' | 'grouped') => setUiPreference('viewModes', pageKey, val);
+  const setSortConfig = (val: any) => setUiPreference('tableSorting', pageKey, val);
+
+  const [searchParams] = useSearchParams();
 
   // Handle URL query parameters and filter initialization
   useEffect(() => {
     const filterParam = searchParams.get('filter');
-    const pendingCount = staff.filter(s => s.status === 'pending_placement').length;
-
     if (filterParam === 'pending') {
       setFilterStatus('pending_placement');
-    } else if (!filterParam || pendingCount === 0) {
-      setFilterStatus('placed');
     }
-  }, [searchParams, staff]);
+    // Eğer pending count 0 ise zorla placed yapma kodunu kaldırdık ki kullanıcının son tercihi (pending) ekranda boş listesiyle kalsın
+  }, [searchParams]);
 
   const rp = useStore.getState().rolesPermissions;
   const canAddStaff = can(currentUser?.role, 'create_staff', PAGE_KEYS.staff, rp);
@@ -217,6 +233,11 @@ export default function StaffManagement() {
         if (item.acc?.facilityId !== filterFacility) return false;
       }
       if (filterDepartment && item.staff.department !== filterDepartment) return false;
+      
+      const itemCheckIn = item.acc?.checkInDate || item.staff.checkInDate;
+      const itemCheckOut = item.acc?.checkOutDate || item.staff.checkOutDate;
+      if (filterCheckIn && itemCheckIn !== filterCheckIn) return false;
+      if (filterCheckOut && itemCheckOut !== filterCheckOut) return false;
 
       return true;
     }).sort((a, b) => {
@@ -250,14 +271,13 @@ export default function StaffManagement() {
             aValue = a.staff.gender || '';
             bValue = b.staff.gender || '';
             break;
-          case 'status':
-            const statusLabels: Record<string, string> = {
-              pending_placement: 'Bekliyor',
-              placed: 'Konaklıyor',
-              left: 'Çıkış Yaptı'
-            };
-            aValue = statusLabels[a.staff.status] || a.staff.status;
-            bValue = statusLabels[b.staff.status] || b.staff.status;
+          case 'checkIn':
+            aValue = a.acc?.checkInDate || '';
+            bValue = b.acc?.checkInDate || '';
+            break;
+          case 'checkOut':
+            aValue = a.acc?.checkOutDate || a.staff.checkOutDate || '';
+            bValue = b.acc?.checkOutDate || b.staff.checkOutDate || '';
             break;
         }
 
@@ -334,7 +354,7 @@ export default function StaffManagement() {
     const dHotelId = currentUser?.role === 'hotel_hr_manager' 
       ? (currentUser.assignedHotelIds?.[0] || currentUser.assignedHotelId || '') 
       : '';
-    setNewStaff({ fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: dHotelId, gender: 'male', notes: '', specialNote: '' });
+    setNewStaff({ fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: dHotelId, gender: 'male', notes: '', specialNote: '', checkInDate: '', checkOutDate: '' });
   };
 
   const downloadStaffTemplate = () => {
@@ -513,7 +533,9 @@ export default function StaffManagement() {
       gender: staffData.gender,
       status: staffData.status,
       notes: staffData.notes || '',
-      specialNote: staffData.specialNote || ''
+      specialNote: staffData.specialNote || '',
+      checkInDate: staffData.checkInDate || '',
+      checkOutDate: staffData.checkOutDate || ''
     });
     setEditingStaffId(staffData.id);
   };
@@ -603,12 +625,6 @@ export default function StaffManagement() {
     }
 
     const dataToExport = unifiedStaffData.map(item => {
-      let statusStr = '';
-      if (item.staff.status === 'placed') statusStr = 'Konaklıyor';
-      else if (item.staff.status === 'pending_placement') statusStr = 'Yerleşim Bekliyor';
-      else if (item.staff.status === 'pending_checkout') statusStr = 'Çıkış Bekliyor';
-      else if (item.staff.status === 'left') statusStr = 'Çıkış Yaptı';
-
       return {
         'TC Kimlik No': item.staff.tcNo || '',
         'Ad Soyad': item.staff.fullName || '',
@@ -618,11 +634,10 @@ export default function StaffManagement() {
         'Otel/İşletme': item.hotel?.name || '-',
         'Departman': item.staff.department || '-',
         'Görev': item.staff.position || '-',
-        'Durum': statusStr,
         'Lojman': item.facility?.name || '-',
         'Oda No': item.room?.roomNumber || '-',
-        'Giriş Tarihi': item.acc?.checkInDate ? new Date(item.acc.checkInDate).toLocaleDateString('tr-TR') : '-',
-        'Çıkış Tarihi': item.acc?.checkOutDate ? new Date(item.acc.checkOutDate).toLocaleDateString('tr-TR') : '-',
+        'Giriş Tarihi': item.acc?.checkInDate ? new Date(item.acc.checkInDate).toLocaleDateString('tr-TR') : (item.staff.checkInDate ? new Date(item.staff.checkInDate).toLocaleDateString('tr-TR') : '-'),
+        'Çıkış Tarihi': item.acc?.checkOutDate ? new Date(item.acc.checkOutDate).toLocaleDateString('tr-TR') : (item.staff.checkOutDate ? new Date(item.staff.checkOutDate).toLocaleDateString('tr-TR') : '-'),
         'Özel Not': item.staff.specialNote || '-',
         'Genel Not': item.staff.notes || '-'
       };
@@ -776,18 +791,20 @@ export default function StaffManagement() {
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="flex items-center bg-[#E8E6E1] p-1 rounded-xl h-full mt-1 shrink-0 ml-2 shadow-sm border border-[#E8E6E1]">
+            <div className="flex items-center bg-[#E8E6E1] p-1 rounded-xl shrink-0 shadow-sm border border-[#E8E6E1]">
                <button
                  onClick={() => setViewMode('list')}
-                 className={cn("px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors", viewMode === 'list' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
+                 className={cn("p-1.5 rounded-lg flex items-center justify-center transition-colors", viewMode === 'list' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
+                 title="Liste Görünümü"
                >
-                 <List className="w-4 h-4"/> Liste
+                 <List className="w-4 h-4"/>
                </button>
                <button
                  onClick={() => setViewMode('grouped')}
-                 className={cn("px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors", viewMode === 'grouped' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
+                 className={cn("p-1.5 rounded-lg flex items-center justify-center transition-colors", viewMode === 'grouped' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
+                 title="Odalar Görünümü"
                >
-                 <LayoutGrid className="w-4 h-4"/> Odalar
+                 <LayoutGrid className="w-4 h-4"/>
                </button>
             </div>
           </div>
@@ -824,11 +841,24 @@ export default function StaffManagement() {
                   <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('room') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('room')}>
                     <div className="flex items-center">Oda {getSortIcon('room')}</div>
                   </th>
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('gender') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('gender')}>
-                    <div className="flex items-center">Cinsiyet {getSortIcon('gender')}</div>
+                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider", isSorted('gender') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                    <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none" onClick={() => requestSort('gender')}>Cinsiyet {getSortIcon('gender')}</div>
                   </th>
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('status') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('status')}>
-                    <div className="flex items-center">Durum {getSortIcon('status')}</div>
+                  <th className={cn("px-4 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB]", isSorted('checkIn') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                    <div className="flex items-center justify-between gap-2">
+                      <input type="date" title="Giriş Tarihi" value={filterCheckIn} onChange={e => setFilterCheckIn(e.target.value)} className="text-[11px] border border-[#E8E6E1] bg-white rounded p-1.5 font-normal w-[110px] focus:outline-none focus:border-[#7C8363]" />
+                      <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-1 rounded shrink-0" onClick={() => requestSort('checkIn')} title="Giriş Tarihi'ne Göre Sırala">
+                          {getSortIcon('checkIn')}
+                      </div>
+                    </div>
+                  </th>
+                  <th className={cn("px-4 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB]", isSorted('checkOut') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                     <div className="flex items-center justify-between gap-2">
+                      <input type="date" title="Çıkış Tarihi" value={filterCheckOut} onChange={e => setFilterCheckOut(e.target.value)} className="text-[11px] border border-[#E8E6E1] bg-white rounded p-1.5 font-normal w-[110px] focus:outline-none focus:border-[#7C8363]" />
+                      <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-1 rounded shrink-0" onClick={() => requestSort('checkOut')} title="Çıkış Tarihi'ne Göre Sırala">
+                          {getSortIcon('checkOut')}
+                      </div>
+                    </div>
                   </th>
                   <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>
                 </tr>
@@ -876,11 +906,23 @@ export default function StaffManagement() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-[#7C8363]">
+                      <td className="px-6 py-4 text-sm font-semibold">
                         {s.status === 'pending_placement' ? (
                           <span className="text-stone-400 italic font-normal">-</span>
                         ) : (
-                          f?.name || 'Bilinmeyen Lojman'
+                          f ? (
+                            <span 
+                              className={cn(
+                                "line-clamp-2",
+                                currentUser?.role === 'hotel_hr_manager' && !availableFacilities.some(af => af.id === f.id) 
+                                  ? "text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-100 inline-block mb-1"
+                                  : "text-[#7C8363]"
+                              )}
+                              title={currentUser?.role === 'hotel_hr_manager' && !availableFacilities.some(af => af.id === f.id) ? "Farklı bir otele tahsisli lojmanda konaklıyor" : ""}
+                            >
+                              {f.name}
+                            </span>
+                          ) : 'Bilinmeyen Lojman'
                         )}
                       </td>
                       <td className="px-6 py-4 text-sm font-mono font-medium text-stone-600">
@@ -895,44 +937,21 @@ export default function StaffManagement() {
                           {s.gender === 'female' ? 'Kadın' : 'Erkek'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm">
-                        <div className="flex flex-col items-start gap-1">
-                          {s.status === 'placed' && (
-                             <>
-                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-green-50 text-green-700 border border-green-200">
-                                 Konaklıyor
-                               </span>
-                               <span className="text-[11px] text-stone-500 font-medium whitespace-nowrap">
-                                 G: {acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}
-                               </span>
-                             </>
-                          )}
-                          {s.status === 'pending_placement' && (
-                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-200">
-                               Bekliyor
-                             </span>
-                          )}
-                          {s.status === 'pending_checkout' && (
-                             <>
-                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
-                                 Çıkış Bekliyor
-                               </span>
-                               <span className="text-[11px] text-stone-500 font-medium whitespace-nowrap">
-                                 G: {acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}
-                               </span>
-                             </>
-                          )}
-                          {s.status === 'left' && (
-                             <>
-                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-stone-100 text-stone-600 border border-stone-200">
-                                 Çıkış Yaptı
-                               </span>
-                               <span className="text-[11px] text-stone-500 font-medium whitespace-nowrap">
-                                 Ç: {acc?.checkOutDate ? new Date(acc.checkOutDate).toLocaleDateString('tr-TR') : '-'}
-                               </span>
-                             </>
-                          )}
-                        </div>
+                      <td className="px-6 py-4 text-sm font-medium text-stone-700 whitespace-nowrap">
+                        {acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                         {s.status === 'pending_checkout' ? (
+                            <span className="text-orange-600 bg-orange-50 px-2 py-0.5 rounded text-xs border border-orange-200">
+                               {s.checkOutDate ? new Date(s.checkOutDate).toLocaleDateString('tr-TR') : 'Bekliyor'}
+                            </span>
+                         ) : s.status === 'left' ? (
+                            <span className="text-stone-600 bg-stone-100 px-2 py-0.5 rounded text-xs border border-stone-200">
+                               {acc?.checkOutDate ? new Date(acc.checkOutDate).toLocaleDateString('tr-TR') : (s.checkOutDate ? new Date(s.checkOutDate).toLocaleDateString('tr-TR') : 'Çıkış Yaptı')}
+                            </span>
+                         ) : (
+                            <span className="text-stone-400">-</span>
+                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         {(canPlaceStaff || canCheckoutStaff || canEditStaff || canDeleteStaff || canViewDoc) ? (
@@ -948,9 +967,12 @@ export default function StaffManagement() {
                             {s.status === 'placed' && canEditStaff && acc && (
                               <button 
                                 onClick={() => {
-                                  if(confirm(`${s.fullName} isimli personel için Çıkış Bekliyor durumunu bildirmek istediğinize emin misiniz?`)) {
-                                    notifyCheckoutStaff(s.id);
-                                  }
+                                  setNotifyCheckoutModal({
+                                    open: true,
+                                    staffId: s.id,
+                                    staffName: s.fullName,
+                                    date: new Date().toISOString().split('T')[0]
+                                  });
                                 }}
                                 className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                               >
@@ -1064,7 +1086,21 @@ export default function StaffManagement() {
                             {group.room.genderType === 'female' ? 'KADIN' : (group.room.genderType === 'male' ? 'ERKEK' : (group.room.genderType === 'Aile' ? 'AİLE ODASI' : 'KARMA'))}
                           </span>
                         </div>
-                        <p className="text-xs font-semibold text-stone-500 uppercase tracking-widest">{group.facility?.name || 'Bilinmeyen Lojman'}</p>
+                        {group.facility ? (
+                           <p 
+                             className={cn(
+                               "text-xs font-semibold uppercase tracking-widest",
+                               currentUser?.role === 'hotel_hr_manager' && !availableFacilities.some(af => af.id === group.facility!.id)
+                                 ? "text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 inline-block mb-0.5 mt-1"
+                                 : "text-stone-500"
+                             )}
+                             title={currentUser?.role === 'hotel_hr_manager' && !availableFacilities.some(af => af.id === group.facility!.id) ? "Farklı bir otele tahsisli lojman" : ""}
+                           >
+                              {group.facility.name}
+                           </p>
+                        ) : (
+                           <p className="text-xs font-semibold text-stone-500 uppercase tracking-widest">Bilinmeyen Lojman</p>
+                        )}
                      </div>
                      <div className="flex flex-col items-end gap-1.5">
                        <div className="text-xs font-bold text-stone-600 uppercase tracking-widest">
@@ -1120,6 +1156,19 @@ export default function StaffManagement() {
                            
                            <div className="shrink-0 text-right pr-6 border-r border-[#E8E6E1] mr-6">
                              <div className="text-xs text-stone-500 font-medium whitespace-nowrap">Giriş: {item.acc?.checkInDate ? new Date(item.acc.checkInDate).toLocaleDateString('tr-TR') : '-'}</div>
+                             <div className="text-[10px] text-stone-400 font-medium whitespace-nowrap mt-1">
+                               Çıkış: {item.staff.status === 'pending_checkout' ? (
+                                  <span className="text-orange-600 bg-orange-50 px-1 py-0.5 rounded border border-orange-200">
+                                     {item.staff.checkOutDate ? new Date(item.staff.checkOutDate).toLocaleDateString('tr-TR') : 'Bekliyor'}
+                                  </span>
+                               ) : item.staff.status === 'left' ? (
+                                  <span className="text-stone-600 bg-stone-100 px-1 py-0.5 rounded border border-stone-200">
+                                     {item.acc?.checkOutDate ? new Date(item.acc.checkOutDate).toLocaleDateString('tr-TR') : (item.staff.checkOutDate ? new Date(item.staff.checkOutDate).toLocaleDateString('tr-TR') : 'Çıkış Yaptı')}
+                                  </span>
+                               ) : (
+                                  '-'
+                               )}
+                             </div>
                            </div>
                            
                            <div className="shrink-0 pl-2">
@@ -1128,9 +1177,12 @@ export default function StaffManagement() {
                                  {item.staff.status === 'placed' && canEditStaff && item.acc && (
                                    <button 
                                      onClick={() => {
-                                       if(confirm(`${item.staff.fullName} isimli personel için Çıkış Bekliyor durumunu bildirmek istediğinize emin misiniz?`)) {
-                                         notifyCheckoutStaff(item.staff.id);
-                                       }
+                                      setNotifyCheckoutModal({
+                                        open: true,
+                                        staffId: item.staff.id,
+                                        staffName: item.staff.fullName,
+                                        date: new Date().toISOString().split('T')[0]
+                                      });
                                      }}
                                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                                    >
@@ -1284,6 +1336,14 @@ export default function StaffManagement() {
                     {positions.map(p => <option key={p} value={p} />)}
                   </datalist>
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Giriş Tarihi</label>
+                  <input type="date" value={newStaff.checkInDate} onChange={e => setNewStaff({...newStaff, checkInDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çıkış Tarihi</label>
+                  <input type="date" value={newStaff.checkOutDate} onChange={e => setNewStaff({...newStaff, checkOutDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Notlar / Açıklama</label>
                   <textarea value={newStaff.notes} onChange={e => setNewStaff({...newStaff, notes: e.target.value})} placeholder="Personel ile ilgili notlar..." className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] min-h-[80px]" />
@@ -1411,6 +1471,14 @@ export default function StaffManagement() {
                   {positions.map(p => <option key={p} value={p} />)}
                 </datalist>
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Giriş Tarihi</label>
+                <input type="date" value={editForm.checkInDate || ''} onChange={e => setEditForm({...editForm, checkInDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çıkış Tarihi</label>
+                <input type="date" value={editForm.checkOutDate || ''} onChange={e => setEditForm({...editForm, checkOutDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Notlar / Açıklama</label>
                 <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} placeholder="Personel ile ilgili notlar..." className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] min-h-[80px]" />
@@ -1427,6 +1495,62 @@ export default function StaffManagement() {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+      </AnimatePresence>
+
+      {/* Notify Checkout Modal */}
+      <AnimatePresence>
+      {notifyCheckoutModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+          >
+            <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1]">
+              <h2 className="text-xl font-bold text-[#2D332D]">Çıkış Tarihi Belirle</h2>
+              <button 
+                onClick={() => setNotifyCheckoutModal({ ...notifyCheckoutModal, open: false })}
+                className="text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-stone-600 mb-4">
+                <strong>{notifyCheckoutModal.staffName}</strong> isimli personel için çıkış tarihi belirleyiniz.
+              </p>
+              <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çıkış Tarihi</label>
+              <input 
+                type="date" 
+                value={notifyCheckoutModal.date}
+                onChange={e => setNotifyCheckoutModal({ ...notifyCheckoutModal, date: e.target.value })}
+                className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl focus:outline-none focus:border-[#7C8363]"
+              />
+            </div>
+            <div className="p-6 border-t border-[#E8E6E1] bg-stone-50 flex justify-end gap-3">
+              <button 
+                onClick={() => setNotifyCheckoutModal({ ...notifyCheckoutModal, open: false })}
+                className="px-6 py-2 bg-white border border-[#E8E6E1] text-[#2D332D] rounded-xl font-bold hover:bg-stone-50 transition-colors"
+              >
+                İptal
+              </button>
+              <button 
+                onClick={() => {
+                  if (notifyCheckoutModal.date) {
+                    notifyCheckoutStaff(notifyCheckoutModal.staffId, notifyCheckoutModal.date);
+                    setNotifyCheckoutModal({ ...notifyCheckoutModal, open: false });
+                  }
+                }}
+                disabled={!notifyCheckoutModal.date}
+                className="px-6 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                Çıkış Bildir
+              </button>
+            </div>
           </motion.div>
         </div>
       )}

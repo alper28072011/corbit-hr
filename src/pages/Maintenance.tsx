@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { 
   Plus, Wrench, Search, Filter, Trash2, Edit2, History, AlertCircle, MapPin, 
-  X, Check, ChevronDown, ListFilter, AlignLeft, ShieldAlert
+  X, Check, ChevronDown, ListFilter, AlignLeft, ShieldAlert, CheckCircle
 } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
@@ -30,7 +30,7 @@ function formatDateLabel(timestamp: number) {
 
 export default function Maintenance() {
   const { 
-    hotels, facilities, rooms, maintenanceTickets, 
+    hotels, facilities, rooms, maintenanceTickets, addRoom,
     addMaintenanceTicket, updateMaintenanceTicket, deleteMaintenanceTicket, 
     addLog, logs, currentUser, roles 
   } = useStore();
@@ -42,11 +42,23 @@ export default function Maintenance() {
   const canUpdateStatus = can(currentUser?.role, 'update_ticket_status', PAGE_KEYS.maintenance, rp);
   const canViewLogs = can(currentUser?.role, 'view_logs', 'settings', rp);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterPriority, setFilterPriority] = useState("all");
-  const [filterFacility, setFilterFacility] = useState("all");
-  const [filterHotel, setFilterHotel] = useState("all");
+  // Read preferences
+  const uiPrefs = useStore(state => state.uiPreferences);
+  const setUiPreference = useStore(state => state.setUiPreference);
+  const pageKey = PAGE_KEYS.maintenance;
+
+  const mFilters = uiPrefs.lastFilters[pageKey] || {};
+  const searchQuery = mFilters.search ?? '';
+  const filterStatus = mFilters.status ?? 'all';
+  const filterPriority = mFilters.priority ?? 'all';
+  const filterFacility = mFilters.facilityId ?? 'all';
+  const filterHotel = mFilters.hotelId ?? 'all';
+
+  const setSearchQuery = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, search: val });
+  const setFilterStatus = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, status: val });
+  const setFilterPriority = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, priority: val });
+  const setFilterFacility = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, facilityId: val });
+  const setFilterHotel = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, hotelId: val });
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTicket, setEditingTicket] = useState<MaintenanceTicket | null>(null);
@@ -61,6 +73,8 @@ export default function Maintenance() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [selectedTicketForLog, setSelectedTicketForLog] = useState<MaintenanceTicket | null>(null);
 
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -70,6 +84,73 @@ export default function Maintenance() {
     priority: 'Düşük' as "Düşük" | "Orta" | "Acil",
     reportedBy: currentUser?.fullName || '',
   });
+
+  const [roomSearchQuery, setRoomSearchQuery] = useState("");
+  const [isRoomDropdownOpen, setIsRoomDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsRoomDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredFacilityRooms = useMemo(() => {
+    if (!formData.dormId) return [];
+    return rooms
+      .filter(r => r.facilityId === formData.dormId)
+      .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+  }, [rooms, formData.dormId]);
+
+  const searchedRooms = useMemo(() => {
+    if (!roomSearchQuery) return filteredFacilityRooms;
+    const lowerQuery = roomSearchQuery.toLowerCase();
+    return filteredFacilityRooms.filter(r => r.roomNumber.toLowerCase().includes(lowerQuery));
+  }, [filteredFacilityRooms, roomSearchQuery]);
+
+  const exactRoomMatch = filteredFacilityRooms.find(r => r.roomNumber.toLowerCase() === roomSearchQuery.trim().toLowerCase());
+  const [pendingRoomSelect, setPendingRoomSelect] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (pendingRoomSelect) {
+      const newlyAdded = rooms.find(r => r.facilityId === formData.dormId && r.roomNumber.toLowerCase() === pendingRoomSelect.toLowerCase());
+      if (newlyAdded) {
+        setFormData(prev => ({ ...prev, roomId: newlyAdded.id }));
+        setPendingRoomSelect(null);
+        setIsRoomDropdownOpen(false);
+      }
+    }
+  }, [rooms, pendingRoomSelect, formData.dormId]);
+
+  const handleRoomCreateAndSelect = async () => {
+    if (!roomSearchQuery.trim() || exactRoomMatch || !formData.dormId) return;
+    
+    const newRoomName = roomSearchQuery.trim();
+    try {
+      setPendingRoomSelect(newRoomName);
+      const newRoom = {
+        facilityId: formData.dormId,
+        roomNumber: newRoomName,
+        block: 'Özel Konum',
+        bedCount: 0,
+        genderType: 'mixed' as const,
+        status: 'active' as const,
+        notes: 'Sistem tarafından otomatik oluşturulan özel konum',
+      };
+      await addRoom(newRoom);
+      setRoomSearchQuery('');
+    } catch (error) {
+      console.error(error);
+      setPendingRoomSelect(null);
+    }
+  };
+
+  // Display selected room name
+  const selectedRoomForForm = rooms.find(r => r.id === formData.roomId);
 
   // Filter Data
   const visibleTickets = useMemo(() => {
@@ -139,8 +220,18 @@ export default function Maintenance() {
       });
     }
 
+    if (!editingTicket) {
+      setSearchQuery('');
+      setFilterStatus('Açık');
+      setFilterFacility('all');
+      setFilterHotel('all');
+      setFilterPriority('all');
+    }
+
     setShowAddModal(false);
     setEditingTicket(null);
+    setSuccessMessage(editingTicket ? 'Arıza kaydı başarıyla güncellendi.' : 'Yeni arıza kaydı başarıyla eklendi.');
+    setTimeout(() => setSuccessMessage(null), 5000);
   };
 
   const handleStatusSubmit = async (e: React.FormEvent) => {
@@ -246,6 +337,23 @@ export default function Maintenance() {
           )
         }
       />
+
+      {successMessage && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="p-4 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl flex items-center justify-between"
+        >
+          <div className="flex items-center gap-3">
+            <CheckCircle className="w-5 h-5 text-emerald-600" />
+            <span className="font-medium text-sm">{successMessage}</span>
+          </div>
+          <button onClick={() => setSuccessMessage(null)} className="text-emerald-600 hover:text-emerald-800 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </motion.div>
+      )}
 
       <div className="card-standard p-4">
         <div className="flex flex-col xl:flex-row xl:items-center gap-3">
@@ -452,12 +560,74 @@ export default function Maintenance() {
                     {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500 mb-1">Oda Numarası</label>
-                  <select value={formData.roomId} onChange={e => setFormData({...formData, roomId: e.target.value})} disabled={!formData.dormId} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]">
-                    <option value="">Ortak Alan</option>
-                    {rooms.filter(r => r.facilityId === formData.dormId).map(r => <option key={r.id} value={r.id}>{r.roomNumber}</option>)}
-                  </select>
+                <div className="relative" ref={dropdownRef}>
+                  <label className="block text-xs font-semibold text-stone-500 mb-1">Konum / Oda Numarası</label>
+                  <button 
+                    type="button" 
+                    disabled={!formData.dormId}
+                    onClick={() => setIsRoomDropdownOpen(!isRoomDropdownOpen)}
+                    className="w-full px-3 py-2 border rounded-lg text-left bg-white focus:outline-none focus:border-[#7C8363] disabled:bg-stone-50 disabled:text-stone-400 flex items-center justify-between"
+                  >
+                    <span className="truncate whitespace-nowrap overflow-hidden text-ellipsis">
+                      {selectedRoomForForm ? selectedRoomForForm.roomNumber : (formData.roomId ? "Özel Konum" : "Seçiniz Veya Yazınız...")}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-stone-400 shrink-0" />
+                  </button>
+                  
+                  <AnimatePresence>
+                    {isRoomDropdownOpen && formData.dormId && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}
+                        className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 flex flex-col overflow-hidden"
+                      >
+                        <div className="p-2 border-b shrink-0 flex items-center gap-2">
+                          <Search className="w-4 h-4 text-stone-400 shrink-0" />
+                          <input 
+                            type="text" 
+                            placeholder="Oda ara veya yeni konum yaz..." 
+                            value={roomSearchQuery}
+                            onChange={e => setRoomSearchQuery(e.target.value)}
+                            className="w-full text-sm outline-none"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="overflow-y-auto p-1 text-sm">
+                          <button 
+                              type="button"
+                              onClick={() => { setFormData({ ...formData, roomId: '' }); setIsRoomDropdownOpen(false); setRoomSearchQuery(''); }}
+                              className={cn("w-full text-left px-3 py-2 rounded-md hover:bg-stone-50 transition-colors", !formData.roomId && "bg-stone-100 font-medium")}
+                            >
+                              Ortak Alan
+                          </button>
+                          {searchedRooms.map(r => (
+                            <button 
+                              key={r.id} 
+                              type="button"
+                              onClick={() => { setFormData({ ...formData, roomId: r.id }); setIsRoomDropdownOpen(false); setRoomSearchQuery(''); }}
+                              className={cn("w-full text-left flex items-center gap-2 px-3 py-2 rounded-md hover:bg-stone-50 transition-colors", formData.roomId === r.id && "bg-[#7C8363]/10 text-[#7C8363] font-medium")}
+                            >
+                              {r.roomNumber}
+                              {r.block === 'Özel Konum' && <span className="text-[10px] bg-stone-100 border text-stone-500 px-1.5 py-0.5 rounded leading-none">Özel Konum</span>}
+                            </button>
+                          ))}
+                          {roomSearchQuery.trim() && !exactRoomMatch && (
+                            <button
+                              type="button"
+                              disabled={!!pendingRoomSelect}
+                              onClick={handleRoomCreateAndSelect}
+                              className="w-full text-left px-3 py-2 rounded-md bg-[#7C8363]/5 hover:bg-[#7C8363]/10 text-[#7C8363] flex items-center justify-between font-medium border border-dashed border-[#7C8363]/30 mt-1"
+                            >
+                              <span className="flex items-center gap-2">
+                                <Plus className="w-3 h-3" />
+                                "{roomSearchQuery}" Konumu Ekle
+                              </span>
+                              {pendingRoomSelect && <div className="w-3 h-3 border-2 border-[#7C8363]/20 border-t-[#7C8363] rounded-full animate-spin" />}
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 

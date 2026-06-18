@@ -73,10 +73,7 @@ export default function DataSync() {
     // 3. Facilities
     unsubs.push(
       onSnapshot(collection(db, "facilities"), (snapshot: any) => {
-        let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Facility));
-        if (currentUser.role === 'hotel_hr_manager') {
-          data = data.filter(d => d.allowedHotelIds?.some((id: string) => hotelIds.includes(id)) || (d as any).hotelId && hotelIds.includes((d as any).hotelId));
-        }
+        const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Facility));
         setFacilities(data);
       }, (error: any) => handleFirestoreError(error, OperationType.LIST, "facilities"))
     );
