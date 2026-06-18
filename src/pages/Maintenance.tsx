@@ -8,6 +8,7 @@ import { cn } from "../lib/utils";
 import { MaintenanceTicket, ActionLog } from "../types";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
+import { motion, AnimatePresence } from "motion/react";
 
 function formatTimeDiff(startTime: number, endTime: number = Date.now()) {
   const diffInSeconds = Math.floor((endTime - startTime) / 1000);
@@ -34,17 +35,6 @@ export default function Maintenance() {
     addLog, logs, currentUser, roles 
   } = useStore();
   
-  // Security check
-  if (!canViewPage(currentUser?.role, PAGE_KEYS.maintenance, useStore.getState().rolesPermissions)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
-        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
-        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
-        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
-      </div>
-    );
-  }
-
   const rp = useStore.getState().rolesPermissions;
   const canCreate = can(currentUser?.role, 'create_ticket', PAGE_KEYS.maintenance, rp);
   const canEdit = can(currentUser?.role, 'edit_ticket', PAGE_KEYS.maintenance, rp);
@@ -228,6 +218,16 @@ export default function Maintenance() {
     };
     return <span className={cn("px-2 py-0.5 rounded text-[10px] uppercase font-bold", colors[priority] || colors['Düşük'])}>{priority}</span>;
   };
+
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.maintenance, useStore.getState().rolesPermissions)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full flex flex-col p-6 space-y-6">

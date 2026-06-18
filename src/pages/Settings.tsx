@@ -5,6 +5,7 @@ import { PagePermission } from "../types";
 import { canViewPage, PAGE_KEYS, ROLE_NAMES, PERMISSIONS_MATRIX } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 import { cn } from "../lib/utils";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function Settings() {
   const { users, rolesPermissions, currentUser, addUser, updateUser, deleteUser, hotels, facilities, updateRolePermissions } = useStore();
@@ -294,9 +295,16 @@ export default function Settings() {
       )}
 
       {/* User Modal */}
+      <AnimatePresence>
       {showAddForm && (
         <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+          >
             <div className="p-6 border-b border-[#E8E6E1] flex justify-between items-center bg-[#FDFCFB]">
               <h2 className="text-xl font-bold text-stone-800">{editingUser ? 'Kullanıcıyı Düzenle' : 'Yeni Kullanıcı Ekle'}</h2>
               <button onClick={closeForm} className="p-2 text-stone-400 hover:text-stone-600 transition-colors rounded-full hover:bg-stone-100"><X className="w-5 h-5"/></button>
@@ -400,9 +408,10 @@ export default function Settings() {
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

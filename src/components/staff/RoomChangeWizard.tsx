@@ -4,6 +4,7 @@ import { useStore } from '../../store/useStore';
 import { Staff, Room, Facility } from '../../types';
 import { cn } from '../../lib/utils';
 import { ROLE_NAMES } from '../../lib/permissions';
+import { motion } from 'motion/react';
 
 interface RoomChangeWizardProps {
   staff: Staff;
@@ -139,7 +140,13 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         <div className="p-6 border-b border-[#E8E6E1] flex justify-between items-center bg-[#FDFCFB]">
           <div>
             <h2 className="text-xl font-bold text-stone-800 flex items-center gap-2">
@@ -336,7 +343,7 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
               </button>
            </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useStore } from "../store/useStore";
 import { cn } from "../lib/utils";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
+import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 
 export default function RoomManagement() {
@@ -27,17 +28,6 @@ export default function RoomManagement() {
 
   const canEdit = can(currentUser?.role, 'edit_room', PAGE_KEYS.rooms, useStore.getState().rolesPermissions);
   const canDelete = can(currentUser?.role, 'delete_room', PAGE_KEYS.rooms, useStore.getState().rolesPermissions);
-
-  // Security check
-  if (!canViewPage(currentUser?.role, PAGE_KEYS.rooms, useStore.getState().rolesPermissions)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
-        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
-        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
-        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
-      </div>
-    );
-  }
 
   const availableFacilities = useMemo(() => {
     if (!currentUser) return [];
@@ -144,16 +134,6 @@ export default function RoomManagement() {
     XLSX.utils.book_append_sheet(wb, ws, "Odalar");
     XLSX.writeFile(wb, "rooms_template.xlsx");
   };
-
-  if (!canViewPage(currentUser?.role, PAGE_KEYS.rooms, useStore.getState().rolesPermissions)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
-        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
-        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
-        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
-      </div>
-    );
-  }
 
   const handleSelectAll = (e: import('react').ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -267,6 +247,16 @@ export default function RoomManagement() {
       setImporting(false);
     }
   };
+
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.rooms, useStore.getState().rolesPermissions)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full flex flex-col p-6 gap-6">
@@ -386,9 +376,16 @@ export default function RoomManagement() {
         )}
       </div>
 
+      <AnimatePresence>
       {showAddForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 shrink-0 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl min-h-[450px] max-h-[90vh] flex flex-col overflow-hidden">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-2xl min-h-[450px] max-h-[90vh] flex flex-col overflow-hidden"
+          >
             <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1] shrink-0">
               <h3 className="text-xl font-bold text-[#2D332D]">Yeni Oda Kaydı</h3>
               <button onClick={() => setShowAddForm(false)} className="text-stone-400 hover:text-stone-600">
@@ -490,9 +487,10 @@ export default function RoomManagement() {
                 {activeTab === 'single' ? <><Plus className="w-4 h-4"/> Ekle</> : importing ? 'Yükleniyor...' : <><Upload className="w-4 h-4"/> Yükle</>}
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
+      </AnimatePresence>
 
       {/* Main Table Content */}
       <div className="card-standard flex flex-col bg-white overflow-hidden">
@@ -645,9 +643,16 @@ export default function RoomManagement() {
       </div>
 
       {/* Bulk Delete Confirm Modal */}
+      <AnimatePresence>
       {showBulkDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col"
+          >
             <div className="p-6 text-center">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <ShieldAlert className="w-8 h-8 text-red-600" />
@@ -671,9 +676,10 @@ export default function RoomManagement() {
                 Evet, Sil
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
+      </AnimatePresence>
 
     </div>
   );

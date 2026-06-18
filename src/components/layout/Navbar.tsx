@@ -35,6 +35,9 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   // Sadece yetkili kisiler approval görebilecek
   const canManageApprovals = currentUser?.role === 'super_admin' || currentUser?.role === 'hr_director';
   const pendingApprovals = approvalRequests.filter(r => r.status === 'Bekliyor');
+  
+  const pendingPlacement = staff.filter(s => s.status === 'pending_placement').length;
+  const pendingCheckout = staff.filter(s => s.status === 'pending_checkout').length;
 
   const handleLogout = () => {
     auth.signOut();
@@ -83,15 +86,28 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
 
       <div className="flex flex-1 items-center justify-between gap-x-4 self-stretch lg:gap-x-6">
         <div className="relative flex flex-1 items-center max-w-md">
-          {/* Arama */}
-          <div className="flex flex-1 items-center bg-stone-100 rounded-full px-4 py-2">
-            <span className="text-stone-400 text-sm">🔍</span>
-            <input
-              type="text"
-              placeholder="Personel veya oda ara..."
-              className="bg-transparent border-none focus:outline-none focus:ring-0 text-sm w-full ml-2"
-            />
-          </div>
+          {/* Bildirim Özeti */}
+          {(pendingPlacement > 0 || pendingCheckout > 0) ? (
+            <div className="flex flex-1 items-center gap-3 bg-[#FCFBF8] rounded-2xl px-4 py-2 border border-[#E8E6E1] shadow-sm">
+              <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.6)]"></div>
+              <span className="text-sm font-medium text-stone-600">
+                {pendingPlacement > 0 && pendingCheckout > 0 ? (
+                  <><strong className="text-stone-800">{pendingPlacement}</strong> personel yerleşim için, <strong className="text-stone-800">{pendingCheckout}</strong> personel çıkış işlemi için bekliyor.</>
+                ) : pendingPlacement > 0 ? (
+                  <><strong className="text-stone-800">{pendingPlacement}</strong> personel yerleşim için bekliyor.</>
+                ) : (
+                  <><strong className="text-stone-800">{pendingCheckout}</strong> personel çıkış işlemi için bekliyor.</>
+                )}
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center gap-3 bg-stone-50 rounded-2xl px-4 py-2 border border-[#E8E6E1] opacity-60">
+              <div className="w-2 h-2 rounded-full bg-[#7C8363] shrink-0"></div>
+              <span className="text-sm font-medium text-stone-500">
+                Tüm personel işlemleri tamamlandı, bekleyen görev yok.
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-x-6">
           <div className="relative">

@@ -7,20 +7,10 @@ import {
   BedSingle, AlertTriangle, LogOut, CheckCircle, Wrench, ShieldAlert
 } from 'lucide-react';
 import { canViewPage, PAGE_KEYS } from '../lib/permissions';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function RackManagement() {
   const { facilities, rooms, staff, accommodations, maintenanceTickets, currentUser, roles } = useStore();
-
-  // Security check
-  if (!canViewPage(currentUser?.role, PAGE_KEYS.rack, useStore.getState().rolesPermissions)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
-        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
-        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
-        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
-      </div>
-    );
-  }
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -105,6 +95,16 @@ export default function RackManagement() {
     if (!selectedRoomId) return null;
     return EnrichedRooms.find(r => r.id === selectedRoomId) || null;
   }, [selectedRoomId, EnrichedRooms]);
+
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.rack, useStore.getState().rolesPermissions)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full flex flex-col p-6 gap-6">
@@ -364,9 +364,16 @@ export default function RackManagement() {
       </div>
 
       {/* Room Details Modal */}
+      <AnimatePresence>
       {selectedRoomId && selectedRoomDetails && (
          <div className="fixed inset-0 z-50 flex items-center justify-end bg-stone-900/60 p-4 transition-all">
-           <div className="bg-white h-full w-full max-w-md rounded-l-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-10">
+           <motion.div 
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="bg-white h-[98vh] max-h-full w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+           >
               <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1] bg-[#FDFCFB] shrink-0">
                  <div>
                    <h2 className="text-2xl font-black font-mono text-[#2D332D] mb-1">Oda {selectedRoomDetails.roomNumber}</h2>
@@ -442,9 +449,10 @@ export default function RackManagement() {
                     <Wrench className="w-4 h-4 text-stone-400" /> Arıza Bildir
                  </button>
               </div>
-           </div>
+           </motion.div>
          </div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

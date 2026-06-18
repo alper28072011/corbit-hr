@@ -52,17 +52,6 @@ function CardContent({ className = "", children }: { className?: string, childre
 export default function Dashboard() {
   const { facilities, rooms, accommodations, staff, hotels, roles, currentUser } = useStore();
 
-  // Security check
-  if (!canViewPage(currentUser?.role, PAGE_KEYS.dashboard, useStore.getState().rolesPermissions)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
-        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
-        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
-        <p>Bu sayfayı görüntüleme yetkiniz yok. Yönetici ile iletişime geçin.</p>
-      </div>
-    );
-  }
-
   const authorizedFacilities = useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === 'facility_manager') {
@@ -116,7 +105,8 @@ export default function Dashboard() {
     // Otele Göre Konaklama (Bar Chart)
     const hotelCounts: Record<string, number> = {};
     activeStaff.forEach(s => {
-      const hName = hotels.find(h => h.id === s.hotelId)?.name || 'Bilinmeyen';
+      const hotel = hotels.find(h => h.id === s.hotelId);
+      const hName = hotel?.branchCode || hotel?.name || 'Bilinmeyen';
       hotelCounts[hName] = (hotelCounts[hName] || 0) + 1;
     });
     const hotelDistributionData = Object.entries(hotelCounts).map(([name, count]) => ({
@@ -203,6 +193,17 @@ export default function Dashboard() {
     }
     return null;
   };
+
+  // Security check
+  if (!canViewPage(currentUser?.role, PAGE_KEYS.dashboard, useStore.getState().rolesPermissions)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
+        <ShieldAlert className="w-16 h-16 mb-4 text-red-500 opacity-20" />
+        <h2 className="text-2xl font-bold text-stone-700">Yetkisiz Erişim</h2>
+        <p>Bu sayfayı görüntüleme yetkiniz yok. Yönetici ile iletişime geçin.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full flex flex-col p-6 space-y-6">

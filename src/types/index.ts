@@ -1,6 +1,7 @@
 export interface Hotel {
   id: string;
   name: string;
+  branchCode?: string;
   status: 'active' | 'passive';
 }
 
@@ -84,7 +85,7 @@ export interface Staff {
   position: string;
   hotelId: string;
   gender: 'male' | 'female';
-  status: 'pending_placement' | 'placed' | 'left' | 'pending_approval';
+  status: 'pending_placement' | 'placed' | 'left' | 'pending_approval' | 'pending_checkout';
   notes?: string;
   specialNote?: string;
 }

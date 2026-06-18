@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { Staff, Room, Accommodation, Facility, Hotel } from '../../types';
 import { collection, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface CheckInWizardProps {
   staffMember: Staff;
@@ -122,10 +123,31 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
     return filtered.sort((a, b) => {
       if (a.isRecommended && !b.isRecommended) return -1;
       if (!a.isRecommended && b.isRecommended) return 1;
-      return b.recommendedScore - a.recommendedScore;
+      if (a.recommendedScore !== b.recommendedScore) {
+        return b.recommendedScore - a.recommendedScore;
+      }
+      // Orthen sort by room number ascending
+      return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true });
     });
 
   }, [matchingRooms, searchQuery, filterType]);
+
+  const { ownHotelFacilities, approvalRooms } = useMemo(() => {
+    const ownRooms = filteredAndSortedRooms.filter(r => !r.requiresApproval);
+    const approval = filteredAndSortedRooms.filter(r => r.requiresApproval);
+    
+    // Group ownRooms by facility
+    const grouped = ownRooms.reduce((acc, room) => {
+      if (!acc[room.facilityName]) {
+        acc[room.facilityName] = [];
+      }
+      acc[room.facilityName].push(room);
+      return acc;
+    }, {} as Record<string, typeof ownRooms>);
+    
+    return { ownHotelFacilities: grouped, approvalRooms: approval };
+  }, [filteredAndSortedRooms]);
+
 
 
   const handleInitPlacement = (roomId: string, facilityId: string, requiresApproval: boolean, isFamily: boolean) => {
@@ -175,8 +197,15 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 p-4 shrink-0 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 p-4 shrink-0 overflow-y-auto">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+      >
         
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1] bg-[#FDFCFB] shrink-0">
@@ -236,115 +265,248 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
               <p className="text-sm mt-1">Cinsiyet veya yetki kısıtlamaları nedeniyle eşleşen bir sonuç yok.</p>
             </div>
           ) : (
-            <div className="grid gap-3">
-              {filteredAndSortedRooms.map((room) => (
-                <div key={room.id} className={cn(
-                  "p-4 rounded-xl border bg-white shadow-sm transition-all flex flex-col md:flex-row gap-4 items-start md:items-center",
-                  room.isRecommended ? "border-amber-300 bg-amber-50/10" : "border-[#E8E6E1] hover:border-[#7C8363]"
-                )}>
-                  
-                  {/* Room Status/Info */}
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h4 className="font-bold text-[#2D332D] text-lg">{room.roomNumber}</h4>
-                      <span className="text-sm font-medium text-stone-500">· {room.facilityName}</span>
-                      
-                      {room.genderType === 'mixed' && (
-                        <span className={cn(
-                           "px-2 py-0.5 text-xs font-bold rounded flex items-center gap-1",
-                           room.effectiveGender === 'mixed' ? "bg-stone-100 text-stone-600 border border-stone-200" :
-                           room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border border-pink-200" :
-                           "bg-blue-100 text-blue-700 border border-blue-200"
-                        )}>
-                           {room.effectiveGender === 'mixed' ? 'Karma (Boş)' : `Karma ➔ ${room.effectiveGender === 'female' ? 'Kadın' : 'Erkek'}`}
-                        </span>
-                      )}
-                      
-                      {room.genderType === 'Aile' && (
-                         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded">
-                            Aile Odası
-                         </span>
-                      )}
+            <div className="flex flex-col gap-8">
+              {/* Own Hotel Facilities */}
+              {Object.entries(ownHotelFacilities).length > 0 && (
+                <div className="flex flex-col gap-6">
+                  {Object.entries(ownHotelFacilities).map(([facilityName, _rooms]) => {
+                    const rooms = _rooms as any[];
+                    return (
+                    <div key={facilityName}>
+                      <h4 className="text-sm font-bold text-stone-500 uppercase tracking-wider mb-3 px-1">{facilityName}</h4>
+                      <div className="grid gap-3">
+                        {rooms.map((room) => (
+                          <div key={room.id} className={cn(
+                            "p-4 rounded-xl border bg-white shadow-sm transition-all flex flex-col md:flex-row gap-4 items-start md:items-center",
+                            room.isRecommended ? "border-amber-300 bg-amber-50/10" : "border-[#E8E6E1] hover:border-[#7C8363]"
+                          )}>
+                            
+                            {/* Room Status/Info */}
+                            <div className="flex-1">
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <h4 className="font-bold text-[#2D332D] text-lg">{room.roomNumber}</h4>
+                                <span className="text-sm font-medium text-stone-500">· {room.facilityName}</span>
+                                
+                                {room.genderType === 'mixed' && (
+                                  <span className={cn(
+                                     "px-2 py-0.5 text-xs font-bold rounded flex items-center gap-1",
+                                     room.effectiveGender === 'mixed' ? "bg-stone-100 text-stone-600 border border-stone-200" :
+                                     room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border border-pink-200" :
+                                     "bg-blue-100 text-blue-700 border border-blue-200"
+                                  )}>
+                                     {room.effectiveGender === 'mixed' ? 'Karma (Boş)' : `Karma ➔ ${room.effectiveGender === 'female' ? 'Kadın' : 'Erkek'}`}
+                                  </span>
+                                )}
+                                
+                                {room.genderType === 'Aile' && (
+                                   <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded">
+                                      Aile Odası
+                                   </span>
+                                )}
 
-                      {room.isRecommended && (
-                        <span className="ml-0 md:ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Önerilen
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="text-sm text-stone-600 flex flex-wrap gap-x-4 gap-y-1">
-                      <span>{room.block && `${room.block}`} {room.floor && `· ${room.floor}`}</span>
-                      <span className={cn("font-medium", room.hasMaintenance ? "text-red-500 flex items-center gap-1" : "")}>
-                         {room.hasMaintenance && <AlertTriangle className="w-3 h-3"/>}
-                         {room.hasMaintenance ? "Açık Arıza Kaydı Var" : ""}
-                      </span>
-                    </div>
+                                {room.isRecommended && (
+                                  <span className="ml-0 md:ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" /> Önerilen
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <div className="text-sm text-stone-600 flex flex-wrap gap-x-4 gap-y-1">
+                                <span>{room.block && `${room.block}`} {room.floor && `· ${room.floor}`}</span>
+                                <span className={cn("font-medium", room.hasMaintenance ? "text-red-500 flex items-center gap-1" : "")}>
+                                   {room.hasMaintenance && <AlertTriangle className="w-3 h-3"/>}
+                                   {room.hasMaintenance ? "Açık Arıza Kaydı Var" : ""}
+                                </span>
+                              </div>
 
-                    {/* Current Residents Summary */}
-                    <div className="mt-3 bg-stone-50 p-2.5 rounded-lg border border-stone-100">
-                      <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
-                        Mevcut Durum ({room.currentResidents.length} Kişi Kalıyor / {room.availableBeds} Boş Yatak)
-                      </p>
-                      {room.currentResidents.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                           {room.currentResidents.map(res => (
-                             <span key={res.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-stone-200 rounded text-xs font-medium text-stone-700 shadow-sm">
-                               {hotels.find(h => h.id === res.hotelId)?.name || 'Bilinmeyen'} / {res.department}
-                             </span>
-                           ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-stone-400 italic">Oda şu an tamamen boş.</p>
-                      )}
+                              {/* Current Residents Summary */}
+                              <div className="mt-3 bg-stone-50 p-2.5 rounded-lg border border-stone-100">
+                                <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
+                                  Mevcut Durum ({room.currentResidents.length} Kişi Kalıyor / {room.availableBeds} Boş Yatak)
+                                </p>
+                                {room.currentResidents.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2">
+                                     {room.currentResidents.map((res: any) => (
+                                       <span key={res.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-stone-200 rounded text-xs font-medium text-stone-700 shadow-sm">
+                                         {hotels.find(h => h.id === res.hotelId)?.name || 'Bilinmeyen'} / {res.department}
+                                       </span>
+                                     ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-stone-400 italic">Oda şu an tamamen boş.</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="w-full md:w-auto shrink-0 flex flex-col items-center gap-2">
+                              {room.hasGenderMismatch && !room.isFamilyRoom && (
+                                <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                                  <AlertTriangle className="w-3 h-3 shrink-0"/> Cinsiyet Uyuşmazlığı
+                                </div>
+                              )}
+                              {room.requiresFamilyApproval && !room.hasGenderMismatch && (
+                                <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                                  <AlertTriangle className="w-3 h-3 shrink-0"/> Aile Odası (Onay Gerekli)
+                                </div>
+                              )}
+                              {room.requiresFamilyApproval && room.hasGenderMismatch && (
+                                 <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                                    <AlertTriangle className="w-3 h-3 shrink-0"/> İstisnai Yerleşim
+                                 </div>
+                              )}
+                              {room.requiresCrossDormApproval && !room.requiresFamilyApproval && (
+                                <div className="text-xs text-orange-600 font-semibold bg-orange-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                                  <AlertTriangle className="w-3 h-3 shrink-0"/> Farklı Lojman (Onay Gerekli)
+                                </div>
+                              )}
+                              <button 
+                                onClick={() => handleInitPlacement(room.id, room.facilityId, room.requiresApproval, room.requiresFamilyApproval || room.hasGenderMismatch)}
+                                disabled={isSubmitting}
+                                className={cn("w-full md:w-auto px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-colors disabled:opacity-50",
+                                  room.requiresApproval 
+                                    ? "bg-amber-500 hover:bg-amber-600 text-white" 
+                                    : "bg-[#7C8363] hover:bg-[#6A7152] text-white"
+                                )}
+                              >
+                                {room.requiresApproval ? "İK Onayına Gönder" : "Yerleştir"}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Approval Rooms */}
+              {approvalRooms.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 mb-1 px-1">
+                    <h4 className="text-sm font-bold text-amber-600 uppercase tracking-wider">İK Onayı Gerektiren Lojmanlar (Çapraz Seçim vb.)</h4>
                   </div>
+                  <div className="grid gap-3 opacity-90">
+                    {approvalRooms.map(room => (
+                      <div key={room.id} className={cn(
+                        "p-4 rounded-xl border bg-white shadow-sm transition-all flex flex-col md:flex-row gap-4 items-start md:items-center",
+                        room.isRecommended ? "border-amber-300 bg-amber-50/10" : "border-amber-100 hover:border-amber-300 bg-amber-50/30"
+                      )}>
+                        
+                        {/* Room Status/Info */}
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h4 className="font-bold text-[#2D332D] text-lg">{room.roomNumber}</h4>
+                            <span className="text-sm font-medium text-stone-500">· {room.facilityName}</span>
+                            
+                            {room.genderType === 'mixed' && (
+                              <span className={cn(
+                                 "px-2 py-0.5 text-xs font-bold rounded flex items-center gap-1",
+                                 room.effectiveGender === 'mixed' ? "bg-stone-100 text-stone-600 border border-stone-200" :
+                                 room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border border-pink-200" :
+                                 "bg-blue-100 text-blue-700 border border-blue-200"
+                              )}>
+                                 {room.effectiveGender === 'mixed' ? 'Karma (Boş)' : `Karma ➔ ${room.effectiveGender === 'female' ? 'Kadın' : 'Erkek'}`}
+                              </span>
+                            )}
+                            
+                            {room.genderType === 'Aile' && (
+                               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded">
+                                  Aile Odası
+                               </span>
+                            )}
 
-                  {/* Actions */}
-                  <div className="w-full md:w-auto shrink-0 flex flex-col items-center gap-2">
-                    {room.hasGenderMismatch && !room.isFamilyRoom && (
-                      <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
-                        <AlertTriangle className="w-3 h-3 shrink-0"/> Cinsiyet Uyuşmazlığı
+                            {room.isRecommended && (
+                              <span className="ml-0 md:ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> Önerilen
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="text-sm text-stone-600 flex flex-wrap gap-x-4 gap-y-1">
+                            <span>{room.block && `${room.block}`} {room.floor && `· ${room.floor}`}</span>
+                            <span className={cn("font-medium", room.hasMaintenance ? "text-red-500 flex items-center gap-1" : "")}>
+                               {room.hasMaintenance && <AlertTriangle className="w-3 h-3"/>}
+                               {room.hasMaintenance ? "Açık Arıza Kaydı Var" : ""}
+                            </span>
+                          </div>
+
+                          {/* Current Residents Summary */}
+                          <div className="mt-3 bg-stone-50 p-2.5 rounded-lg border border-stone-100">
+                            <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
+                              Mevcut Durum ({room.currentResidents.length} Kişi Kalıyor / {room.availableBeds} Boş Yatak)
+                            </p>
+                            {room.currentResidents.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                 {room.currentResidents.map((res: any) => (
+                                   <span key={res.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-stone-200 rounded text-xs font-medium text-stone-700 shadow-sm">
+                                     {hotels.find(h => h.id === res.hotelId)?.name || 'Bilinmeyen'} / {res.department}
+                                   </span>
+                                 ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-stone-400 italic">Oda şu an tamamen boş.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="w-full md:w-auto shrink-0 flex flex-col items-center gap-2">
+                          {room.hasGenderMismatch && !room.isFamilyRoom && (
+                            <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                              <AlertTriangle className="w-3 h-3 shrink-0"/> Cinsiyet Uyuşmazlığı
+                            </div>
+                          )}
+                          {room.requiresFamilyApproval && !room.hasGenderMismatch && (
+                            <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                              <AlertTriangle className="w-3 h-3 shrink-0"/> Aile Odası (Onay Gerekli)
+                            </div>
+                          )}
+                          {room.requiresFamilyApproval && room.hasGenderMismatch && (
+                             <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                                <AlertTriangle className="w-3 h-3 shrink-0"/> İstisnai Yerleşim
+                             </div>
+                          )}
+                          {room.requiresCrossDormApproval && !room.requiresFamilyApproval && (
+                            <div className="text-xs text-orange-600 font-semibold bg-orange-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
+                              <AlertTriangle className="w-3 h-3 shrink-0"/> Farklı Lojman (Onay Gerekli)
+                            </div>
+                          )}
+                          <button 
+                            onClick={() => handleInitPlacement(room.id, room.facilityId, room.requiresApproval, room.requiresFamilyApproval || room.hasGenderMismatch)}
+                            disabled={isSubmitting}
+                            className={cn("w-full md:w-auto px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-colors disabled:opacity-50",
+                              room.requiresApproval 
+                                ? "bg-amber-500 hover:bg-amber-600 text-white" 
+                                : "bg-[#7C8363] hover:bg-[#6A7152] text-white"
+                            )}
+                          >
+                            {room.requiresApproval ? "İK Onayına Gönder" : "Yerleştir"}
+                          </button>
+                        </div>
                       </div>
-                    )}
-                    {room.requiresFamilyApproval && !room.hasGenderMismatch && (
-                      <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
-                        <AlertTriangle className="w-3 h-3 shrink-0"/> Aile Odası (Onay Gerekli)
-                      </div>
-                    )}
-                    {room.requiresFamilyApproval && room.hasGenderMismatch && (
-                       <div className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
-                          <AlertTriangle className="w-3 h-3 shrink-0"/> İstisnai Yerleşim
-                       </div>
-                    )}
-                    {room.requiresCrossDormApproval && !room.requiresFamilyApproval && (
-                      <div className="text-xs text-orange-600 font-semibold bg-orange-50 px-2 py-1 rounded flex items-center gap-1 max-w-[150px] text-center mb-1">
-                        <AlertTriangle className="w-3 h-3 shrink-0"/> Farklı Lojman (Onay Gerekli)
-                      </div>
-                    )}
-                    <button 
-                      onClick={() => handleInitPlacement(room.id, room.facilityId, room.requiresApproval, room.requiresFamilyApproval || room.hasGenderMismatch)}
-                      disabled={isSubmitting}
-                      className={cn("w-full md:w-auto px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-colors disabled:opacity-50",
-                        room.requiresApproval 
-                          ? "bg-amber-500 hover:bg-amber-600 text-white" 
-                          : "bg-[#7C8363] hover:bg-[#6A7152] text-white"
-                      )}
-                    >
-                      {room.requiresApproval ? "İK Onayına Gönder" : "Yerleştir"}
-                    </button>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
+    </div>
 
-      {/* Approval Modal */}
+    {/* Approval Modal */}
+      <AnimatePresence>
       {approvalModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/60 p-4">
-           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+           <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+           >
               <h3 className="text-lg font-bold text-[#2D332D] mb-2">İK Onayına Gönder</h3>
               <p className="text-sm text-stone-500 mb-4">
                  Bu yerleşim için İnsan Kaynakları departmanının onayı gerekmektedir. Lütfen onay talebiniz için bir gerekçe/not yazın.
@@ -373,9 +535,10 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                     Onaya Gönder
                  </button>
               </div>
-           </div>
+           </motion.div>
         </div>
       )}
-    </div>
+      </AnimatePresence>
+    </>
   );
 }

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
 
 interface AppState {
@@ -55,11 +55,14 @@ interface AppState {
   bulkDeleteRooms: (roomIds: string[]) => Promise<void>;
 
   addStaff: (staffData: Omit<Staff, 'id'>) => Promise<void>;
+  bulkAddStaffWithPlacements: (staffList: Array<{ staff: Omit<Staff, 'id'>, placement?: { facilityId: string, roomId: string } }>) => Promise<void>;
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
+  bulkDeleteStaff: (ids: string[]) => Promise<void>;
   placeStaff: (staffId: string, facilityId: string, roomId: string) => Promise<void>;
   changeStaffRoom: (staffId: string, oldRoomId: string, newRoomId: string, newFacilityId?: string) => Promise<void>;
   changeRoom: (accommodationId: string, newFacilityId: string, newRoomId: string) => Promise<void>;
+  notifyCheckoutStaff: (staffId: string) => Promise<void>;
   checkoutStaff: (accommodationId: string, checkoutDate: string) => Promise<void>;
   undoCheckoutStaff: (accommodationId: string) => Promise<void>;
 
@@ -311,6 +314,49 @@ export const useStore = create<AppState>((set, get) => ({
          }
       },
 
+      bulkAddStaffWithPlacements: async (staffList) => {
+        try {
+          const batch = writeBatch(db);
+          const state = get();
+          
+          staffList.forEach(item => {
+            const docRef = doc(collection(db, "staff"));
+            const staffData = { ...item.staff };
+            
+            if (item.placement) {
+              staffData.status = 'placed';
+              const accommodationRef = doc(collection(db, "accommodations"));
+              batch.set(accommodationRef, {
+                staffId: docRef.id,
+                facilityId: item.placement.facilityId,
+                roomId: item.placement.roomId,
+                checkInDate: new Date().toISOString().split('T')[0],
+                status: 'active'
+              });
+            } else {
+              staffData.status = 'pending_placement';
+            }
+            
+            batch.set(docRef, staffData);
+          });
+          
+          await batch.commit();
+
+          if (state.currentUser) {
+             await get().addLog({
+               entityId: 'bulk',
+               entityType: 'staff',
+               action: 'create',
+               changes: `${staffList.length} adet personel (gerekli yerleşimleriyle birlikte) toplu olarak oluşturuldu.`,
+               performedBy: state.currentUser.fullName || state.currentUser.email,
+               timestamp: Date.now()
+             });
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.CREATE, "bulkAddStaffWithPlacements");
+        }
+      },
+
       updateStaff: async (id, data) => {
          try {
            const state = get();
@@ -349,20 +395,81 @@ export const useStore = create<AppState>((set, get) => ({
            const state = get();
            const oldData = state.staff.find(s => s.id === id);
            
-           await deleteDoc(doc(db, "staff", id));
+           const batch = writeBatch(db);
            
+           // Personeli sil
+           batch.delete(doc(db, "staff", id));
+           
+           // İlgili konaklama kayıtlarını (accommodations) bul ve sil
+           const accQuery = query(collection(db, "accommodations"), where("staffId", "==", id));
+           const accSnapshot = await getDocs(accQuery);
+           accSnapshot.forEach(docSnap => {
+             batch.delete(docSnap.ref);
+           });
+           
+           // İlgili logları (action_logs) bul ve sil (İsteğe bağlı temizlik - istenirse yoruma alınabilir ama şu an veritabanında "kırıntı" kalmaması için ekliyoruz)
+           const logQuery = query(collection(db, "action_logs"), where("entityId", "==", id));
+           const logSnapshot = await getDocs(logQuery);
+           logSnapshot.forEach(docSnap => {
+             batch.delete(docSnap.ref);
+           });
+           
+           await batch.commit();
+           
+           // Eğer silme logu oluşturmak istiyorsak bunu ayrı bir doc olarak ekleriz (eski id'yi referans alarak)
+           // Fakat entityId si id olan logları yukarıda sildiğimiz için, yeni log the entityId id olarak atansa bile listelenecek sayfa bulunamayabilir.
+           // Ya da genel loglara düşmesi için personelin silindiğine dair log atılabilir.
            if (state.currentUser && oldData) {
               await get().addLog({
-                 entityId: id,
+                 entityId: state.currentUser.id, 
                  entityType: 'staff',
                  action: 'delete',
-                 changes: `Personel kaydı silindi (${oldData.fullName}).`,
+                 changes: `Personel kaydı ve tüm bağlantılı verileri silindi (${oldData.fullName}).`,
                  performedBy: state.currentUser.fullName || state.currentUser.email,
                  timestamp: Date.now()
               });
            }
          } catch (error) {
            handleFirestoreError(error, OperationType.DELETE, `staff/${id}`);
+         }
+      },
+
+      bulkDeleteStaff: async (ids) => {
+         try {
+           const state = get();
+           const chunkSize = 30; // Firestore 'in' query limit is 30
+           
+           for (let i = 0; i < ids.length; i += chunkSize) {
+             const chunk = ids.slice(i, i + chunkSize);
+             if (chunk.length === 0) break;
+             
+             const batch = writeBatch(db);
+             
+             chunk.forEach(id => batch.delete(doc(db, "staff", id)));
+             
+             const accQuery = query(collection(db, "accommodations"), where("staffId", "in", chunk));
+             const accSnapshot = await getDocs(accQuery);
+             accSnapshot.forEach(docSnap => batch.delete(docSnap.ref));
+             
+             const logQuery = query(collection(db, "action_logs"), where("entityId", "in", chunk));
+             const logSnapshot = await getDocs(logQuery);
+             logSnapshot.forEach(docSnap => batch.delete(docSnap.ref));
+             
+             await batch.commit();
+           }
+           
+           if (state.currentUser && ids.length > 0) {
+              await get().addLog({
+                 entityId: state.currentUser.id,
+                 entityType: 'staff',
+                 action: 'delete',
+                 changes: `${ids.length} adet personel kaydı ve tüm bağlantılı verileri toplu olarak silindi.`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
+         } catch (error) {
+           handleFirestoreError(error, OperationType.DELETE, "bulkDeleteStaff");
          }
       },
         
@@ -549,6 +656,26 @@ export const useStore = create<AppState>((set, get) => ({
            }
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
+         }
+      },
+
+      notifyCheckoutStaff: async (staffId) => {
+         try {
+           const state = get();
+           await updateDoc(doc(db, "staff", staffId), { status: 'pending_checkout' });
+           
+           if (state.currentUser) {
+              await get().addLog({
+                 entityId: staffId,
+                 entityType: 'staff',
+                 action: 'update',
+                 changes: `Personel için lojmandan çıkış bildirildi (Çıkış Bekliyor).`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
+         } catch (error) {
+           handleFirestoreError(error, OperationType.UPDATE, `staff/${staffId}`);
          }
       },
 

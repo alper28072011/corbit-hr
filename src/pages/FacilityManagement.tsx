@@ -116,21 +116,21 @@ export default function FacilityManagement() {
 // --- HOTELS TAB ---
 
 function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel, showForm, setShowForm }: any) {
-  const [formData, setFormData] = useState({ name: '', status: 'active' as const });
+  const [formData, setFormData] = useState({ name: '', branchCode: '', status: 'active' as const });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState({ name: '', status: 'active' as const });
+  const [editData, setEditData] = useState({ name: '', branchCode: '', status: 'active' as const });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
-    addHotel({ name: formData.name.trim(), status: formData.status as 'active' | 'passive' });
-    setFormData({ name: '', status: 'active' });
+    addHotel({ name: formData.name.trim(), branchCode: formData.branchCode.trim().toUpperCase() || undefined, status: formData.status as 'active' | 'passive' });
+    setFormData({ name: '', branchCode: '', status: 'active' });
     setShowForm(false);
   };
 
   const handleUpdate = () => {
     if (!editData.name.trim() || !editingId) return;
-    updateHotel(editingId, { name: editData.name.trim(), status: editData.status });
+    updateHotel(editingId, { name: editData.name.trim(), branchCode: editData.branchCode.trim().toUpperCase() || undefined, status: editData.status });
     setEditingId(null);
   };
 
@@ -141,6 +141,10 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel, show
       {showForm && (
         <form onSubmit={handleSubmit} className="mb-6 p-4 bg-stone-50 border border-[#E8E6E1] rounded-xl flex items-end gap-4 shrink-0">
           <div className="flex-1">
+            <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Şube Kodu</label>
+            <input type="text" value={formData.branchCode} onChange={e => setFormData({...formData, branchCode: e.target.value})} className="w-full px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Örn: RPL" />
+          </div>
+          <div className="flex-[2]">
             <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Otel Adı</label>
             <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Örn: Grand Hotel" />
           </div>
@@ -163,22 +167,24 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel, show
           <table className="min-w-full text-left relative">
           <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
             <tr>
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider w-32">Şube Kodu</th>
               <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Otel Adı</th>
-              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider">Durum</th>
-              {canManage && <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>}
+              <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider w-32">Durum</th>
+              {canManage && <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right w-32">İşlemler</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E8E6E1] bg-white">
             {hotels.length === 0 ? (
-              <tr><td colSpan={3} className="px-6 py-8 text-center text-stone-500">Henüz otel eklenmemiş.</td></tr>
+              <tr><td colSpan={canManage ? 4 : 3} className="px-6 py-8 text-center text-stone-500">Henüz otel eklenmemiş.</td></tr>
             ) : (
               hotels.map((hotel: any) => (
                 <tr key={hotel.id} className="hover:bg-stone-50 transition-colors">
                   {editingId === hotel.id ? (
                     <>
+                      <td className="px-6 py-3"><input type="text" value={editData.branchCode} onChange={e => setEditData({...editData, branchCode: e.target.value})} className="w-full px-2 py-1 text-sm border rounded uppercase" placeholder="RPL" /></td>
                       <td className="px-6 py-3"><input type="text" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="w-full px-2 py-1 text-sm border rounded" /></td>
                       <td className="px-6 py-3">
-                        <select value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})} className="px-2 py-1 text-sm border rounded">
+                        <select value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})} className="px-2 py-1 text-sm border rounded w-full">
                           <option value="active">Aktif</option>
                           <option value="passive">Pasif</option>
                         </select>
@@ -192,6 +198,7 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel, show
                     </>
                   ) : (
                     <>
+                      <td className="px-6 py-4 font-mono text-sm text-stone-600">{hotel.branchCode || '-'}</td>
                       <td className="px-6 py-4 font-semibold text-stone-800">{hotel.name}</td>
                       <td className="px-6 py-4">
                         <span className={cn("inline-flex px-2 py-0.5 rounded text-xs font-semibold", hotel.status === 'active' ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-600")}>
@@ -201,7 +208,7 @@ function HotelsTab({ hotels, canManage, addHotel, updateHotel, deleteHotel, show
                       {canManage && (
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => { setEditingId(hotel.id); setEditData({ name: hotel.name, status: hotel.status }); }} className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg">
+                            <button onClick={() => { setEditingId(hotel.id); setEditData({ name: hotel.name, branchCode: hotel.branchCode || '', status: hotel.status }); }} className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg">
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button onClick={() => deleteHotel(hotel.id)} className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
