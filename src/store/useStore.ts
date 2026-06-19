@@ -359,11 +359,15 @@ export const useStore = create<AppState>()(
 
       addStaff: async (staffData) => {
          try {
-           const docRef = await addDoc(collection(db, "staff"), staffData);
+           const batch = writeBatch(db);
+           const staffDocRef = doc(collection(db, "staff"));
+           batch.set(staffDocRef, staffData);
+
            const state = get();
            if (state.currentUser) {
-             await get().addLog({
-               entityId: docRef.id,
+             const logDocRef = doc(collection(db, "logs"));
+             batch.set(logDocRef, {
+               entityId: staffDocRef.id,
                entityType: 'staff',
                action: 'create',
                changes: 'Personel kaydı oluşturuldu.',
@@ -371,6 +375,7 @@ export const useStore = create<AppState>()(
                timestamp: Date.now()
              });
            }
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.CREATE, "staff");
          }
@@ -402,10 +407,9 @@ export const useStore = create<AppState>()(
             batch.set(docRef, staffData);
           });
           
-          await batch.commit();
-
           if (state.currentUser) {
-             await get().addLog({
+             const logDocRef = doc(collection(db, "logs"));
+             batch.set(logDocRef, {
                entityId: 'bulk',
                entityType: 'staff',
                action: 'create',
@@ -414,6 +418,9 @@ export const useStore = create<AppState>()(
                timestamp: Date.now()
              });
           }
+          
+          await batch.commit();
+
         } catch (error) {
           handleFirestoreError(error, OperationType.CREATE, "bulkAddStaffWithPlacements");
         }
@@ -424,7 +431,8 @@ export const useStore = create<AppState>()(
            const state = get();
            const oldData = state.staff.find(s => s.id === id);
            
-           await updateDoc(doc(db, "staff", id), data);
+           const batch = writeBatch(db);
+           batch.update(doc(db, "staff", id), data);
 
            if (state.currentUser && oldData) {
              const changes: string[] = [];
@@ -437,7 +445,8 @@ export const useStore = create<AppState>()(
              });
 
              if (changes.length > 0) {
-               await get().addLog({
+               const logDocRef = doc(collection(db, "logs"));
+               batch.set(logDocRef, {
                  entityId: id,
                  entityType: 'staff',
                  action: 'update',
@@ -447,6 +456,7 @@ export const useStore = create<AppState>()(
                });
              }
            }
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `staff/${id}`);
          }
@@ -476,13 +486,9 @@ export const useStore = create<AppState>()(
              batch.delete(docSnap.ref);
            });
            
-           await batch.commit();
-           
-           // Eğer silme logu oluşturmak istiyorsak bunu ayrı bir doc olarak ekleriz (eski id'yi referans alarak)
-           // Fakat entityId si id olan logları yukarıda sildiğimiz için, yeni log the entityId id olarak atansa bile listelenecek sayfa bulunamayabilir.
-           // Ya da genel loglara düşmesi için personelin silindiğine dair log atılabilir.
            if (state.currentUser && oldData) {
-              await get().addLog({
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
                  entityId: state.currentUser.id, 
                  entityType: 'staff',
                  action: 'delete',
@@ -491,6 +497,8 @@ export const useStore = create<AppState>()(
                  timestamp: Date.now()
               });
            }
+           
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.DELETE, `staff/${id}`);
          }
@@ -566,6 +574,8 @@ export const useStore = create<AppState>()(
          }
 
          try {
+           const batch = writeBatch(db);
+
            const accData = {
               staffId,
               facilityId,
@@ -573,15 +583,19 @@ export const useStore = create<AppState>()(
               checkInDate: new Date().toISOString().split('T')[0],
               status: 'active'
            };
-           await addDoc(collection(db, "accommodations"), accData);
-           await updateDoc(doc(db, "staff", staffId), { status: 'placed' });
+           const accDocRef = doc(collection(db, "accommodations"));
+           batch.set(accDocRef, accData);
+           
+           const staffRef = doc(db, "staff", staffId);
+           batch.update(staffRef, { status: 'placed' });
            
            if (state.currentUser) {
               const fac = state.facilities.find(f => f.id === facilityId);
               const rm = state.rooms.find(r => r.id === roomId);
               const roomStr = fac && rm ? `${fac.name} / ${rm.roomNumber}` : 'Bilinmeyen Oda';
               
-              await get().addLog({
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
                  entityId: staffId,
                  entityType: 'staff',
                  action: 'check_in',
@@ -590,6 +604,8 @@ export const useStore = create<AppState>()(
                  timestamp: Date.now()
               });
            }
+           
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.CREATE, "accommodations");
          }
@@ -601,14 +617,16 @@ export const useStore = create<AppState>()(
            const acc = state.accommodations.find(a => a.id === accommodationId);
            if (!acc) return;
 
-           await updateDoc(doc(db, "accommodations", accommodationId), { 
+           const batch = writeBatch(db);
+           batch.update(doc(db, "accommodations", accommodationId), { 
              status: 'checked_out', 
              checkOutDate: checkoutDate 
            });
-           await updateDoc(doc(db, "staff", acc.staffId), { status: 'left' });
+           batch.update(doc(db, "staff", acc.staffId), { status: 'left' });
            
            if (state.currentUser) {
-              await get().addLog({
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
                  entityId: acc.staffId,
                  entityType: 'staff',
                  action: 'check_out',
@@ -617,6 +635,7 @@ export const useStore = create<AppState>()(
                  timestamp: Date.now()
               });
            }
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }
@@ -628,14 +647,16 @@ export const useStore = create<AppState>()(
            const acc = state.accommodations.find(a => a.id === accommodationId);
            if (!acc) return;
 
-           await updateDoc(doc(db, "accommodations", accommodationId), { 
+           const batch = writeBatch(db);
+           batch.update(doc(db, "accommodations", accommodationId), { 
              status: 'active', 
              checkOutDate: null 
            });
-           await updateDoc(doc(db, "staff", acc.staffId), { status: 'placed' });
+           batch.update(doc(db, "staff", acc.staffId), { status: 'placed' });
            
            if (state.currentUser) {
-              await get().addLog({
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
                  entityId: acc.staffId,
                  entityType: 'staff',
                  action: 'update',
@@ -644,6 +665,7 @@ export const useStore = create<AppState>()(
                  timestamp: Date.now()
               });
            }
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }
@@ -670,16 +692,11 @@ export const useStore = create<AppState>()(
              facilityId: newFacilityId || acc.facilityId
            });
 
-           // Note: We don't directly track people count on Room, it's calculated. 
-           // Staff document status is already 'placed'.
-
-           await batch.commit();
-
            if (state.currentUser) {
               const oldRoomStr = oldFac && oldRoom ? `${oldFac.name} ${oldRoom.roomNumber}` : 'Bilinmeyen Oda';
               const newRoomStr = `${fac.name} ${targetRoom.roomNumber}`;
-              
-              await get().addLog({
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
                  entityId: staffId,
                  entityType: 'staff',
                  action: 'room_change',
@@ -688,6 +705,8 @@ export const useStore = create<AppState>()(
                  timestamp: Date.now()
               });
            }
+
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, "accommodations");
          }
@@ -697,7 +716,10 @@ export const useStore = create<AppState>()(
            const state = get();
            const acc = state.accommodations.find(a => a.id === accommodationId);
            
-           await updateDoc(doc(db, "accommodations", accommodationId), {
+           const batch = writeBatch(db);
+           const accRef = doc(db, "accommodations", accommodationId);
+           
+           batch.update(accRef, {
              facilityId: newFacilityId,
              roomId: newRoomId
            });
@@ -706,8 +728,8 @@ export const useStore = create<AppState>()(
               const fac = state.facilities.find(f => f.id === newFacilityId);
               const rm = state.rooms.find(r => r.id === newRoomId);
               const roomStr = fac && rm ? `${fac.name} / ${rm.roomNumber}` : 'Bilinmeyen Oda';
-              
-              await get().addLog({
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
                  entityId: acc.staffId,
                  entityType: 'staff',
                  action: 'room_change',
@@ -716,6 +738,7 @@ export const useStore = create<AppState>()(
                  timestamp: Date.now()
               });
            }
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `accommodations/${accommodationId}`);
          }
@@ -724,10 +747,13 @@ export const useStore = create<AppState>()(
       notifyCheckoutStaff: async (staffId, checkOutDate) => {
          try {
            const state = get();
-           await updateDoc(doc(db, "staff", staffId), { status: 'pending_checkout', checkOutDate });
+           const batch = writeBatch(db);
+           const staffRef = doc(db, "staff", staffId);
+           batch.update(staffRef, { status: 'pending_checkout', checkOutDate });
            
            if (state.currentUser) {
-              await get().addLog({
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
                  entityId: staffId,
                  entityType: 'staff',
                  action: 'update',
@@ -736,6 +762,7 @@ export const useStore = create<AppState>()(
                  timestamp: Date.now()
               });
            }
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.UPDATE, `staff/${staffId}`);
          }
@@ -748,7 +775,29 @@ export const useStore = create<AppState>()(
              createdAt: Date.now(),
              status: 'Açık',
            };
-           await addDoc(collection(db, "maintenanceTickets"), payload);
+           const state = get();
+           const batch = writeBatch(db);
+           const ticketRef = doc(collection(db, "maintenanceTickets"));
+           batch.set(ticketRef, payload);
+
+           if (state.currentUser) {
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
+                 entityId: ticketRef.id,
+                 entityType: 'maintenance',
+                 action: 'create',
+                 changes: `Yeni arıza/bakım kaydı oluşturuldu. (${payload.title})`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
+
+           // Optimistic Update
+           set(s => ({
+              maintenanceTickets: [{ id: ticketRef.id, ...payload } as any, ...s.maintenanceTickets]
+           }));
+
+           await batch.commit();
          } catch (error) {
            handleFirestoreError(error, OperationType.CREATE, "maintenanceTickets");
          }

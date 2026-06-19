@@ -16,3 +16,12 @@ export function calculateAge(birthDateString?: string): number | null {
   }
   return age;
 }
+
+export function naturalSort<T>(items: T[], keyFn: (item: T) => string): T[] {
+  return [...items].sort((a, b) => {
+    return keyFn(a).localeCompare(keyFn(b), undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    });
+  });
+}

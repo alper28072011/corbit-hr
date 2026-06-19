@@ -79,48 +79,72 @@ export default function DataSync() {
     );
 
     // 4. Rooms
-    unsubs.push(
-      onSnapshot(collection(db, "rooms"), (snapshot: any) => {
-        let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Room));
-        if (currentUser.role === 'facility_manager') {
-          data = data.filter(d => facilityIds.includes(d.facilityId));
-        }
-        setRooms(data);
-      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "rooms"))
-    );
+    let roomsQuery = collection(db, "rooms") as any;
+    if (currentUser.role === 'facility_manager') {
+      if (facilityIds.length > 0) roomsQuery = query(collection(db, "rooms"), where("facilityId", "in", facilityIds.slice(0, 30)));
+      else roomsQuery = null;
+    }
+    if (roomsQuery) {
+      unsubs.push(
+        onSnapshot(roomsQuery, (snapshot: any) => {
+          const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Room));
+          setRooms(data);
+        }, (error: any) => handleFirestoreError(error, OperationType.LIST, "rooms"))
+      );
+    } else {
+      setRooms([]);
+    }
 
     // 5. Staff
-    unsubs.push(
-      onSnapshot(collection(db, "staff"), (snapshot: any) => {
-        let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Staff));
-        if (currentUser.role === 'hotel_hr_manager') {
-          data = data.filter(d => hotelIds.includes(d.hotelId));
-        }
-        setStaff(data);
-      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "staff"))
-    );
+    let staffQuery = collection(db, "staff") as any;
+    if (currentUser.role === 'hotel_hr_manager') {
+      if (hotelIds.length > 0) staffQuery = query(collection(db, "staff"), where("hotelId", "in", hotelIds.slice(0, 30)));
+      else staffQuery = null;
+    }
+    if (staffQuery) {
+      unsubs.push(
+        onSnapshot(staffQuery, (snapshot: any) => {
+          const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Staff));
+          setStaff(data);
+        }, (error: any) => handleFirestoreError(error, OperationType.LIST, "staff"))
+      );
+    } else {
+      setStaff([]);
+    }
 
     // 6. Accommodations
-    unsubs.push(
-      onSnapshot(collection(db, "accommodations"), (snapshot: any) => {
-        let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Accommodation));
-        if (currentUser.role === 'facility_manager') {
-          data = data.filter(d => facilityIds.includes(d.facilityId));
-        }
-        setAccommodations(data);
-      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "accommodations"))
-    );
+    let accsQuery = collection(db, "accommodations") as any;
+    if (currentUser.role === 'facility_manager') {
+      if (facilityIds.length > 0) accsQuery = query(collection(db, "accommodations"), where("facilityId", "in", facilityIds.slice(0, 30)));
+      else accsQuery = null;
+    }
+    if (accsQuery) {
+      unsubs.push(
+        onSnapshot(accsQuery, (snapshot: any) => {
+          const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Accommodation));
+          setAccommodations(data);
+        }, (error: any) => handleFirestoreError(error, OperationType.LIST, "accommodations"))
+      );
+    } else {
+      setAccommodations([]);
+    }
 
     // 7. Maintenance Tickets
-    unsubs.push(
-      onSnapshot(collection(db, "maintenanceTickets"), (snapshot: any) => {
-        let data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as MaintenanceTicket));
-        if (currentUser.role === 'facility_manager') {
-          data = data.filter(d => facilityIds.includes(d.dormId)); // In MaintenanceTicket, we use dormId instead of facilityId
-        }
-        setMaintenanceTickets(data);
-      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "maintenanceTickets"))
-    );
+    let maintenanceQuery = collection(db, "maintenanceTickets") as any;
+    if (currentUser.role === 'facility_manager') {
+      if (facilityIds.length > 0) maintenanceQuery = query(collection(db, "maintenanceTickets"), where("dormId", "in", facilityIds.slice(0, 30)));
+      else maintenanceQuery = null;
+    }
+    if (maintenanceQuery) {
+      unsubs.push(
+        onSnapshot(maintenanceQuery, (snapshot: any) => {
+          const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as MaintenanceTicket));
+          setMaintenanceTickets(data);
+        }, (error: any) => handleFirestoreError(error, OperationType.LIST, "maintenanceTickets"))
+      );
+    } else {
+      setMaintenanceTickets([]);
+    }
 
     // Approval Requests
     unsubs.push(

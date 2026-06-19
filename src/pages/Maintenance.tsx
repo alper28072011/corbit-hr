@@ -4,7 +4,7 @@ import {
   X, Check, ChevronDown, ListFilter, AlignLeft, ShieldAlert, CheckCircle
 } from "lucide-react";
 import { useStore } from "../store/useStore";
-import { cn } from "../lib/utils";
+import { cn, naturalSort } from "../lib/utils";
 import { MaintenanceTicket, ActionLog } from "../types";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -101,9 +101,9 @@ export default function Maintenance() {
 
   const filteredFacilityRooms = useMemo(() => {
     if (!formData.dormId) return [];
-    return rooms
-      .filter(r => r.facilityId === formData.dormId)
-      .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+    
+    // Filtrelenmiş listeyi naturalSort ile sıralayıp dönüyoruz
+    return naturalSort(rooms.filter(r => r.facilityId === formData.dormId), r => r.roomNumber);
   }, [rooms, formData.dormId]);
 
   const searchedRooms = useMemo(() => {

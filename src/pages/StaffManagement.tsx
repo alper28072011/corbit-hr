@@ -1575,16 +1575,16 @@ export default function StaffManagement() {
               top: tooltipData.y - 8 // 8px offset above the icon
             }}
           >
-            <span className="font-semibold block mb-1">TC Kimlik No: {s.tcNo || '-'}</span>
-            <span className="block text-gray-200 mb-1">Telefon: {s.phone || '-'}</span>
-            {s.birthDate ? (
+            <span className="font-semibold block mb-1">TC Kimlik No: {s?.tcNo || '-'}</span>
+            <span className="block text-gray-200 mb-1">Telefon: {s?.phone || '-'}</span>
+            {s?.birthDate ? (
               <span className="block text-gray-200 border-t border-gray-600 mt-1 pt-1">
                 Doğum Tarihi: {new Date(s.birthDate).toLocaleDateString('tr-TR')} (Yaş: {calculateAge(s.birthDate)})
               </span>
             ) : (
               <span className="block text-gray-400 italic border-t border-gray-600 mt-1 pt-1">Doğum Tarihi Belirtilmemiş</span>
             )}
-            {s.notes && (
+            {s?.notes && (
               <span className="block text-gray-200 border-t border-gray-600 mt-2 pt-2 max-w-[200px] whitespace-normal break-words text-left self-start w-full">
                 <strong className="text-gray-400 block mb-0.5">Not:</strong>{s.notes}
               </span>

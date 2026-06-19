@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X, Search, Filter, Upload, Download } from "lucide-react";
 import { useStore } from "../store/useStore";
-import { cn } from "../lib/utils";
+import { cn, naturalSort } from "../lib/utils";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { Room } from "../types";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -93,7 +93,7 @@ export default function RoomManagement() {
       filtered = filtered.filter(r => r.status === filterStatus);
     }
 
-    return filtered.sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+    return naturalSort(filtered, r => r.roomNumber);
   }, [rooms, selectedFacilityId, searchQuery, filterBlock, filterGender, filterStatus]);
 
   const uniqueBlocks = useMemo(() => {

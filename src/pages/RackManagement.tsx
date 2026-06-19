@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { PageHeader } from '../components/layout/PageHeader';
-import { cn } from '../lib/utils';
+import { cn, naturalSort } from '../lib/utils';
 import { 
   Search, X, LayoutGrid, LayoutList, Grip, Users, 
   BedSingle, AlertTriangle, LogOut, CheckCircle, Wrench, ShieldAlert
@@ -129,7 +129,8 @@ export default function RackManagement() {
       }
 
       return true;
-    }).sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+    });
+    return naturalSort(filtered, r => r.roomNumber);
   }, [EnrichedRooms, filterFacility, filterGender, filterStatus, searchQuery]);
 
   const resetFilters = () => {
