@@ -117,7 +117,6 @@ export default function StaffManagement() {
   const filterDepartment = staffFilters.department ?? '';
   const filterCheckIn = staffFilters.checkIn ?? '';
   const filterCheckOut = staffFilters.checkOut ?? '';
-  const viewMode = (uiPrefs.viewModes[pageKey] as 'list' | 'grouped') || 'list';
   const sortConfig = uiPrefs.tableSorting[pageKey] || { key: 'room', direction: 'asc' };
 
   const setGlobalSearch = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, search: val });
@@ -131,6 +130,11 @@ export default function StaffManagement() {
   const setSortConfig = (val: any) => setUiPreference('tableSorting', pageKey, val);
 
   const [searchParams] = useSearchParams();
+
+  let viewMode = (uiPrefs.viewModes[pageKey] as 'list' | 'grouped') || 'list';
+  if (filterStatus !== 'placed') {
+    viewMode = 'list';
+  }
 
   // Handle URL query parameters and filter initialization
   useEffect(() => {
@@ -709,6 +713,26 @@ export default function StaffManagement() {
               colorClass: 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300'
             }] : [])
           ]}
+          customActions={
+            filterStatus === 'placed' ? (
+              <div className="flex items-center bg-[#E8E6E1] p-1 rounded-xl shrink-0 shadow-sm border border-[#E8E6E1] ml-2">
+                 <button
+                   onClick={() => setViewMode('list')}
+                   className={cn("p-1.5 rounded-lg flex items-center justify-center transition-colors", viewMode === 'list' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
+                   title="Liste Görünümü"
+                 >
+                   <List className="w-4 h-4"/>
+                 </button>
+                 <button
+                   onClick={() => setViewMode('grouped')}
+                   className={cn("p-1.5 rounded-lg flex items-center justify-center transition-colors", viewMode === 'grouped' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
+                   title="Odalar Görünümü"
+                 >
+                   <LayoutGrid className="w-4 h-4"/>
+                 </button>
+              </div>
+            ) : null
+          }
         />
       </div>
 
@@ -784,22 +808,6 @@ export default function StaffManagement() {
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="flex items-center bg-[#E8E6E1] p-1 rounded-xl shrink-0 shadow-sm border border-[#E8E6E1]">
-               <button
-                 onClick={() => setViewMode('list')}
-                 className={cn("p-1.5 rounded-lg flex items-center justify-center transition-colors", viewMode === 'list' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
-                 title="Liste Görünümü"
-               >
-                 <List className="w-4 h-4"/>
-               </button>
-               <button
-                 onClick={() => setViewMode('grouped')}
-                 className={cn("p-1.5 rounded-lg flex items-center justify-center transition-colors", viewMode === 'grouped' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700')}
-                 title="Odalar Görünümü"
-               >
-                 <LayoutGrid className="w-4 h-4"/>
-               </button>
-            </div>
           </div>
         </div>
 

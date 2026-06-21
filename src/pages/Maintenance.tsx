@@ -33,6 +33,7 @@ export default function Maintenance() {
   const facilities = useStore(state => state.facilities);
   const rooms = useStore(state => state.rooms);
   const maintenanceTickets = useStore(state => state.maintenanceTickets);
+  const addRoom = useStore(state => state.addRoom);
   const addMaintenanceTicket = useStore(state => state.addMaintenanceTicket);
   const updateMaintenanceTicket = useStore(state => state.updateMaintenanceTicket);
   const deleteMaintenanceTicket = useStore(state => state.deleteMaintenanceTicket);

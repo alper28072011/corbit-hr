@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions } from '../types';
+import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions, SupportTicket } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';

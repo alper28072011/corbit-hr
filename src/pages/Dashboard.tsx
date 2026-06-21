@@ -74,6 +74,7 @@ export default function Dashboard() {
   const authorizedFacilityIds = authorizedFacilities.map(f => f.id);
 
   const {
+    activeRoomsCount,
     totalCapacity,
     activeStaffCount,
     occupancyRate,
@@ -83,7 +84,11 @@ export default function Dashboard() {
     facilityOccupancyList,
     departmentDistributionList,
     departedStaffCount,
-    departedStaffByDepartment
+    departedStaffByDepartment,
+    vacantRoomCount,
+    dedicatedRoomCount,
+    sharedRoomCount,
+    hotelRoomDistribution
   } = useMemo(() => {
     // 1. Capacity
     const activeRooms = rooms.filter(r => r.status === 'active' && authorizedFacilityIds.includes(r.facilityId));
@@ -170,7 +175,54 @@ export default function Dashboard() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5); // top 5
 
+    // --- Room Analytics ---
+    let vacantRoomCount = 0;
+    let dedicatedRoomCount = 0;
+    let sharedRoomCount = 0;
+
+    const hotelRoomStats = hotels.reduce((acc, hotel) => {
+      acc[hotel.id] = { hotel, dedicatedRooms: 0, sharedRooms: 0, sharedDetails: [] };
+      return acc;
+    }, {} as Record<string, any>);
+
+    activeRooms.forEach(room => {
+      // Find active staff in this room
+      const roomAccs = activeAccs.filter(a => a.roomId === room.id);
+      const roomStaffIds = new Set(roomAccs.map(a => a.staffId));
+      const rStaff = staff.filter(s => s.status === 'placed' && roomStaffIds.has(s.id));
+
+      const uniqueHotelIds = Array.from(new Set(rStaff.map(s => s.hotelId).filter(Boolean)));
+
+      if (uniqueHotelIds.length === 0) {
+        vacantRoomCount++;
+      } else if (uniqueHotelIds.length === 1) {
+        dedicatedRoomCount++;
+        const hid = uniqueHotelIds[0];
+        if (hotelRoomStats[hid]) hotelRoomStats[hid].dedicatedRooms++;
+      } else {
+        sharedRoomCount++;
+        uniqueHotelIds.forEach(hid => {
+          if (hotelRoomStats[hid]) {
+            hotelRoomStats[hid].sharedRooms++;
+            hotelRoomStats[hid].sharedDetails.push({
+              roomName: room.roomNumber,
+              sharedWith: uniqueHotelIds.filter(id => id !== hid).map(id => hotels.find(h => h.id === id)?.name || id).join(', ')
+            });
+          }
+        });
+      }
+    });
+
+    const hotelRoomDistribution = Object.values(hotelRoomStats).map((stat: any) => ({
+      name: stat.hotel.branchCode || stat.hotel.name,
+      'Kendine Ait': stat.dedicatedRooms,
+      'Ortak Kullandığı': stat.sharedRooms,
+      totalRooms: stat.dedicatedRooms + stat.sharedRooms,
+      sharedDetails: stat.sharedDetails
+    })).filter((d: any) => d.totalRooms > 0);
+
     return {
+      activeRoomsCount: activeRooms.length,
       totalCapacity,
       activeStaffCount,
       occupancyRate,
@@ -180,7 +232,11 @@ export default function Dashboard() {
       facilityOccupancyList,
       departmentDistributionList,
       departedStaffCount,
-      departedStaffByDepartment
+      departedStaffByDepartment,
+      vacantRoomCount,
+      dedicatedRoomCount,
+      sharedRoomCount,
+      hotelRoomDistribution
     };
 
   }, [rooms, accommodations, authorizedFacilityIds, staff, authorizedFacilities, hotels, currentUser]);
@@ -286,7 +342,132 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 2. Distribution Charts */}
+      {/* 2. Oda Bazlı Kapasite ve Tahsis Analizi */}
+      <h3 className="text-xl font-serif font-bold text-[#2D332D] mt-8 mb-4 border-b border-stone-200 pb-2 flex items-center gap-2">
+        <BedDouble className="w-5 h-5 text-stone-400" />
+        Oda Bazlı Kapasite ve Tahsis Analizi
+      </h3>
+      
+      {/* A. Genel Konsolide Durum (4'lü Küçük Metrik Grid) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-5 flex flex-col justify-center">
+            <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Toplam Tanımlı</p>
+            <div className="text-3xl font-serif font-bold text-[#2D332D] mt-1">{activeRoomsCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 flex flex-col justify-center">
+            <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Yalnızca Tek Otele Ait</p>
+            <div className="text-3xl font-serif font-bold text-[#7C8363] mt-1">{dedicatedRoomCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 flex flex-col justify-center relative overflow-visible">
+            <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Ortak Kullanılan</p>
+            <div className="text-3xl font-serif font-bold text-amber-600 mt-1">{sharedRoomCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 flex flex-col justify-center">
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">Hiç Kullanılmayan (Boş)</p>
+            <div className="text-3xl font-serif font-bold text-stone-400 mt-1">{vacantRoomCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* B. Otel Kırılımlı Oda Dağılım Tablosu & Stacked Bar Graph */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-2">
+        <Card>
+          <CardHeader>
+            <CardTitle icon={BarChart3}>Otel Oda Paylaşım Dağılımı</CardTitle>
+            <p className="text-sm text-stone-500">Hangi otel kaç oda kullanıyor ve ne kadarını paylaşıyor?</p>
+          </CardHeader>
+          <CardContent className="min-h-[300px]">
+             {hotelRoomDistribution.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={hotelRoomDistribution} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8E6E1" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#78716C', fontSize: 12, fontWeight: 500 }}
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#78716C', fontSize: 12 }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F5F5F4' }} />
+                    <Legend verticalAlign="top" height={36} iconType="circle" />
+                    <Bar dataKey="Kendine Ait" stackId="a" fill="#7C8363" radius={[0, 0, 4, 4]} maxBarSize={50} />
+                    <Bar dataKey="Ortak Kullandığı" stackId="a" fill="#D9D3C1" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  </BarChart>
+                </ResponsiveContainer>
+             ) : (
+                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
+                  <BedDouble className="w-8 h-8 opacity-20" />
+                  <p className="text-sm font-medium">Veri bulunamadı</p>
+                </div>
+             )}
+          </CardContent>
+        </Card>
+
+        {/* Tablo */}
+        <Card>
+          <CardHeader>
+            <CardTitle icon={ListVideo}>Otel Kırılımlı Oda Dağılımı</CardTitle>
+            <p className="text-sm text-stone-500">Otel bazlı kullanım istisnaları (Shared Room Details)</p>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead>
+                <tr className="border-b border-stone-200 text-stone-500 font-semibold mb-2">
+                  <th className="pb-3 pt-2 pl-2">Otel Adı</th>
+                  <th className="pb-3 pt-2 text-center">Tek Başına</th>
+                  <th className="pb-3 pt-2 text-center">Ortak</th>
+                  <th className="pb-3 pt-2 text-center pr-2">Toplam Temas</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {hotelRoomDistribution.map((hotel, idx) => (
+                  <tr key={idx} className="hover:bg-stone-50 transition-colors">
+                    <td className="py-3 pl-2 font-semibold text-[#2D332D]">{hotel.name}</td>
+                    <td className="py-3 text-center text-stone-600 font-mono">{hotel['Kendine Ait']}</td>
+                    <td className="py-3 text-center text-stone-600 font-mono relative group">
+                      <span className="border-b border-dashed border-stone-400 cursor-help font-bold text-amber-600">
+                        {hotel['Ortak Kullandığı']}
+                      </span>
+                      {hotel['Ortak Kullandığı'] > 0 && (
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 bg-[#2D332D] text-white text-xs p-3 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-[60] min-w-[220px] whitespace-normal text-left">
+                          <p className="font-bold mb-1.5 border-b border-stone-600 pb-1.5 text-amber-400">Ortak Kullanılan Odalar:</p>
+                          <ul className="list-disc pl-4 space-y-1 text-stone-300">
+                            {hotel.sharedDetails.map((sd: any, i: number) => (
+                              <li key={i}><span className="font-bold text-white max-w-[80px] truncate inline-block align-bottom">{sd.roomName}</span>: {sd.sharedWith} ile</li>
+                            ))}
+                          </ul>
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-[#2D332D] rotate-45"></div>
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 text-center font-bold text-[#7C8363] font-mono pr-2">{hotel.totalRooms}</td>
+                  </tr>
+                ))}
+                {hotelRoomDistribution.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-stone-400">Oda kullanımı bulunmuyor.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 3. Distribution Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>

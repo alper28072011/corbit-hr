@@ -111,7 +111,7 @@ export default function RackManagement() {
   }, [rooms, accommodations, staff, maintenanceTickets]);
 
   const filteredRooms = useMemo(() => {
-    return EnrichedRooms.filter(room => {
+    const filtered = EnrichedRooms.filter(room => {
       if (filterFacility && room.facilityId !== filterFacility) return false;
       if (filterGender && room.genderType !== filterGender) return false;
       if (filterStatus !== 'all') {
@@ -130,7 +130,7 @@ export default function RackManagement() {
 
       return true;
     });
-    return naturalSort(filtered, r => r.roomNumber);
+    return naturalSort(filtered, (r: any) => r.roomNumber);
   }, [EnrichedRooms, filterFacility, filterGender, filterStatus, searchQuery]);
 
   const resetFilters = () => {
