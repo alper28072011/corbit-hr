@@ -687,35 +687,28 @@ export default function StaffManagement() {
         <PageHeader
           title="Personel Yönetimi"
           description="Personel listesi, giriş-çıkış işlemleri ve oda yerleşimleri (allocation)."
-          actions={
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={exportToExcel}
-                className="px-4 py-2 bg-white text-stone-700 border border-[#E8E6E1] rounded-xl text-sm font-semibold shadow-sm hover:bg-stone-50 transition-colors flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Excel'e Aktar
-              </button>
-              {canDeleteStaff && selectedStaffIds.length > 0 && (
-                <button 
-                  onClick={handleBulkDelete}
-                  className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold shadow-sm hover:bg-red-100 transition-colors flex items-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Seçilenleri Sil ({selectedStaffIds.length})
-                </button>
-              )}
-              {canAddStaff && (
-                <button 
-                  onClick={() => setShowAddStaffForm(true)}
-                  className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Yeni Personel Kaydı
-                </button>
-              )}
-            </div>
-          }
+          actions={[
+            ...(canAddStaff ? [{
+              key: 'add_staff',
+              icon: UserPlus,
+              tooltip: 'Yeni Personel Kaydı',
+              onClick: () => setShowAddStaffForm(true),
+              permissionKey: 'create_staff'
+            }] : []),
+            {
+              key: 'export',
+              icon: Download,
+              tooltip: 'Excel\'e Aktar',
+              onClick: exportToExcel,
+            },
+            ...(canDeleteStaff && selectedStaffIds.length > 0 ? [{
+              key: 'delete_selected',
+              icon: Trash2,
+              tooltip: `Seçilenleri Sil (${selectedStaffIds.length})`,
+              onClick: handleBulkDelete,
+              colorClass: 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300'
+            }] : [])
+          ]}
         />
       </div>
 

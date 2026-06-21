@@ -74,6 +74,14 @@ export default function FeedbackManagement() {
       <PageHeader
         title="Destek & Geribildirim"
         description="Soru, şikayet ve geliştirme taleplerinizi iletebilirsiniz."
+        actions={[
+          {
+            key: 'new_ticket',
+            icon: Plus,
+            tooltip: 'Yeni Destek Talebi Oluştur',
+            onClick: () => setIsCreateModalOpen(true),
+          }
+        ]}
       />
 
       <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
@@ -82,13 +90,6 @@ export default function FeedbackManagement() {
         <div className="w-full md:w-1/3 flex flex-col card-standard overflow-hidden bg-white">
           <div className="p-4 border-b border-stone-100 bg-stone-50/50 flex justify-between items-center shrink-0">
             <h2 className="font-bold text-[#2D332D]">Taleplerim ({supportTickets.length})</h2>
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7C8363] text-white rounded-lg text-sm font-semibold hover:bg-[#6A7055] transition-colors shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              Yeni
-            </button>
           </div>
           
           <div className="flex-1 overflow-y-auto p-3 space-y-2">

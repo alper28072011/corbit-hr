@@ -28,7 +28,7 @@ export default function AppLayout() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="px-8 py-8 h-full"
+              className="h-full"
             >
               {outlet}
             </motion.div>

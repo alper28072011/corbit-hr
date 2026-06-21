@@ -6,7 +6,15 @@ import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
 
 export default function FacilityManagement() {
-  const { hotels, facilities, addHotel, deleteHotel, updateHotel, addFacility, updateFacility, deleteFacility, currentUser, roles } = useStore();
+  const hotels = useStore(state => state.hotels);
+  const facilities = useStore(state => state.facilities);
+  const addHotel = useStore(state => state.addHotel);
+  const deleteHotel = useStore(state => state.deleteHotel);
+  const updateHotel = useStore(state => state.updateHotel);
+  const addFacility = useStore(state => state.addFacility);
+  const updateFacility = useStore(state => state.updateFacility);
+  const deleteFacility = useStore(state => state.deleteFacility);
+  const currentUser = useStore(state => state.currentUser);
   
   const uiPrefs = useStore(state => state.uiPreferences);
   const setUiPreference = useStore(state => state.setUiPreference);
@@ -36,6 +44,23 @@ export default function FacilityManagement() {
         <PageHeader
           title="Tesis Yönetimi"
           description="Oteller, lojman binaları ve otel-lojman bağlantı izinlerinin yönetimi."
+          actions={[
+            ...(canManage && activeTab === 'hotels' ? [{
+              key: 'add_hotel',
+              icon: HotelIcon,
+              tooltip: 'Yeni Otel Ekle',
+              onClick: () => setShowHotelForm(true),
+            }] : []),
+            ...(canManage && activeTab === 'dorms' ? [{
+              key: 'add_dorm',
+              icon: Building,
+              tooltip: 'Yeni Lojman Ekle',
+              onClick: () => {
+                const evt = new CustomEvent('openDormForm');
+                window.dispatchEvent(evt);
+              },
+            }] : [])
+          ]}
         />
       </div>
         
@@ -58,33 +83,6 @@ export default function FacilityManagement() {
             <Building className="w-4 h-4" /> Lojmanlar
           </button>
         </div>
-
-        {canManage && (
-          <div>
-            {activeTab === 'hotels' ? (
-              !showHotelForm && (
-                <button 
-                  onClick={() => setShowHotelForm(true)}
-                  className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Yeni Otel Ekle
-                </button>
-              )
-            ) : (
-              !showDormForm && (
-                <button 
-                  onClick={() => {
-                    const evt = new CustomEvent('openDormForm');
-                    window.dispatchEvent(evt);
-                  }}
-                  className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] flex items-center gap-2 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Yeni Lojman Ekle
-                </button>
-              )
-            )}
-          </div>
-        )}
       </div>
 
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">

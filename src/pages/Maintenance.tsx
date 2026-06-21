@@ -29,11 +29,16 @@ function formatDateLabel(timestamp: number) {
 }
 
 export default function Maintenance() {
-  const { 
-    hotels, facilities, rooms, maintenanceTickets, addRoom,
-    addMaintenanceTicket, updateMaintenanceTicket, deleteMaintenanceTicket, 
-    addLog, logs, currentUser, roles 
-  } = useStore();
+  const hotels = useStore(state => state.hotels);
+  const facilities = useStore(state => state.facilities);
+  const rooms = useStore(state => state.rooms);
+  const maintenanceTickets = useStore(state => state.maintenanceTickets);
+  const addMaintenanceTicket = useStore(state => state.addMaintenanceTicket);
+  const updateMaintenanceTicket = useStore(state => state.updateMaintenanceTicket);
+  const deleteMaintenanceTicket = useStore(state => state.deleteMaintenanceTicket);
+  const addLog = useStore(state => state.addLog);
+  const logs = useStore(state => state.logs);
+  const currentUser = useStore(state => state.currentUser);
   
   const rp = useStore.getState().rolesPermissions;
   const canCreate = can(currentUser?.role, 'create_ticket', PAGE_KEYS.maintenance, rp);
@@ -325,17 +330,15 @@ export default function Maintenance() {
       <PageHeader
         title="Arıza ve Bakım Yönetimi"
         description="Tesislerdeki teknik talepleri ve arızaları merkezi olarak takip edin."
-        actions={
-          canCreate && (
-            <button 
-              onClick={() => openAddModal()}
-              className="px-4 py-2 bg-[#2D332D] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-black transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Yeni Arıza Kaydı
-            </button>
-          )
-        }
+        actions={[
+          ...(canCreate ? [{
+            key: 'new_ticket',
+            icon: Plus,
+            tooltip: 'Yeni Arıza Kaydı',
+            onClick: () => openAddModal(),
+            permissionKey: 'create_ticket'
+          }] : [])
+        ]}
       />
 
       {successMessage && (

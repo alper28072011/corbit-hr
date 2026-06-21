@@ -9,7 +9,15 @@ import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 
 export default function RoomManagement() {
-  const { hotels, facilities, rooms, addRoom, addRoomsBulk, updateRoom, deleteRoom, bulkDeleteRooms, bulkUpdateRooms, currentUser, roles } = useStore();
+  const facilities = useStore(state => state.facilities);
+  const rooms = useStore(state => state.rooms);
+  const addRoom = useStore(state => state.addRoom);
+  const addRoomsBulk = useStore(state => state.addRoomsBulk);
+  const updateRoom = useStore(state => state.updateRoom);
+  const deleteRoom = useStore(state => state.deleteRoom);
+  const bulkDeleteRooms = useStore(state => state.bulkDeleteRooms);
+  const bulkUpdateRooms = useStore(state => state.bulkUpdateRooms);
+  const currentUser = useStore(state => state.currentUser);
 
   // Read preferences
   const uiPrefs = useStore(state => state.uiPreferences);
@@ -296,18 +304,23 @@ export default function RoomManagement() {
         <PageHeader
           title="Oda Yönetimi"
           description="Oda tipleri, yatak kapasiteleri ve oda detaylarını buradan yönetin."
-          actions={
-            canEdit && (
-              <button 
-                onClick={() => setShowAddForm(true)}
-                disabled={!selectedFacilityId}
-                className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-4 h-4" />
-                Yeni Oda Ekle
-              </button>
-            )
-          }
+          actions={[
+            ...(canDelete && selectedRooms.length > 0 ? [{
+              key: 'delete_selected_rooms',
+              icon: Trash2,
+              tooltip: `Seçilenleri Sil (${selectedRooms.length})`,
+              onClick: () => setShowBulkDeleteModal(true),
+              colorClass: 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300'
+            }] : []),
+            ...(canEdit ? [{
+              key: 'add_room',
+              icon: Plus,
+              tooltip: 'Yeni Oda Ekle',
+              onClick: () => setShowAddForm(true),
+              disabled: !selectedFacilityId,
+              permissionKey: 'add_room'
+            }] : [])
+          ]}
         />
       </div>
 
@@ -526,26 +539,16 @@ export default function RoomManagement() {
 
       {/* Main Table Content */}
       <div className="card-standard flex flex-col bg-white overflow-hidden">
-        {selectedRooms.length > 0 && (
+        {selectedRooms.length > 0 && isSuperAdmin && (
           <div className="bg-[#7C8363]/10 border-b border-[#7C8363]/20 px-6 py-3 flex items-center justify-between z-20">
             <span className="text-sm font-bold text-[#7C8363]">{selectedRooms.length} oda seçildi</span>
             <div className="flex gap-2">
-              {isSuperAdmin && (
-                <button 
-                  onClick={() => setShowBulkUpdateModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-lg text-sm font-semibold hover:bg-amber-100 transition-colors border border-amber-200"
-                >
-                  <Edit2 className="w-4 h-4" /> Toplu Güncelle
-                </button>
-              )}
-              {canDelete && (
-                <button 
-                  onClick={() => setShowBulkDeleteModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors border border-red-200"
-                >
-                  <Trash2 className="w-4 h-4" /> Seçilenleri Sil
-                </button>
-              )}
+              <button 
+                onClick={() => setShowBulkUpdateModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-lg text-sm font-semibold hover:bg-amber-100 transition-colors border border-amber-200"
+              >
+                <Edit2 className="w-4 h-4" /> Toplu Güncelle
+              </button>
             </div>
           </div>
         )}

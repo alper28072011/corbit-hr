@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   Building2, 
   Users, 
@@ -50,7 +50,13 @@ function CardContent({ className = "", children }: { className?: string, childre
 // -------------------------------
 
 export default function Dashboard() {
-  const { facilities, rooms, accommodations, staff, hotels, roles, currentUser } = useStore();
+  const navigate = useNavigate();
+  const facilities = useStore(state => state.facilities);
+  const rooms = useStore(state => state.rooms);
+  const accommodations = useStore(state => state.accommodations);
+  const staff = useStore(state => state.staff);
+  const hotels = useStore(state => state.hotels);
+  const currentUser = useStore(state => state.currentUser);
 
   const authorizedFacilities = useMemo(() => {
     if (!currentUser) return [];
@@ -213,22 +219,21 @@ export default function Dashboard() {
         description={currentUser?.role === 'facility_manager' 
           ? 'Sorumlu olduğunuz lojmanların detaylı analizleri.' 
           : 'Zincir genelindeki konaklama istatistikleri ve analizler.'}
-        actions={
-          <>
-            {can(currentUser?.role, 'create_staff', PAGE_KEYS.staff, useStore.getState().rolesPermissions) && (
-              <Link to="/staff" className="px-4 py-2 border border-[#E8E6E1] rounded-xl bg-white hover:bg-stone-50 text-sm font-semibold transition-colors flex items-center gap-2">
-                <UserPlus className="w-4 h-4" />
-                Yeni Talep
-              </Link>
-            )}
-            {can(currentUser?.role, 'change_room', PAGE_KEYS.staff, useStore.getState().rolesPermissions) && (
-              <Link to="/staff" className="px-4 py-2 bg-[#7C8363] text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-[#6A7152] transition-colors flex items-center gap-2">
-                <BedDouble className="w-4 h-4" />
-                Yerleşim Yap
-              </Link>
-            )}
-          </>
-        }
+        actions={[
+          ...(can(currentUser?.role, 'create_staff', PAGE_KEYS.staff, useStore.getState().rolesPermissions) ? [{
+            key: 'new_staff',
+            icon: UserPlus,
+            tooltip: 'Yeni Talep',
+            onClick: () => navigate('/staff'),
+            colorClass: 'bg-white text-stone-700 border border-[#E8E6E1] hover:bg-stone-50'
+          }] : []),
+          ...(can(currentUser?.role, 'change_room', PAGE_KEYS.staff, useStore.getState().rolesPermissions) ? [{
+            key: 'place_staff',
+            icon: BedDouble,
+            tooltip: 'Yerleşim Yap',
+            onClick: () => navigate('/staff')
+          }] : [])
+        ]}
       />
 
       {/* 1. KPI Cards (4 Grid) */}
