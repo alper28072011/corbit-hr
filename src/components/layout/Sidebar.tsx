@@ -10,7 +10,8 @@ import {
   X,
   LayoutGrid,
   Check,
-  Edit2
+  Edit2,
+  MessageSquare
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useStore } from "../../store/useStore";
@@ -27,7 +28,9 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
   const staff = useStore(state => state.staff);
   const appSettings = useStore(state => state.appSettings);
   const updateAppVersion = useStore(state => state.updateAppVersion);
+  const supportTickets = useStore((state) => state.supportTickets);
   const pendingStaffCount = staff.filter(s => s.status === "pending_placement").length;
+  const openTicketsCount = supportTickets?.filter(t => t.status === 'Açık').length || 0;
   
   const [isEditingVersion, setIsEditingVersion] = useState(false);
   const [versionInput, setVersionInput] = useState("");
@@ -58,6 +61,12 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
       badge: pendingStaffCount
     },
     canViewPage(currentUser?.role, PAGE_KEYS.maintenance, rolesPermissions) && { name: "Arıza ve Bakım", href: "/maintenance", icon: Wrench },
+    { 
+      name: "Destek & Geribildirim", 
+      href: "/feedback", 
+      icon: MessageSquare,
+      badge: currentUser?.role === 'super_admin' ? openTicketsCount : 0
+    },
     canViewPage(currentUser?.role, PAGE_KEYS.settings, rolesPermissions) && { name: "Ayarlar", href: "/settings", icon: Settings },
   ].filter(Boolean) as { name: string, href: string, icon: any, badge?: number }[];
 

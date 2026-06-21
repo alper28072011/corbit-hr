@@ -10,6 +10,7 @@ import FacilityManagement from "./pages/FacilityManagement";
 import RoomManagement from "./pages/RoomManagement";
 import StaffManagement from "./pages/StaffManagement";
 import Maintenance from "./pages/Maintenance";
+import FeedbackManagement from "./pages/FeedbackManagement";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import AuthProvider from "./components/auth/AuthProvider";
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="rack" element={<RackManagement />} />
             <Route path="staff" element={<StaffManagement />} />
             <Route path="maintenance" element={<Maintenance />} />
+            <Route path="feedback" element={<FeedbackManagement />} />
             <Route path="profile" element={<Profile />} />
             <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
               <Route path="settings" element={<Settings />} />

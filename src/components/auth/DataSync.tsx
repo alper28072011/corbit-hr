@@ -154,6 +154,18 @@ export default function DataSync() {
       }, (error: any) => handleFirestoreError(error, OperationType.LIST, "approvalRequests"))
     );
 
+    // Support Tickets
+    let supportQuery = collection(db, "supportTickets") as any;
+    if (currentUser.role !== 'super_admin') {
+      supportQuery = query(collection(db, "supportTickets"), where("userId", "==", currentUser.id));
+    }
+    unsubs.push(
+      onSnapshot(supportQuery, (snapshot: any) => {
+        const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+        useStore.getState().setSupportTickets(data);
+      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "supportTickets"))
+    );
+
     // 8. Logs
     const rolesPermissions = useStore.getState().rolesPermissions;
     if (can(currentUser.role, 'view_logs', 'settings', rolesPermissions)) {

@@ -61,6 +61,11 @@ export const PERMISSIONS_MATRIX: PagePermission[] = [
     features: [
       { key: 'view_logs', name: 'Sistem Logları', description: 'Kullanıcı hareketlerini (Action Logs) görebilir.' }
     ]
+  },
+  {
+    pageKey: 'feedback',
+    pageName: 'Destek & Geribildirim',
+    features: []
   }
 ];
 
@@ -72,6 +77,7 @@ export const PAGE_KEYS = {
   staff: 'staff',
   maintenance: 'maintenance',
   settings: 'settings',
+  feedback: 'feedback',
 } as const;
 
 export function canViewPage(userRole: Role | undefined, pageKey: string, rolesPermissions: RolePermissions[]): boolean {

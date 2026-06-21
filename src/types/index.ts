@@ -137,3 +137,26 @@ export interface MaintenanceTicket {
   resolvedAt?: number;
   priority: 'Düşük' | 'Orta' | 'Acil';
 }
+
+export interface SupportMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  title: string;
+  category: 'Soru' | 'Hata Bildirimi (Bug)' | 'Geliştirme Talebi' | 'Görüş/Öneri';
+  priority: 'Düşük' | 'Orta' | 'Yüksek';
+  status: 'Açık' | 'Cevaplandı' | 'İşlemde' | 'Sonlandırıldı';
+  createdAt: number;
+  updatedAt: number;
+  messages: SupportMessage[];
+}

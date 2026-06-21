@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
 
 export interface UiPreferences {
@@ -24,6 +24,7 @@ interface AppState {
   accommodations: Accommodation[];
   maintenanceTickets: MaintenanceTicket[];
   approvalRequests: ApprovalRequest[];
+  supportTickets: SupportTicket[];
   
   uiPreferences: UiPreferences;
   setUiPreference: <K extends keyof UiPreferences>(key: K, pageKey: string, value: any) => void;
@@ -39,6 +40,7 @@ interface AppState {
   setAccommodations: (accs: Accommodation[]) => void;
   setMaintenanceTickets: (tickets: MaintenanceTicket[]) => void;
   setApprovalRequests: (reqs: ApprovalRequest[]) => void;
+  setSupportTickets: (tickets: SupportTicket[]) => void;
   
   // Actions
   addUser: (user: Omit<User, 'id'>) => Promise<void>;
@@ -86,6 +88,10 @@ interface AppState {
   addApprovalRequest: (reqData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
   resolveApprovalRequest: (id: string, status: 'Onaylandı' | 'Reddedildi') => Promise<void>;
   
+  createSupportTicket: (ticketData: Omit<SupportTicket, 'id' | 'userId' | 'userName' | 'userEmail' | 'status' | 'messages' | 'createdAt' | 'updatedAt'>, initialMessage: string) => Promise<void>;
+  sendSupportMessage: (ticketId: string, messageText: string) => Promise<void>;
+  closeSupportTicket: (ticketId: string) => Promise<void>;
+
   updateRolePermissions: (roleKey: string, allowedPages: string[], allowedFeatures: string[]) => Promise<void>;
 
   // Logs
@@ -112,6 +118,7 @@ export const useStore = create<AppState>()(
       accommodations: [],
       maintenanceTickets: [],
       approvalRequests: [],
+      supportTickets: [],
       logs: [],
       appSettings: {},
 
@@ -155,6 +162,7 @@ export const useStore = create<AppState>()(
       setAccommodations: (accommodations) => set({ accommodations }),
       setMaintenanceTickets: (maintenanceTickets) => set({ maintenanceTickets }),
       setApprovalRequests: (approvalRequests) => set({ approvalRequests }),
+      setSupportTickets: (supportTickets) => set({ supportTickets }),
       setLogs: (logs) => set({ logs }),
       setAppSettings: (appSettings) => set({ appSettings }),
 
@@ -859,6 +867,75 @@ export const useStore = create<AppState>()(
           await setDoc(docRef, { roleKey, allowedPages, allowedFeatures }, { merge: true });
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, `roles_permissions/${roleKey}`);
+        }
+      },
+      
+      createSupportTicket: async (ticketData, initialMessage) => {
+        try {
+          const state = get();
+          const user = state.currentUser;
+          if (!user) return;
+          
+          const payload = {
+            ...ticketData,
+            userId: user.id,
+            userName: user.fullName || user.email,
+            userEmail: user.email,
+            status: 'Açık',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messages: [{
+              id: Date.now().toString(),
+              senderId: user.id,
+              senderName: user.fullName || user.email,
+              senderRole: user.role,
+              message: initialMessage,
+              timestamp: Date.now()
+            }]
+          };
+          
+          await addDoc(collection(db, "supportTickets"), payload);
+        } catch (error) {
+           handleFirestoreError(error, OperationType.CREATE, "supportTickets");
+        }
+      },
+      
+      sendSupportMessage: async (ticketId, messageText) => {
+        try {
+          const state = get();
+          const user = state.currentUser;
+          if (!user) return;
+          
+          const newMessage = {
+            id: Date.now().toString(),
+            senderId: user.id,
+            senderName: user.fullName || user.email,
+            senderRole: user.role,
+            message: messageText,
+            timestamp: Date.now()
+          };
+          
+          const newStatus = user.role === 'super_admin' ? 'Cevaplandı' : 'Açık';
+          
+          await updateDoc(doc(db, "supportTickets", ticketId), {
+            messages: arrayUnion(newMessage),
+            status: newStatus,
+            updatedAt: Date.now()
+          });
+          
+        } catch (error) {
+           handleFirestoreError(error, OperationType.UPDATE, `supportTickets/${ticketId}`);
+        }
+      },
+      
+      closeSupportTicket: async (ticketId) => {
+        try {
+          await updateDoc(doc(db, "supportTickets", ticketId), {
+            status: 'Sonlandırıldı',
+            updatedAt: Date.now()
+          });
+        } catch (error) {
+           handleFirestoreError(error, OperationType.UPDATE, `supportTickets/${ticketId}`);
         }
       }
     }),
