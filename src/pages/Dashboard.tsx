@@ -422,7 +422,7 @@ export default function Dashboard() {
             <CardTitle icon={ListVideo}>Otel Kırılımlı Oda Dağılımı</CardTitle>
             <p className="text-sm text-stone-500">Otel bazlı kullanım istisnaları (Shared Room Details)</p>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="overflow-visible">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead>
                 <tr className="border-b border-stone-200 text-stone-500 font-semibold mb-2">
@@ -437,7 +437,7 @@ export default function Dashboard() {
                   <tr key={idx} className="hover:bg-stone-50 transition-colors">
                     <td className="py-3 pl-2 font-semibold text-[#2D332D]">{hotel.name}</td>
                     <td className="py-3 text-center text-stone-600 font-mono">{hotel['Kendine Ait']}</td>
-                    <td className="py-3 text-center text-stone-600 font-mono relative group">
+                    <td className="py-3 text-center text-stone-600 font-mono relative group hover:z-50">
                       <span className="border-b border-dashed border-stone-400 cursor-help font-bold text-amber-600">
                         {hotel['Ortak Kullandığı']}
                       </span>
