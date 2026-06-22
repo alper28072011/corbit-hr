@@ -30,6 +30,9 @@ interface AppState {
   setUiPreference: <K extends keyof UiPreferences>(key: K, pageKey: string, value: any) => void;
   resetUiPreferences: () => void;
 
+  refreshTrigger: number;
+  triggerRefresh: () => void;
+
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleConfig[]) => void;
   setRolesPermissions: (perms: RolePermissions[]) => void;
@@ -121,6 +124,8 @@ export const useStore = create<AppState>()(
       supportTickets: [],
       logs: [],
       appSettings: {},
+      refreshTrigger: 0,
+      triggerRefresh: () => set((state) => ({ refreshTrigger: state.refreshTrigger + 1 })),
 
       uiPreferences: {
         activeTabs: {},

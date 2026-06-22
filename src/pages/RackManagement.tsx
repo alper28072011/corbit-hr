@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { PageHeader } from '../components/layout/PageHeader';
+import { usePageRefresh } from '../hooks/usePageRefresh';
 import { cn, naturalSort } from '../lib/utils';
 import { 
   Search, X, LayoutGrid, LayoutList, Grip, Users, 
@@ -29,6 +30,8 @@ export default function RackManagement() {
   const setFilterFacility = (val: string) => setUiPreference('lastFilters', pageKey, { ...rackFilters, facilityId: val });
   const setFilterGender = (val: string) => setUiPreference('lastFilters', pageKey, { ...rackFilters, gender: val });
   const setViewMode = (val: 'rack' | 'card' | 'list') => setUiPreference('viewModes', pageKey, val);
+
+  const refreshAction = usePageRefresh();
 
   // Selected Room for Modal
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
@@ -161,6 +164,7 @@ export default function RackManagement() {
         <PageHeader
           title="Oda Doluluk (Rack)"
           description="Odaların anlık doluluk durumlarını, kapasitelerini ve arıza kayıtlarını yönetin."
+          actions={[refreshAction]}
         />
       </div>
 

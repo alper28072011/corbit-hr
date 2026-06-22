@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Hotel as HotelIcon, Building, Trash2, Edit2, Check, X, ShieldAlert } from "lucide-react";
 import { useStore } from "../store/useStore";
+import { usePageRefresh } from "../hooks/usePageRefresh";
 import { cn } from "../lib/utils";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -22,6 +23,8 @@ export default function FacilityManagement() {
 
   const activeTab = (uiPrefs.activeTabs[pageKey] as 'hotels' | 'dorms') || 'hotels';
   const setActiveTab = (val: 'hotels' | 'dorms') => setUiPreference('activeTabs', pageKey, val);
+
+  const refreshAction = usePageRefresh();
 
   const [showHotelForm, setShowHotelForm] = useState(false);
   const [showDormForm, setShowDormForm] = useState(false);
@@ -45,6 +48,7 @@ export default function FacilityManagement() {
           title="Tesis Yönetimi"
           description="Oteller, lojman binaları ve otel-lojman bağlantı izinlerinin yönetimi."
           actions={[
+            refreshAction,
             ...(canManage && activeTab === 'hotels' ? [{
               key: 'add_hotel',
               icon: HotelIcon,

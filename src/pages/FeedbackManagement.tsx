@@ -3,12 +3,15 @@ import { useStore } from '../store/useStore';
 import { PageHeader } from '../components/layout/PageHeader';
 import { MessageSquare, Plus, Send, X, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePageRefresh } from '../hooks/usePageRefresh';
 import { SupportTicket } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function FeedbackManagement() {
   const { currentUser, supportTickets, createSupportTicket, sendSupportMessage, closeSupportTicket } = useStore();
   
+  const refreshAction = usePageRefresh();
+
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
@@ -75,6 +78,7 @@ export default function FeedbackManagement() {
         title="Destek & Geribildirim"
         description="Soru, şikayet ve geliştirme taleplerinizi iletebilirsiniz."
         actions={[
+          refreshAction,
           {
             key: 'new_ticket',
             icon: Plus,

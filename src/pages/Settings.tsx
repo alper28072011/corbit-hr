@@ -4,11 +4,13 @@ import { useStore } from "../store/useStore";
 import { PagePermission } from "../types";
 import { canViewPage, PAGE_KEYS, ROLE_NAMES, PERMISSIONS_MATRIX } from "../lib/permissions";
 import { PageHeader } from "../components/layout/PageHeader";
+import { usePageRefresh } from "../hooks/usePageRefresh";
 import { cn } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Settings() {
   const { users, rolesPermissions, currentUser, addUser, updateUser, deleteUser, hotels, facilities, updateRolePermissions } = useStore();
+  const refreshAction = usePageRefresh();
   const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
   
   const [showAddForm, setShowAddForm] = useState(false);
@@ -117,6 +119,7 @@ export default function Settings() {
       <PageHeader
         title="Sistem & Kullanıcı Ayarları"
         description="Sistem erişimlerini ve granüler yetki matrisini yönetin."
+        actions={[refreshAction]}
       />
 
       <div className="flex gap-2 border-b border-[#E8E6E1]">

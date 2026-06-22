@@ -7,6 +7,7 @@ import { useStore } from "../store/useStore";
 import { cn, naturalSort } from "../lib/utils";
 import { MaintenanceTicket, ActionLog } from "../types";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
+import { usePageRefresh } from "../hooks/usePageRefresh";
 import { PageHeader } from "../components/layout/PageHeader";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -65,6 +66,8 @@ export default function Maintenance() {
   const setFilterPriority = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, priority: val });
   const setFilterFacility = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, facilityId: val });
   const setFilterHotel = (val: string) => setUiPreference('lastFilters', pageKey, { ...mFilters, hotelId: val });
+
+  const refreshAction = usePageRefresh();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTicket, setEditingTicket] = useState<MaintenanceTicket | null>(null);
@@ -332,6 +335,7 @@ export default function Maintenance() {
         title="Arıza ve Bakım Yönetimi"
         description="Tesislerdeki teknik talepleri ve arızaları merkezi olarak takip edin."
         actions={[
+          refreshAction,
           ...(canCreate ? [{
             key: 'new_ticket',
             icon: Plus,

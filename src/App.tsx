@@ -18,9 +18,12 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 import RackManagement from "./pages/RackManagement";
 
+import { Toaster } from "react-hot-toast";
+
 export default function App() {
   return (
     <AuthProvider>
+      <Toaster position="bottom-right" toastOptions={{ duration: 3000, style: { background: '#2D332D', color: '#fff', borderRadius: '12px' } }} />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<AppLayout />}>

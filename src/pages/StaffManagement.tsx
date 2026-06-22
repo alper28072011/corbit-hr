@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Search, X, UserPlus, LogOut, LogIn, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Download, UploadCloud, List, LayoutGrid } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useStore } from "../store/useStore";
+import { usePageRefresh } from "../hooks/usePageRefresh";
 import { Staff } from "../types";
 import { cn, calculateAge } from "../lib/utils";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
@@ -61,6 +62,8 @@ const ActionMenu = ({ children }: { children: ReactNode }) => {
 
 export default function StaffManagement() {
   const { hotels, facilities, rooms, staff, accommodations, addStaff, bulkAddStaffWithPlacements, placeStaff, checkoutStaff, undoCheckoutStaff, deleteStaff, bulkDeleteStaff, notifyCheckoutStaff, currentUser, roles } = useStore();
+
+  const refreshAction = usePageRefresh();
 
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
 
@@ -692,6 +695,7 @@ export default function StaffManagement() {
           title="Personel Yönetimi"
           description="Personel listesi, giriş-çıkış işlemleri ve oda yerleşimleri (allocation)."
           actions={[
+            refreshAction,
             ...(canAddStaff ? [{
               key: 'add_staff',
               icon: UserPlus,

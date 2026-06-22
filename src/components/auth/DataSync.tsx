@@ -15,7 +15,8 @@ export default function DataSync() {
     setStaff, 
     setAccommodations, 
     setMaintenanceTickets,
-    setApprovalRequests
+    setApprovalRequests,
+    refreshTrigger
   } = useStore();
 
   useEffect(() => {
@@ -182,7 +183,7 @@ export default function DataSync() {
     return () => {
       unsubs.forEach(unsub => unsub());
     };
-  }, [currentUser]);
+  }, [currentUser, refreshTrigger]);
 
   return null;
 }

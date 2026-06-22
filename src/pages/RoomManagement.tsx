@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { BedDouble, Plus, Copy, Trash2, Edit2, Building, AlertCircle, ShieldAlert, Check, X, Search, Filter, Upload, Download } from "lucide-react";
 import { useStore } from "../store/useStore";
+import { usePageRefresh } from "../hooks/usePageRefresh";
 import { cn, naturalSort } from "../lib/utils";
 import { PAGE_KEYS, canViewPage, can } from "../lib/permissions";
 import { Room } from "../types";
@@ -30,6 +31,8 @@ export default function RoomManagement() {
   const filterBlock = roomFilters.block ?? '';
   const filterGender = roomFilters.gender ?? '';
   const filterStatus = roomFilters.status ?? '';
+
+  const refreshAction = usePageRefresh();
 
   const setSelectedFacilityId = (val: string) => setUiPreference('lastFilters', pageKey, { ...roomFilters, facilityId: val });
   const setSearchQuery = (val: string) => setUiPreference('lastFilters', pageKey, { ...roomFilters, search: val });
@@ -305,6 +308,7 @@ export default function RoomManagement() {
           title="Oda Yönetimi"
           description="Oda tipleri, yatak kapasiteleri ve oda detaylarını buradan yönetin."
           actions={[
+            refreshAction,
             ...(canDelete && selectedRooms.length > 0 ? [{
               key: 'delete_selected_rooms',
               icon: Trash2,

@@ -19,6 +19,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from "recharts";
 import { useStore } from "../store/useStore";
+import { usePageRefresh } from "../hooks/usePageRefresh";
 import { canViewPage, can, PAGE_KEYS } from "../lib/permissions";
 import { cn } from "../lib/utils";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -51,6 +52,7 @@ function CardContent({ className = "", children }: { className?: string, childre
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const refreshAction = usePageRefresh();
   const facilities = useStore(state => state.facilities);
   const rooms = useStore(state => state.rooms);
   const accommodations = useStore(state => state.accommodations);
@@ -276,6 +278,7 @@ export default function Dashboard() {
           ? 'Sorumlu olduğunuz lojmanların detaylı analizleri.' 
           : 'Zincir genelindeki konaklama istatistikleri ve analizler.'}
         actions={[
+          refreshAction,
           ...(can(currentUser?.role, 'create_staff', PAGE_KEYS.staff, useStore.getState().rolesPermissions) ? [{
             key: 'new_staff',
             icon: UserPlus,
