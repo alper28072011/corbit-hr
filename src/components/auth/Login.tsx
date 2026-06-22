@@ -26,7 +26,7 @@ export default function Login() {
       <div className="bg-white p-8 rounded-[32px] border border-[#E8E6E1] shadow-xl w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-serif font-bold text-[#2D332D]">Corbit HR</h1>
-          <p className="text-stone-500 mt-2">Lojman Yönetim Sistemi</p>
+          <p className="text-stone-500 mt-2">Management</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
