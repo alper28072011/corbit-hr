@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { 
   Plus, Wrench, Search, Filter, Trash2, Edit2, History, AlertCircle, MapPin, 
-  X, Check, ChevronDown, ListFilter, AlignLeft, ShieldAlert, CheckCircle
+  X, Check, ChevronDown, ListFilter, AlignLeft, ShieldAlert, CheckCircle, Download
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { useStore } from "../store/useStore";
 import { cn, naturalSort } from "../lib/utils";
 import { MaintenanceTicket, ActionLog } from "../types";
@@ -41,6 +42,9 @@ export default function Maintenance() {
   const addLog = useStore(state => state.addLog);
   const logs = useStore(state => state.logs);
   const currentUser = useStore(state => state.currentUser);
+  const staff = useStore(state => state.staff);
+  const accommodations = useStore(state => state.accommodations);
+
   
   const rp = useStore.getState().rolesPermissions;
   const canCreate = can(currentUser?.role, 'create_ticket', PAGE_KEYS.maintenance, rp);
@@ -108,12 +112,49 @@ export default function Maintenance() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // --- Derived State: İzin Verilen Odalar ---
+  const allowedRoomIds = useMemo(() => {
+    if (!currentUser) return new Set<string>();
+    const userHotelIds = currentUser.assignedHotelIds || [];
+    
+    // Sistemdeki personelleri tarayıp otel yetkimizde olanları bul
+    const activeStaffIds = new Set(
+      staff.filter(s => s.status === 'Konaklıyor' && userHotelIds.includes(s.hotelId)).map(s => s.id)
+    );
+
+    // Bu personellerin konfor sağlandığı odaları bul
+    const roomIds = accommodations
+      .filter(acc => acc.status === 'active' && activeStaffIds.has(acc.staffId))
+      .map(acc => acc.roomId);
+
+    return new Set(roomIds);
+  }, [currentUser, staff, accommodations]);
+
+  const assignedDormIds = currentUser?.assignedFacilityIds || (currentUser?.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+  const superAdmin = currentUser?.role === 'super_admin';
+
+  const allowedFacilityIds = useMemo(() => {
+    if (superAdmin) return facilities.map(f => f.id);
+    const result = new Set<string>(assignedDormIds);
+    rooms.filter(r => allowedRoomIds.has(r.id)).forEach(r => result.add(r.facilityId));
+    return Array.from(result);
+  }, [superAdmin, facilities, assignedDormIds, rooms, allowedRoomIds]);
+
+  const visibleFacilitiesForForm = facilities.filter(f => allowedFacilityIds.includes(f.id));
+
   const filteredFacilityRooms = useMemo(() => {
     if (!formData.dormId) return [];
     
-    // Filtrelenmiş listeyi naturalSort ile sıralayıp dönüyoruz
-    return naturalSort(rooms.filter(r => r.facilityId === formData.dormId), r => r.roomNumber);
-  }, [rooms, formData.dormId]);
+    let facRooms = rooms.filter(r => r.facilityId === formData.dormId);
+    
+    // Eğer süper admin değilse ve lojmanın doğrudan yetkilisi değilse (Sadece personel odası için görüyorsa),
+    // SADECE personelinin kaldığı odaları listede göster/seçtir.
+    if (!superAdmin && !assignedDormIds.includes(formData.dormId)) {
+      facRooms = facRooms.filter(r => allowedRoomIds.has(r.id));
+    }
+    
+    return naturalSort(facRooms, r => r.roomNumber);
+  }, [rooms, formData.dormId, superAdmin, assignedDormIds, allowedRoomIds]);
 
   const searchedRooms = useMemo(() => {
     if (!roomSearchQuery) return filteredFacilityRooms;
@@ -165,9 +206,12 @@ export default function Maintenance() {
   const visibleTickets = useMemo(() => {
     let results = maintenanceTickets;
 
-    if (currentUser?.role === 'facility_manager') {
-      const allowedFacIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
-      results = results.filter(t => allowedFacIds.includes(t.dormId));
+    if (!superAdmin) {
+      results = results.filter(t => {
+        const hasDormAccess = assignedDormIds.includes(t.dormId);
+        const hasRoomAccess = allowedRoomIds.has(t.roomId);
+        return hasDormAccess || hasRoomAccess;
+      });
     }
     
     if (searchQuery) {
@@ -300,6 +344,30 @@ export default function Maintenance() {
     setShowStatusModal(true);
   };
 
+  const handleExportExcel = () => {
+    const data = visibleTickets.map(ticket => {
+      const facilityName = facilities.find(f => f.id === ticket.dormId)?.name || 'Bilinmiyor';
+      const roomName = rooms.find(r => r.id === ticket.roomId)?.roomNumber || 'Ortak Alan';
+      
+      return {
+        'Kayıt No': ticket.id,
+        'Oluşturulma Tarihi': new Date(ticket.createdAt).toLocaleString('tr-TR'),
+        'Öncelik': ticket.priority,
+        'Durum': ticket.status,
+        'Kategori': ticket.title,
+        'Lojman / Tesis': facilityName,
+        'Oda': roomName,
+        'Açıklama': ticket.description,
+        'Bildiren': ticket.reportedBy,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Arıza Kayıtları");
+    XLSX.writeFile(workbook, `Ariza_Kayitlari_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const StatusBadge = ({ status }: { status: string }) => {
     const colors: Record<string, string> = {
       'Açık': 'bg-red-50 text-red-700 border-red-200',
@@ -336,6 +404,13 @@ export default function Maintenance() {
         description="Tesislerdeki teknik talepleri ve arızaları merkezi olarak takip edin."
         actions={[
           refreshAction,
+          {
+            key: 'export_excel',
+            icon: Download,
+            tooltip: "Excel'e Aktar",
+            onClick: handleExportExcel,
+            variant: 'outline'
+          },
           ...(canCreate ? [{
             key: 'new_ticket',
             icon: Plus,
@@ -467,7 +542,14 @@ export default function Maintenance() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-semibold text-stone-700">{facilityName}</div>
-                        <div className="text-xs text-stone-500 mt-1">{roomName ? `Oda: ${roomName}` : 'Ortak Alan'}</div>
+                        <div className="text-xs text-stone-500 mt-1 flex items-center gap-1.5">
+                          <span>{roomName ? `Oda: ${roomName}` : 'Ortak Alan'}</span>
+                          {!superAdmin && !assignedDormIds.includes(ticket.dormId) && allowedRoomIds.has(ticket.roomId) && (
+                            <span title="Yetkiniz dışı lojman. Personelinizin konaklaması sebebiyle görebiliyorsunuz." className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 uppercase tracking-wider">
+                               Personelinizin Odası
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-stone-600">{ticket.reportedBy}</div>
@@ -506,11 +588,11 @@ export default function Maintenance() {
                               <Edit2 className="w-4 h-4" />
                             </button>
                           )}
-                          {canViewLogs && (
+                          {true && (
                             <button 
                               onClick={() => { setSelectedTicketForLog(ticket); setShowLogModal(true); }}
                               className="p-1.5 text-stone-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                              title="Geçmiş Logs"
+                              title="İşlem Geçmişi ve Notlar"
                             >
                               <History className="w-4 h-4" />
                             </button>
@@ -565,7 +647,7 @@ export default function Maintenance() {
                   <label className="block text-xs font-semibold text-stone-500 mb-1">Lojman / Tesis</label>
                   <select required value={formData.dormId} onChange={e => setFormData({...formData, dormId: e.target.value, roomId: ''})} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-[#7C8363]">
                     <option value="">Seçiniz...</option>
-                    {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    {visibleFacilitiesForForm.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
                 </div>
                 <div className="relative" ref={dropdownRef}>
