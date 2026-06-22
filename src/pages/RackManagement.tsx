@@ -1,17 +1,68 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, ReactNode } from 'react';
 import { useStore } from '../store/useStore';
 import { PageHeader } from '../components/layout/PageHeader';
 import { usePageRefresh } from '../hooks/usePageRefresh';
 import { cn, naturalSort } from '../lib/utils';
 import { 
   Search, X, LayoutGrid, LayoutList, Grip, Users, 
-  BedSingle, AlertTriangle, LogOut, CheckCircle, Wrench, ShieldAlert
+  BedSingle, AlertTriangle, LogOut, CheckCircle, Wrench, ShieldAlert,
+  MoreVertical, FileText, Phone, Edit2, Trash2, Replace
 } from 'lucide-react';
-import { canViewPage, PAGE_KEYS } from '../lib/permissions';
+import { canViewPage, can, PAGE_KEYS } from '../lib/permissions';
 import { motion, AnimatePresence } from 'motion/react';
+import { Staff } from '../types';
+import RoomChangeWizard from '../components/staff/RoomChangeWizard';
+
+const ActionMenu = ({ children }: { children: ReactNode }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState({ top: 0, right: 0 });
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.bottom + 8, // slight offset
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <div className="relative inline-block text-left">
+      <button 
+        ref={buttonRef}
+        onClick={handleToggle} 
+        className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+      >
+        <MoreVertical className="w-5 h-5" />
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}></div>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+              transition={{ duration: 0.15 }}
+              className="fixed w-56 rounded-xl shadow-[0_4px_24px_-4px_rgba(0,0,0,0.1)] bg-white border border-stone-100 z-[70] py-1 overflow-hidden" 
+              style={{ top: position.top, right: position.right }}
+              onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
+            >
+              {children}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 export default function RackManagement() {
-  const { facilities, rooms, staff, accommodations, maintenanceTickets, currentUser, roles } = useStore();
+  const { facilities, rooms, hotels, staff, accommodations, maintenanceTickets, currentUser, roles } = useStore();
 
   // Read preferences
   const uiPrefs = useStore(state => state.uiPreferences);
@@ -36,6 +87,21 @@ export default function RackManagement() {
   // Selected Room for Modal
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
+  // Staff Management states for Room Detail Panel actions
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: '', notes: '', specialNote: '', checkInDate: '', checkOutDate: ''
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [changingRoomStaffInfo, setChangingRoomStaffInfo] = useState<{ staff: Staff, currentRoomId: string, currentFacilityId: string } | null>(null);
+  const [notifyCheckoutModal, setNotifyCheckoutModal] = useState<{ open: boolean, staffId: string, staffName: string, date: string }>({ open: false, staffId: '', staffName: '', date: '' });
+
+  const rp = useStore.getState().rolesPermissions;
+  const canEditStaff = can(currentUser?.role, 'edit_staff', PAGE_KEYS.staff, rp);
+  const canDeleteStaff = can(currentUser?.role, 'delete_staff', PAGE_KEYS.staff, rp);
+  const canChangeRoom = can(currentUser?.role, 'change_room', PAGE_KEYS.staff, rp);
+  const canCheckoutStaff = can(currentUser?.role, 'change_room', PAGE_KEYS.staff, rp);
+
   // Defer heavy rendering to prevent navigation freezing
   const [isReady, setIsReady] = useState(false);
   useEffect(() => {
@@ -43,6 +109,42 @@ export default function RackManagement() {
     const t = setTimeout(() => setIsReady(true), 100);
     return () => clearTimeout(t);
   }, []);
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaffId) return;
+    setIsSavingEdit(true);
+    try {
+      await useStore.getState().updateStaff(editingStaffId, editForm);
+      setEditingStaffId(null);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleNotifyCheckoutSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    useStore.getState().notifyCheckoutStaff(notifyCheckoutModal.staffId, notifyCheckoutModal.date);
+    setNotifyCheckoutModal({ open: false, staffId: '', staffName: '', date: '' });
+  };
+
+  const availableHotels = useMemo(() => {
+    if (!currentUser) return [];
+    if (['super_admin', 'hr_director'].includes(currentUser.role)) return hotels;
+    if (currentUser.role === 'hotel_hr_manager') {
+      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+      return hotels.filter(h => hotelIds.includes(h.id));
+    }
+    return hotels;
+  }, [hotels, currentUser]);
+
+  const departments = Array.from(new Set(staff.map(s => s.department).filter(Boolean)))
+    .filter((d): d is string => typeof d === 'string')
+    .sort((a, b) => a.localeCompare(b, 'tr-TR'));
+
+  const positions = Array.from(new Set(staff.map(s => s.position).filter(Boolean)))
+    .filter((p): p is string => typeof p === 'string')
+    .sort((a, b) => a.localeCompare(b, 'tr-TR'));
 
   const availableFacilities = useMemo(() => {
     if (!currentUser) return [];
@@ -424,13 +526,14 @@ export default function RackManagement() {
       {/* Room Details Modal */}
       <AnimatePresence>
       {selectedRoomId && selectedRoomDetails && (
-         <div className="fixed inset-0 z-50 flex items-center justify-end bg-stone-900/60 p-4 transition-all">
+         <div className="fixed inset-0 z-50 flex items-center justify-end bg-stone-900/60 p-4 transition-all" onClick={() => setSelectedRoomId(null)}>
            <motion.div 
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 50 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="bg-white h-[98vh] max-h-full w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
            >
               <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1] bg-[#FDFCFB] shrink-0">
                  <div>
@@ -463,19 +566,69 @@ export default function RackManagement() {
                     {selectedRoomDetails.currentResidents.length > 0 ? (
                        <ul className="space-y-3">
                          {selectedRoomDetails.currentResidents.map(res => (
-                            <li key={res.id} className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-stone-100">
-                               <div>
-                                  <p className="font-bold text-[#2D332D] text-sm">{res.fullName}</p>
-                                  <p className="text-[11px] text-stone-500 mt-0.5">{res.department} · {res.position}</p>
+                            <li key={res.id} className="flex flex-col bg-white p-3 rounded-xl shadow-sm border border-stone-100">
+                               <div className="flex items-start justify-between">
+                                  <div>
+                                     <div className="flex items-center gap-2">
+                                       <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-bold uppercase", res.gender === 'female' ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700")}>{res.gender === 'female' ? 'K' : 'E'}</span>
+                                       <p className="font-bold text-[#2D332D] text-sm">{res.fullName}</p>
+                                     </div>
+                                     <p className="text-[11px] text-stone-500 mt-1.5">
+                                        <span className="font-semibold text-stone-700">{hotels.find(h => h.id === res.hotelId)?.name || 'Otelsiz'}</span><br />
+                                        {res.department} {res.department && res.position ? '·' : ''} {res.position}
+                                     </p>
+                                     <div className="mt-2 flex items-center gap-3 text-[10px] text-stone-400">
+                                        <span title="TC / Passport"><FileText className="w-3 h-3 inline mr-1" />{res.tcNo || '-'}</span>
+                                        <span title="Telefon"><Phone className="w-3 h-3 inline mr-1" />{res.phone || '-'}</span>
+                                     </div>
+                                  </div>
+                                  
+                                  {(canEditStaff || canCheckoutStaff || canChangeRoom || canDeleteStaff) && (
+                                     <div className="shrink-0 pl-2">
+                                       <ActionMenu>
+                                         {canEditStaff && (
+                                             <button 
+                                               onClick={() => {
+                                                 setEditForm({ ...res });
+                                                 setEditingStaffId(res.id);
+                                               }}
+                                               className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                                             >
+                                               <Edit2 className="w-4 h-4" /> Düzenle
+                                             </button>
+                                         )}
+                                         {canChangeRoom && selectedRoomId && (
+                                            <button 
+                                              onClick={() => setChangingRoomStaffInfo({ staff: res, currentRoomId: selectedRoomId, currentFacilityId: selectedRoomDetails.facilityId })}
+                                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                                            >
+                                              <Replace className="w-4 h-4" /> Oda Değiştir
+                                            </button>
+                                         )}
+                                         {canCheckoutStaff && (
+                                            <button 
+                                              onClick={() => setNotifyCheckoutModal({ open: true, staffId: res.id, staffName: res.fullName, date: res.checkOutDate || new Date().toISOString().split('T')[0] })}
+                                              className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2"
+                                            >
+                                              <LogOut className="w-4 h-4" /> Çıkış (Planla/Yap)
+                                            </button>
+                                         )}
+                                         {canDeleteStaff && (
+                                            <button 
+                                              onClick={() => {
+                                                if (confirm('Bu personeli silmek istediğinize emin misiniz?')) {
+                                                   useStore.getState().deleteStaff(res.id);
+                                                }
+                                              }}
+                                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
+                                            >
+                                              <Trash2 className="w-4 h-4" /> Kaydı Sil
+                                            </button>
+                                         )}
+                                       </ActionMenu>
+                                     </div>
+                                  )}
                                </div>
-                               {/* Only show if permitted, but keeping it visual for the rack module */}
-                               <button 
-                                 className="text-stone-400 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-50 shrink-0"
-                                 title="Odadan Çıkış Yap"
-                                 onClick={() => alert(`Personel çıkışı 'Personel Yönetimi' modülünden yapılmalıdır.`)}
-                               >
-                                  <LogOut className="w-4 h-4" />
-                               </button>
                             </li>
                          ))}
                        </ul>
@@ -509,6 +662,166 @@ export default function RackManagement() {
               </div>
            </motion.div>
          </div>
+      )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+      {/* Edit Staff Modal */}
+      {editingStaffId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/50 p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]"
+          >
+            <h3 className="text-xl font-bold mb-6 text-[#2D332D]">Personel Düzenle</h3>
+            <form onSubmit={handleSaveEdit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Ad Soyad *</label>
+                <input required type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Doğum Tarihi</label>
+                <input type="date" value={editForm.birthDate} onChange={e => setEditForm({...editForm, birthDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">TC Kimlik / Pasaport</label>
+                <input type="text" value={editForm.tcNo} onChange={e => setEditForm({...editForm, tcNo: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Telefon</label>
+                <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çalıştığı Otel *</label>
+                <select 
+                  required 
+                  value={editForm.hotelId} 
+                  onChange={e => setEditForm({...editForm, hotelId: e.target.value})} 
+                  className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] disabled:opacity-50"
+                  disabled={currentUser?.role === 'hotel_hr_manager'}
+                >
+                  <option value="">Seçiniz...</option>
+                  {availableHotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Cinsiyet *</label>
+                <select value={editForm.gender} onChange={e => setEditForm({...editForm, gender: e.target.value as 'male'|'female'})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
+                  <option value="male">Erkek</option>
+                  <option value="female">Kadın</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Departman</label>
+                <input type="text" list="departments-list-edit" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                <datalist id="departments-list-edit">
+                  {departments.map(d => <option key={d} value={d} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Görev / Pozisyon</label>
+                <input type="text" list="positions-list-edit" value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                <datalist id="positions-list-edit">
+                  {positions.map(p => <option key={p} value={p} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Giriş Tarihi</label>
+                <input type="date" value={editForm.checkInDate || ''} onChange={e => setEditForm({...editForm, checkInDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çıkış Tarihi</label>
+                <input type="date" value={editForm.checkOutDate || ''} onChange={e => setEditForm({...editForm, checkOutDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Notlar / Açıklama</label>
+                <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} placeholder="Personel ile ilgili notlar..." className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] min-h-[80px]" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Sıra Dışı Yerleşim (İK Notu)</label>
+                <textarea value={editForm.specialNote} onChange={e => setEditForm({...editForm, specialNote: e.target.value})} placeholder="Örn: Eşi Ayşe Yılmaz ile Aile odasında kalacak." className="w-full px-4 py-2 border border-red-200 bg-red-50 rounded-xl text-sm focus:outline-none focus:border-red-400 min-h-[60px]" />
+              </div>
+              
+              <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+                <button type="button" onClick={() => setEditingStaffId(null)} className="px-6 py-2 border border-[#E8E6E1] bg-white text-stone-600 rounded-xl hover:bg-stone-50 font-semibold text-sm">İptal</button>
+                <button type="submit" disabled={isSavingEdit} className="px-6 py-2 bg-[#7C8363] text-white rounded-xl hover:bg-[#6A7152] font-semibold text-sm flex items-center gap-2">
+                  {isSavingEdit ? 'Kaydediliyor...' : <><Edit2 className="w-4 h-4"/> Kaydet</>}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+      </AnimatePresence>
+
+      {/* Notify Checkout Modal */}
+      <AnimatePresence>
+      {notifyCheckoutModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+          >
+            <div className="flex justify-between items-center p-6 border-b border-[#E8E6E1]">
+              <h2 className="text-xl font-bold text-[#2D332D]">Çıkış Planlama</h2>
+              <button 
+                onClick={() => setNotifyCheckoutModal({ open: false, staffId: '', staffName: '', date: '' })}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <X className="w-5 h-5"/>
+              </button>
+            </div>
+            <form onSubmit={handleNotifyCheckoutSubmit} className="p-6">
+               <p className="text-sm text-stone-600 mb-4">
+                 <strong>{notifyCheckoutModal.staffName}</strong> adlı personel için otel tarafından belirlenen tahmini çıkış tarihi (Planlanan Çıkış):
+               </p>
+               <input 
+                 type="date" 
+                 required
+                 value={notifyCheckoutModal.date} 
+                 onChange={e => setNotifyCheckoutModal({...notifyCheckoutModal, date: e.target.value})} 
+                 className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl focus:outline-none focus:border-red-500 mb-6" 
+               />
+               
+               <div className="flex justify-between gap-3">
+                 <button 
+                   type="button"
+                   onClick={() => {
+                     // Directly checkout now
+                     useStore.getState().checkoutStaff(notifyCheckoutModal.staffId);
+                     setNotifyCheckoutModal({ open: false, staffId: '', staffName: '', date: '' });
+                   }}
+                   className="px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 font-semibold text-sm flex-1"
+                 >
+                   Hemen Çıkış Yap
+                 </button>
+                 <button 
+                   type="submit" 
+                   className="px-4 py-2 bg-stone-800 text-white rounded-xl hover:bg-stone-900 font-semibold text-sm flex-1"
+                 >
+                   Planla / Kaydet
+                 </button>
+               </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+      </AnimatePresence>
+
+      {/* Room Change Wizard */}
+      <AnimatePresence>
+      {changingRoomStaffInfo && (
+        <RoomChangeWizard 
+          staff={changingRoomStaffInfo.staff}
+          currentRoomId={changingRoomStaffInfo.currentRoomId}
+          currentFacilityId={changingRoomStaffInfo.currentFacilityId}
+          onClose={() => setChangingRoomStaffInfo(null)}
+        />
       )}
       </AnimatePresence>
     </div>
