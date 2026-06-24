@@ -112,17 +112,26 @@ export default function Maintenance() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- Derived State: İzin Verilen Odalar ---
-  const allowedRoomIds = useMemo(() => {
+  // --- Derived State: Dinamik Yetkilendirme ---
+  const hasFullAccess = ['super_admin', 'hr_director'].includes(currentUser?.role || '');
+
+  // 1. directDormIds: Doğrudan yetkili olunan lojmanlar
+  const directDormIds = useMemo(() => {
+    if (hasFullAccess) return facilities.map(f => f.id);
+    return currentUser?.assignedFacilityIds || (currentUser?.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+  }, [hasFullAccess, facilities, currentUser]);
+
+  // 2. staffRoomIds: Personelin Kaldığı Odalar
+  const staffRoomIds = useMemo(() => {
     if (!currentUser) return new Set<string>();
-    const userHotelIds = currentUser.assignedHotelIds || [];
+    const userHotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
     
     // Sistemdeki personelleri tarayıp otel yetkimizde olanları bul
     const activeStaffIds = new Set(
-      staff.filter(s => s.status === 'Konaklıyor' && userHotelIds.includes(s.hotelId)).map(s => s.id)
+      staff.filter(s => ['placed', 'pending_checkout'].includes(s.status) && userHotelIds.includes(s.hotelId)).map(s => s.id)
     );
 
-    // Bu personellerin konfor sağlandığı odaları bul
+    // Bu personellerin konakladığı odaları bul
     const roomIds = accommodations
       .filter(acc => acc.status === 'active' && activeStaffIds.has(acc.staffId))
       .map(acc => acc.roomId);
@@ -130,17 +139,23 @@ export default function Maintenance() {
     return new Set(roomIds);
   }, [currentUser, staff, accommodations]);
 
-  const assignedDormIds = currentUser?.assignedFacilityIds || (currentUser?.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
-  const superAdmin = currentUser?.role === 'super_admin';
+  // 3. staffDormIds: Personelin Kaldığı Lojmanlar
+  const staffDormIds = useMemo(() => {
+    return new Set(
+      rooms.filter(r => staffRoomIds.has(r.id)).map(r => r.facilityId)
+    );
+  }, [rooms, staffRoomIds]);
 
-  const allowedFacilityIds = useMemo(() => {
-    if (superAdmin) return facilities.map(f => f.id);
-    const result = new Set<string>(assignedDormIds);
-    rooms.filter(r => allowedRoomIds.has(r.id)).forEach(r => result.add(r.facilityId));
+  // 4. allowedDormIds: Görünür Lojmanlar Toplamı
+  const allowedDormIds = useMemo(() => {
+    if (hasFullAccess) return facilities.map(f => f.id);
+    const result = new Set<string>(directDormIds);
+    staffDormIds.forEach(id => result.add(id));
     return Array.from(result);
-  }, [superAdmin, facilities, assignedDormIds, rooms, allowedRoomIds]);
+  }, [hasFullAccess, facilities, directDormIds, staffDormIds]);
 
-  const visibleFacilitiesForForm = facilities.filter(f => allowedFacilityIds.includes(f.id));
+  const visibleFacilitiesForFilter = facilities.filter(f => allowedDormIds.includes(f.id));
+  const visibleFacilitiesForForm = visibleFacilitiesForFilter;
 
   const filteredFacilityRooms = useMemo(() => {
     if (!formData.dormId) return [];
@@ -149,12 +164,12 @@ export default function Maintenance() {
     
     // Eğer süper admin değilse ve lojmanın doğrudan yetkilisi değilse (Sadece personel odası için görüyorsa),
     // SADECE personelinin kaldığı odaları listede göster/seçtir.
-    if (!superAdmin && !assignedDormIds.includes(formData.dormId)) {
-      facRooms = facRooms.filter(r => allowedRoomIds.has(r.id));
+    if (!hasFullAccess && !directDormIds.includes(formData.dormId)) {
+      facRooms = facRooms.filter(r => staffRoomIds.has(r.id));
     }
     
     return naturalSort(facRooms, r => r.roomNumber);
-  }, [rooms, formData.dormId, superAdmin, assignedDormIds, allowedRoomIds]);
+  }, [rooms, formData.dormId, hasFullAccess, directDormIds, staffRoomIds]);
 
   const searchedRooms = useMemo(() => {
     if (!roomSearchQuery) return filteredFacilityRooms;
@@ -206,11 +221,12 @@ export default function Maintenance() {
   const visibleTickets = useMemo(() => {
     let results = maintenanceTickets;
 
-    if (!superAdmin) {
+    if (!hasFullAccess) {
       results = results.filter(t => {
-        const hasDormAccess = assignedDormIds.includes(t.dormId);
-        const hasRoomAccess = allowedRoomIds.has(t.roomId);
-        return hasDormAccess || hasRoomAccess;
+        const hasDormAccess = directDormIds.includes(t.dormId);
+        const hasRoomAccess = staffRoomIds.has(t.roomId);
+        const isCommonAreaInStaffDorm = !t.roomId && staffDormIds.has(t.dormId);
+        return hasDormAccess || hasRoomAccess || isCommonAreaInStaffDorm;
       });
     }
     
@@ -490,7 +506,7 @@ export default function Maintenance() {
                   className="bg-transparent text-sm font-semibold text-stone-600 focus:outline-none appearance-none pr-6 cursor-pointer max-w-[150px] truncate"
                 >
                   <option value="all">Tüm Lojmanlar</option>
-                  {facilities.map(f => (
+                  {visibleFacilitiesForFilter.map(f => (
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
                 </select>
@@ -542,13 +558,8 @@ export default function Maintenance() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-semibold text-stone-700">{facilityName}</div>
-                        <div className="text-xs text-stone-500 mt-1 flex items-center gap-1.5">
+                        <div className="text-xs text-stone-500 mt-1 flex items-center gap-1.5 flex-wrap">
                           <span>{roomName ? `Oda: ${roomName}` : 'Ortak Alan'}</span>
-                          {!superAdmin && !assignedDormIds.includes(ticket.dormId) && allowedRoomIds.has(ticket.roomId) && (
-                            <span title="Yetkiniz dışı lojman. Personelinizin konaklaması sebebiyle görebiliyorsunuz." className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 uppercase tracking-wider">
-                               Personelinizin Odası
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">

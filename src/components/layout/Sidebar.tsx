@@ -168,10 +168,10 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
                     )}
                   </NavLink>
                   {isCollapsed && (
-                     <div className="absolute left-full ml-2 hidden lg:flex items-center px-3 py-1.5 bg-[#1A1C18] text-white text-xs font-semibold rounded-lg opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all pointer-events-none z-[60] whitespace-nowrap shadow-xl">
+                     <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden lg:flex items-center px-3 py-1.5 bg-[#1A1C18] text-white text-xs font-semibold rounded-lg opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all pointer-events-none z-[60] whitespace-nowrap shadow-xl">
                        {item.name}
                        {item.badge && item.badge > 0 ? ` (${item.badge})` : ''}
-                       <div className="absolute top-1/2 -left-1 -mt-1 w-2 h-2 bg-[#1A1C18] rotate-45"></div>
+                       <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1A1C18] rotate-45"></div>
                      </div>
                   )}
                 </li>
@@ -188,9 +188,9 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
                 <div className="text-stone-400 py-1">
                    <Settings className="w-5 h-5 opacity-60" />
                    {/* Tooltip for settings area */}
-                   <div className="absolute left-full ml-4 hidden lg:block px-3 py-2 bg-[#1A1C18] text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60] whitespace-nowrap shadow-xl">
+                   <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 hidden lg:block px-3 py-2 bg-[#1A1C18] text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60] whitespace-nowrap shadow-xl">
                      Sistem: %99.9 Aktif<br/>VK: {appSettings?.version || "v1.0.0"}
-                     <div className="absolute top-1/2 -left-1 -mt-1 w-2 h-2 bg-[#1A1C18] rotate-45"></div>
+                     <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1A1C18] rotate-45"></div>
                    </div>
                 </div>
               ) : (
