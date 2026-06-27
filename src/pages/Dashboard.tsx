@@ -81,6 +81,9 @@ export default function Dashboard() {
     activeStaffCount,
     occupancyRate,
     emptyBeds,
+    stajyerCount,
+    yabanciCount,
+    categoryData,
     genderData,
     hotelDistributionData,
     facilityOccupancyList,
@@ -106,6 +109,18 @@ export default function Dashboard() {
     // 3. Occupancy Rate & Empty Beds
     const occupancyRate = totalCapacity > 0 ? (activeStaffCount / totalCapacity) * 100 : 0;
     const emptyBeds = Math.max(0, totalCapacity - activeStaffCount);
+
+    // Stajyer and Foreigner counts
+    const stajyerCount = activeStaff.filter(s => s.category === 'Stajyer').length;
+    const yabanciCount = activeStaff.filter(s => s.isForeigner).length;
+
+    // Category Distribution (Pie Chart)
+    const categoryCounts: Record<string, number> = {};
+    activeStaff.forEach(s => {
+      const cat = s.category || 'Personel';
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+    });
+    const categoryData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
 
     // Gender Distribution (Pie Chart)
     const males = activeStaff.filter(s => s.gender === 'male').length;
@@ -229,6 +244,9 @@ export default function Dashboard() {
       activeStaffCount,
       occupancyRate,
       emptyBeds,
+      stajyerCount,
+      yabanciCount,
+      categoryData,
       genderData,
       hotelDistributionData,
       facilityOccupancyList,
@@ -295,21 +313,21 @@ export default function Dashboard() {
         ]}
       />
 
-      {/* 1. KPI Cards (4 Grid) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="bg-[#2D332D] text-white border-transparent">
+      {/* 1. KPI Cards (Grid) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-6">
+        <Card className="bg-[#2D332D] text-white border-transparent col-span-1 md:col-span-1 xl:col-span-1">
           <CardHeader>
-            <CardTitle className="text-stone-300" icon={Building2}>Toplam Lojman Kapasitesi</CardTitle>
+            <CardTitle className="text-stone-300" icon={Building2}>Toplam Kapasite</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-serif font-bold">{totalCapacity}</div>
-            <p className="text-xs text-stone-400 mt-2 font-medium">aktif odalardaki yatak sayısı</p>
+            <p className="text-xs text-stone-400 mt-2 font-medium">aktif odalardaki yatak</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
           <CardHeader>
-            <CardTitle icon={Users}>Aktif Konaklayan Personel</CardTitle>
+            <CardTitle icon={Users}>Aktif Personel</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-serif font-bold text-[#2D332D]">{activeStaffCount}</div>
@@ -319,9 +337,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
           <CardHeader>
-            <CardTitle icon={Activity}>Doluluk Oranı</CardTitle>
+            <CardTitle icon={Activity}>Doluluk</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-serif font-bold text-[#2D332D]">{occupancyRate.toFixed(1)}%</div>
@@ -334,13 +352,33 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
           <CardHeader>
-            <CardTitle icon={BedDouble}>Boş Yatak Sayısı</CardTitle>
+            <CardTitle icon={BedDouble}>Boş Yatak</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-serif font-bold text-[#2D332D]">{emptyBeds}</div>
-            <p className="text-xs text-stone-500 mt-2 font-medium">atanmaya uygun kapasite</p>
+            <p className="text-xs text-stone-500 mt-2 font-medium">atanmaya uygun</p>
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
+          <CardHeader>
+            <CardTitle icon={Users}>Toplam Stajyer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-serif font-bold text-orange-600">{stajyerCount}</div>
+            <p className="text-xs text-stone-500 mt-2 font-medium">aktif stajyer sayısı</p>
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
+          <CardHeader>
+            <CardTitle icon={UserPlus}>Yabancı Çalışan</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-serif font-bold text-indigo-600">{yabanciCount}</div>
+            <p className="text-xs text-stone-500 mt-2 font-medium">yabancı uyruklu sayısı</p>
           </CardContent>
         </Card>
       </div>
@@ -471,7 +509,57 @@ export default function Dashboard() {
       </div>
 
       {/* 3. Distribution Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle icon={PieChartIcon}>Kategori Dağılımı</CardTitle>
+            <p className="text-sm text-stone-500">Personel statüsü dağılımı</p>
+          </CardHeader>
+          <CardContent className="min-h-[280px] relative">
+             {categoryData.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={90}
+                        paddingAngle={4}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: '1px solid #E8E6E1', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        itemStyle={{ color: '#2D332D', fontWeight: 600 }}
+                      />
+                      <Legend 
+                        verticalAlign="bottom" 
+                        height={36} 
+                        iconType="circle"
+                        formatter={(value) => <span className="text-stone-600 font-semibold ml-1">{value}</span>}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8 text-[#2D332D]">
+                    <span className="text-3xl font-serif font-bold">{activeStaffCount}</span>
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-stone-400">Kişi</span>
+                  </div>
+                </>
+             ) : (
+                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
+                  <Users className="w-8 h-8 opacity-20" />
+                  <p className="text-sm font-medium">Veri bulunamadı</p>
+                </div>
+             )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle icon={PieChartIcon}>Cinsiyet Dağılımı</CardTitle>

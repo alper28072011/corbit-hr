@@ -106,6 +106,18 @@ export default function DataSync() {
       unsubs.push(
         onSnapshot(staffQuery, (snapshot: any) => {
           const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Staff));
+          
+          // Cleanup expired soft-deleted staff (30 days)
+          // We only do this if the user has permission to delete staff to avoid permission errors
+          if (can(currentUser.role, 'delete_staff', 'staff', useStore.getState().rolesPermissions)) {
+            const now = Date.now();
+            const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+            const expiredStaffIds = data.filter(s => s.deletedAt && (now - s.deletedAt) > thirtyDaysMs).map(s => s.id);
+            if (expiredStaffIds.length > 0) {
+              useStore.getState().bulkHardDeleteStaff(expiredStaffIds).catch(console.error);
+            }
+          }
+
           setStaff(data);
         }, (error: any) => handleFirestoreError(error, OperationType.LIST, "staff"))
       );

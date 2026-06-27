@@ -1,6 +1,6 @@
 import React, { useState, useMemo, ReactNode, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, UserPlus, LogOut, LogIn, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Download, UploadCloud, List, LayoutGrid } from "lucide-react";
+import { Search, X, UserPlus, LogOut, LogIn, ShieldAlert, MoreVertical, Edit2, Trash2, FileText, CheckCircle, Replace, FilterX, Clock, Info, ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Download, UploadCloud, List, LayoutGrid, RefreshCw, Trash } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useStore } from "../store/useStore";
 import { usePageRefresh } from "../hooks/usePageRefresh";
@@ -80,7 +80,7 @@ export default function StaffManagement() {
     : '';
 
   const [newStaff, setNewStaff] = useState({
-    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const, notes: '', specialNote: '', checkInDate: '', checkOutDate: ''
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: defaultHotelId, gender: 'male' as const, category: 'Personel' as 'Personel' | 'Yönetici' | 'Stajyer' | 'Taşeron', isForeigner: false, notes: '', specialNote: '', checkInDate: '', checkOutDate: ''
   });
 
   // Placement modal state
@@ -91,7 +91,7 @@ export default function StaffManagement() {
   // Edit Modal State
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, status: '', notes: '', specialNote: '', checkInDate: '', checkOutDate: ''
+    fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: '', gender: 'male' as const, category: 'Personel' as 'Personel' | 'Yönetici' | 'Stajyer' | 'Taşeron', isForeigner: false, status: '', notes: '', specialNote: '', checkInDate: '', checkOutDate: ''
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -118,6 +118,8 @@ export default function StaffManagement() {
   const filterHotel = staffFilters.hotelId ?? '';
   const filterFacility = staffFilters.facilityId ?? '';
   const filterDepartment = staffFilters.department ?? '';
+  const filterPosition = staffFilters.position ?? '';
+  const filterCategory = staffFilters.category ?? '';
   const filterCheckIn = staffFilters.checkIn ?? '';
   const filterCheckOut = staffFilters.checkOut ?? '';
   const sortConfig = uiPrefs.tableSorting[pageKey] || { key: 'room', direction: 'asc' };
@@ -127,12 +129,18 @@ export default function StaffManagement() {
   const setFilterHotel = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, hotelId: val });
   const setFilterFacility = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, facilityId: val });
   const setFilterDepartment = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, department: val });
+  const setFilterPosition = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, position: val });
+  const setFilterCategory = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, category: val });
   const setFilterCheckIn = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, checkIn: val });
   const setFilterCheckOut = (val: string) => setUiPreference('lastFilters', pageKey, { ...staffFilters, checkOut: val });
   const setViewMode = (val: 'list' | 'grouped') => setUiPreference('viewModes', pageKey, val);
   const setSortConfig = (val: any) => setUiPreference('tableSorting', pageKey, val);
 
   const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    setSelectedStaffIds([]);
+  }, [filterStatus]);
 
   let viewMode = (uiPrefs.viewModes[pageKey] as 'list' | 'grouped') || 'list';
   if (filterStatus !== 'placed') {
@@ -157,6 +165,7 @@ export default function StaffManagement() {
   const canChangeRoom = can(currentUser?.role, 'change_room', PAGE_KEYS.staff, rp);
   const canViewDoc = can(currentUser?.role, 'view_sensitive_info', PAGE_KEYS.staff, rp);
   const canViewLogs = can(currentUser?.role, 'view_logs', 'settings', rp);
+  const canSelectRow = canDeleteStaff || canEditStaff || canPlaceStaff || canCheckoutStaff || canChangeRoom || canViewLogs || canViewDoc;
 
   const availableHotels = useMemo(() => {
     if (!currentUser) return [];
@@ -183,13 +192,21 @@ export default function StaffManagement() {
     return facs;
   }, [facilities, currentUser]);
 
-  const departments = Array.from(new Set(staff.map(s => s.department).filter(Boolean)))
+  const departments = Array.from(new Set(staff.map(s => s.department || 'Bilinmiyor')))
     .filter((d): d is string => typeof d === 'string')
-    .sort((a, b) => a.localeCompare(b, 'tr-TR'));
+    .sort((a, b) => {
+      if (a === 'Bilinmiyor') return -1;
+      if (b === 'Bilinmiyor') return 1;
+      return a.localeCompare(b, 'tr-TR');
+    });
 
-  const positions = Array.from(new Set(staff.map(s => s.position).filter(Boolean)))
+  const positions = Array.from(new Set(staff.map(s => s.position || 'Bilinmiyor')))
     .filter((p): p is string => typeof p === 'string')
-    .sort((a, b) => a.localeCompare(b, 'tr-TR'));
+    .sort((a, b) => {
+      if (a === 'Bilinmiyor') return -1;
+      if (b === 'Bilinmiyor') return 1;
+      return a.localeCompare(b, 'tr-TR');
+    });
 
   const unifiedStaffData = useMemo(() => {
     return staff.map(s => {
@@ -218,9 +235,18 @@ export default function StaffManagement() {
         if (item.staff.hotelId && !hotelIds.includes(item.staff.hotelId)) return false;
       }
       if (currentUser?.role === 'facility_manager') {
-        if (item.staff.status !== 'pending_placement') {
-          const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
-          if (item.acc?.facilityId && !facIds.includes(item.acc.facilityId)) return false;
+        const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+        
+        if (item.staff.status === 'pending_placement') {
+          const managedFacs = facilities.filter(f => facIds.includes(f.id));
+          const allowedHotelIds = managedFacs.flatMap(f => {
+            if (f.allowedHotelIds && f.allowedHotelIds.length > 0) return f.allowedHotelIds;
+            if ((f as any).hotelId) return [(f as any).hotelId];
+            return [];
+          });
+          if (item.staff.hotelId && !allowedHotelIds.includes(item.staff.hotelId)) return false;
+        } else {
+          if (!item.acc?.facilityId || !facIds.includes(item.acc.facilityId)) return false;
         }
       }
 
@@ -229,17 +255,27 @@ export default function StaffManagement() {
         const term = globalSearch.toLowerCase();
         const matchName = item.staff.fullName.toLowerCase().includes(term);
         const matchTc = item.staff.tcNo?.toLowerCase().includes(term);
-        const matchPhone = item.staff.phone?.toLowerCase().includes(term);
-        if (!matchName && !matchTc && !matchPhone) return false;
+        const matchRoom = item.room?.roomNumber ? String(item.room.roomNumber).toLowerCase().includes(term) : false;
+        if (!matchName && !matchTc && !matchRoom) return false;
       }
 
       // UI Filters
-      if (filterStatus && item.staff.status !== filterStatus) return false;
+      if (filterStatus === 'deleted') {
+        if (!item.staff.deletedAt) return false;
+      } else {
+        if (item.staff.deletedAt) return false;
+        if (filterStatus && item.staff.status !== filterStatus) return false;
+      }
       if (filterHotel && item.staff.hotelId !== filterHotel) return false;
       if (filterFacility) {
         if (item.acc?.facilityId !== filterFacility) return false;
       }
-      if (filterDepartment && item.staff.department !== filterDepartment) return false;
+      const staffDept = item.staff.department || 'Bilinmiyor';
+      if (filterDepartment && staffDept !== filterDepartment) return false;
+      const staffPos = item.staff.position || 'Bilinmiyor';
+      if (filterPosition && staffPos !== filterPosition) return false;
+      const staffCategory = item.staff.category || 'Personel';
+      if (filterCategory && staffCategory !== filterCategory) return false;
       
       const itemCheckIn = item.acc?.checkInDate || item.staff.checkInDate;
       const itemCheckOut = item.acc?.checkOutDate || item.staff.checkOutDate;
@@ -248,6 +284,11 @@ export default function StaffManagement() {
 
       return true;
     }).sort((a, b) => {
+      // Missing Data Sort: Put missing department or position at the very top
+      const aMissing = (!a.staff.department || !a.staff.position) ? 0 : 1;
+      const bMissing = (!b.staff.department || !b.staff.position) ? 0 : 1;
+      if (aMissing !== bMissing) return aMissing - bMissing;
+
       // Dynamic Sort
       if (sortConfig) {
         let aValue: any = '';
@@ -298,7 +339,7 @@ export default function StaffManagement() {
         return 0;
       }
 
-      // Base Sort: sort pending first, then placed, then left. Then by name
+      // Base Sort: pending first, then placed, then left. Then by name
       const statusOrder = { pending_placement: 0, placed: 1, left: 2 };
       const aOrder = statusOrder[a.staff.status as keyof typeof statusOrder] ?? 3;
       const bOrder = statusOrder[b.staff.status as keyof typeof statusOrder] ?? 3;
@@ -306,7 +347,7 @@ export default function StaffManagement() {
       
       return a.staff.fullName.localeCompare(b.staff.fullName);
     });
-  }, [staff, hotels, facilities, rooms, accommodations, currentUser, globalSearch, filterStatus, filterHotel, filterFacility, filterDepartment, sortConfig]);
+  }, [staff, hotels, facilities, rooms, accommodations, currentUser, globalSearch, filterStatus, filterHotel, filterFacility, filterDepartment, filterPosition, filterCategory, filterCheckIn, filterCheckOut, sortConfig]);
 
 
   const groupedRoomsData = useMemo(() => {
@@ -339,7 +380,7 @@ export default function StaffManagement() {
       
       // Diğer durumlarda (filterStatus, vs) eğer odada hiç eşleşen personel yoksa ve filtrelenmişse:
       // Eğer "Sadece Bekleyenleri" seçmişse ve bu odada hiç placed yoksa oda boş görünecek, o yüzden filtreli listelerde items=0 ise ve özel filtre açıksa gizleyelim:
-      if ((filterHotel || filterDepartment || filterStatus === 'placed' || filterStatus === 'pending_placement' || filterStatus === 'pending_checkout' || filterStatus === 'left') && group.items.length === 0) {
+      if ((filterHotel || filterDepartment || filterPosition || filterCategory || filterStatus === 'placed' || filterStatus === 'pending_placement' || filterStatus === 'pending_checkout' || filterStatus === 'left') && group.items.length === 0) {
         return false;
       }
 
@@ -350,7 +391,7 @@ export default function StaffManagement() {
        if (facA !== facB) return facA.localeCompare(facB);
        return String(a.room.roomNumber).localeCompare(String(b.room.roomNumber), undefined, { numeric: true });
     });
-  }, [unifiedStaffData, rooms, facilities, currentUser, globalSearch, filterFacility, filterHotel, filterDepartment, filterStatus]);
+  }, [unifiedStaffData, rooms, facilities, currentUser, globalSearch, filterFacility, filterHotel, filterDepartment, filterPosition, filterCategory, filterStatus]);
 
   const handleAddStaff = (e: import('react').FormEvent) => {
     e.preventDefault();
@@ -372,6 +413,8 @@ export default function StaffManagement() {
         "Telefon": "5551234567",
         "Doğum Tarihi": "1990-01-01",
         "Cinsiyet (Erkek/Kadin)": "Erkek",
+        "Kategori": "Personel",
+        "Yabancı Mı?": "Hayır",
         "Otel Adi veya Sube Kodu": hotels[0]?.branchCode || hotels[0]?.name || "Rubi Platinum",
         "Departman": "Mutfak",
         "Gorev": "Aşçı",
@@ -386,6 +429,8 @@ export default function StaffManagement() {
         "Telefon": "5559876543",
         "Doğum Tarihi": "1995-05-15",
         "Cinsiyet (Erkek/Kadin)": "Kadin",
+        "Kategori": "Stajyer",
+        "Yabancı Mı?": "Evet",
         "Otel Adi veya Sube Kodu": hotels[0]?.branchCode || hotels[0]?.name || "Rubi Platinum",
         "Departman": "Ön Büro",
         "Gorev": "Resepsiyonist",
@@ -460,6 +505,16 @@ export default function StaffManagement() {
           const genderRaw = String(row['Cinsiyet (Erkek/Kadin)'] || '').toLowerCase();
           const gender = (genderRaw === 'kadın' || genderRaw === 'kadin' || genderRaw === 'female') ? 'female' : 'male';
           
+          const categoryRaw = String(row['Kategori'] || '').trim();
+          if (!categoryRaw) {
+            errorCount++;
+            continue;
+          }
+          const category = (categoryRaw === 'Yönetici' || categoryRaw === 'Stajyer' || categoryRaw === 'Taşeron') ? categoryRaw : 'Personel';
+          
+          const isForeignerRaw = String(row['Yabancı Mı?'] || row['Yabanci Mi?'] || '').trim().toLowerCase();
+          const isForeigner = (isForeignerRaw === 'evet' || isForeignerRaw === 'yes' || isForeignerRaw === 'true');
+          
           const facilityName = String(row['Lojman Adı'] || '').trim();
           const roomNumber = String(row['Oda Numarası'] || String(row['Oda Numarasi'] || '')).trim();
           
@@ -485,6 +540,8 @@ export default function StaffManagement() {
               hotelId: hotel.id,
               status: 'pending_placement',
               gender,
+              category,
+              isForeigner,
               specialNote: String(row['Ozel Not (IK)'] || row['Ozel Not'] || '').trim(),
               birthDate: String(row['Doğum Tarihi'] || row['Dogum Tarihi'] || '').trim(),
               notes: String(row['Notlar'] || '').trim(),
@@ -538,6 +595,8 @@ export default function StaffManagement() {
       position: staffData.position,
       hotelId: staffData.hotelId,
       gender: staffData.gender,
+      category: staffData.category || 'Personel',
+      isForeigner: staffData.isForeigner || false,
       status: staffData.status,
       notes: staffData.notes || '',
       specialNote: staffData.specialNote || '',
@@ -576,10 +635,16 @@ export default function StaffManagement() {
 
   const clearFilters = () => {
     setGlobalSearch('');
-    setFilterStatus('');
-    setFilterHotel('');
-    setFilterFacility('');
-    setFilterDepartment('');
+    setUiPreference('lastFilters', pageKey, {
+      status: filterStatus,
+      hotel: '',
+      facility: '',
+      department: '',
+      position: '',
+      category: '',
+      checkIn: '',
+      checkOut: ''
+    });
   };
 
   const requestSort = (key: string) => {
@@ -605,8 +670,23 @@ export default function StaffManagement() {
 
   const handleBulkDelete = async () => {
     if (selectedStaffIds.length === 0) return;
-    if (confirm(`Seçili ${selectedStaffIds.length} personeli ve tüm konaklama kayıtlarını silmek istediğinize emin misiniz?`)) {
-      await bulkDeleteStaff(selectedStaffIds);
+    if (filterStatus === 'deleted') {
+      if (confirm(`Seçili ${selectedStaffIds.length} personeli tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+        await useStore.getState().bulkHardDeleteStaff(selectedStaffIds);
+        setSelectedStaffIds([]);
+      }
+    } else {
+      if (confirm(`Seçili ${selectedStaffIds.length} personeli çöp kutusuna göndermek istediğinize emin misiniz?`)) {
+        await bulkDeleteStaff(selectedStaffIds);
+        setSelectedStaffIds([]);
+      }
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedStaffIds.length === 0) return;
+    if (confirm(`Seçili ${selectedStaffIds.length} personeli geri yüklemek istediğinize emin misiniz?`)) {
+      await useStore.getState().bulkRestoreStaff(selectedStaffIds);
       setSelectedStaffIds([]);
     }
   };
@@ -638,9 +718,11 @@ export default function StaffManagement() {
         'Telefon': item.staff.phone || '',
         'Doğum Tarihi': item.staff.birthDate ? new Date(item.staff.birthDate).toLocaleDateString('tr-TR') : '',
         'Cinsiyet': item.staff.gender === 'female' ? 'Kadın' : 'Erkek',
+        'Kategori': item.staff.category || 'Personel',
+        'Yabancı Mı?': item.staff.isForeigner ? 'Evet' : 'Hayır',
         'Otel/İşletme': item.hotel?.name || '-',
-        'Departman': item.staff.department || '-',
-        'Görev': item.staff.position || '-',
+        'Departman': item.staff.department || 'Bilinmiyor',
+        'Görev': item.staff.position || 'Bilinmiyor',
         'Lojman': item.facility?.name || '-',
         'Oda No': item.room?.roomNumber || '-',
         'Giriş Tarihi': item.acc?.checkInDate ? new Date(item.acc.checkInDate).toLocaleDateString('tr-TR') : (item.staff.checkInDate ? new Date(item.staff.checkInDate).toLocaleDateString('tr-TR') : '-'),
@@ -688,6 +770,21 @@ export default function StaffManagement() {
     );
   }
 
+  const uniqueRoomCount = useMemo(() => {
+    const roomSet = new Set();
+    unifiedStaffData.forEach(item => {
+      if (item.room?.id) {
+        roomSet.add(item.room.id);
+      }
+    });
+    return roomSet.size;
+  }, [unifiedStaffData]);
+
+  const isSingleSelection = selectedStaffIds.length === 1;
+  const singleStaffItem = isSingleSelection ? unifiedStaffData.find(item => item.staff.id === selectedStaffIds[0]) : null;
+  const selStaff = singleStaffItem?.staff;
+  const selAcc = singleStaffItem?.acc;
+
   return (
     <div className="w-full flex flex-col p-6 gap-6">
       <div className="shrink-0">
@@ -709,11 +806,109 @@ export default function StaffManagement() {
               tooltip: 'Excel\'e Aktar',
               onClick: exportToExcel,
             },
-            ...(canDeleteStaff && selectedStaffIds.length > 0 ? [{
+            { key: 'separator_1', isSeparator: true },
+            {
+              key: 'check_in',
+              icon: CheckCircle,
+              tooltip: 'Yerleştir (Giriş Yap)',
+              onClick: () => { if (selStaff) setSelectedStaffIdToPlace(selStaff.id); },
+              disabled: !(isSingleSelection && selStaff?.status === 'pending_placement' && canPlaceStaff),
+              colorClass: 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+            },
+            {
+              key: 'notify_check_out',
+              icon: LogOut,
+              tooltip: 'Çıkış Bildir',
+              onClick: () => {
+                if (selStaff && selAcc) {
+                  setNotifyCheckoutModal({
+                    open: true,
+                    staffId: selStaff.id,
+                    staffName: selStaff.fullName,
+                    date: new Date().toISOString().split('T')[0]
+                  });
+                }
+              },
+              disabled: !(isSingleSelection && selStaff?.status === 'placed' && canEditStaff && selAcc),
+              colorClass: 'text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 hover:border-orange-300'
+            },
+            {
+              key: 'do_check_out',
+              icon: LogOut,
+              tooltip: 'Çıkış Yap',
+              onClick: () => {
+                if (selStaff && selAcc) {
+                  if(confirm(`${selStaff.fullName} isimli personelin lojmandan çıkışını yapmak istediğinize emin misiniz?`)) {
+                    checkoutStaff(selAcc.id, new Date().toISOString().split('T')[0]);
+                  }
+                }
+              },
+              disabled: !(isSingleSelection && (selStaff?.status === 'placed' || selStaff?.status === 'pending_checkout') && canCheckoutStaff && selAcc),
+              colorClass: 'text-stone-600 hover:text-stone-700 hover:bg-stone-50 border-stone-200 hover:border-stone-300'
+            },
+            {
+              key: 'change_room',
+              icon: Replace,
+              tooltip: 'Oda Değiştir',
+              onClick: () => {
+                if (selStaff && selAcc) {
+                  setChangingRoomStaffInfo({ staff: selStaff, currentRoomId: selAcc.roomId, currentFacilityId: selAcc.facilityId });
+                }
+              },
+              disabled: !(isSingleSelection && (selStaff?.status === 'placed' || selStaff?.status === 'pending_checkout') && canChangeRoom && selAcc),
+              colorClass: 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-300'
+            },
+            {
+              key: 'undo_check_out',
+              icon: CheckCircle,
+              tooltip: 'Çıkış İptali (Geri Al)',
+              onClick: () => {
+                if (selStaff && selAcc) {
+                  if(confirm(`${selStaff.fullName} isimli personelin lojmana geri dönüşünü (C/OUT İptali) onaylıyor musunuz?`)) {
+                    undoCheckoutStaff(selAcc.id);
+                  }
+                }
+              },
+              disabled: !(isSingleSelection && selStaff?.status === 'left' && canPlaceStaff && selAcc),
+              colorClass: 'text-stone-600 hover:text-stone-700 hover:bg-stone-50 border-stone-200 hover:border-stone-300'
+            },
+            {
+              key: 'edit_staff',
+              icon: Edit2,
+              tooltip: 'Düzenle',
+              onClick: () => { if (selStaff) handleOpenEdit(selStaff); },
+              disabled: !(isSingleSelection && canEditStaff),
+            },
+            {
+              key: 'view_logs',
+              icon: Clock,
+              tooltip: 'İşlem Geçmişi',
+              onClick: () => { if (selStaff) setLogsModalStaffId(selStaff.id); },
+              disabled: !(isSingleSelection && canViewLogs),
+            },
+            {
+              key: 'view_docs',
+              icon: FileText,
+              tooltip: 'Belge Görüntüle',
+              onClick: () => alert("Belge görüntüleme ekranı geliştirme aşamasındadır."),
+              disabled: !(isSingleSelection && canViewDoc),
+            },
+            ...(filterStatus === 'deleted' && canDeleteStaff ? [{
+              key: 'restore_selected',
+              icon: RefreshCw,
+              tooltip: selectedStaffIds.length > 0 ? `Seçilenleri Geri Yükle (${selectedStaffIds.length})` : 'Geri Yükle',
+              onClick: handleBulkRestore,
+              disabled: selectedStaffIds.length === 0,
+              colorClass: 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+            }] : []),
+            ...(canDeleteStaff ? [{
               key: 'delete_selected',
-              icon: Trash2,
-              tooltip: `Seçilenleri Sil (${selectedStaffIds.length})`,
+              icon: filterStatus === 'deleted' ? Trash : Trash2,
+              tooltip: filterStatus === 'deleted' 
+                ? (selectedStaffIds.length > 0 ? `Seçilenleri Kalıcı Sil (${selectedStaffIds.length})` : 'Kalıcı Sil') 
+                : (selectedStaffIds.length > 0 ? `Seçilenleri Sil (${selectedStaffIds.length})` : 'Kayıt Sil'),
               onClick: handleBulkDelete,
+              disabled: selectedStaffIds.length === 0,
               colorClass: 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300'
             }] : [])
           ]}
@@ -749,6 +944,7 @@ export default function StaffManagement() {
             { id: 'pending_placement', label: 'Yerleşim Bekliyor' },
             { id: 'pending_checkout', label: 'Çıkış Bekliyor' },
             { id: 'left', label: 'Çıkış Yaptı' },
+            { id: 'deleted', label: 'Silinenler' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -771,43 +967,92 @@ export default function StaffManagement() {
             </button>
           ))}
         </div>
-        <div className="text-sm text-stone-500 font-medium pb-3">
-          {unifiedStaffData.length} Kayıt
+        <div className="text-sm text-stone-500 font-medium pb-3 flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-stone-100 text-stone-600 rounded-md border border-stone-200">{uniqueRoomCount} Oda</span>
+          <span className="px-2 py-0.5 bg-[#7C8363]/10 text-[#7C8363] rounded-md border border-[#7C8363]/20">{unifiedStaffData.length} Kayıt</span>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="card-standard p-4 flex flex-col md:flex-row gap-4 bg-[#FDFCFB] shrink-0">
-          <div className="relative flex-1">
+      <div className="card-standard p-4 flex flex-col xl:flex-row gap-4 bg-[#FDFCFB] shrink-0">
+          <div className="relative w-full xl:max-w-xs shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
             <input 
               type="text" 
-              placeholder="İsim, TC No veya Telefon ile ara..." 
+              placeholder="İsim, TC No veya Oda..." 
               value={globalSearch}
               onChange={(e) => setGlobalSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm transition-all"
             />
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 hide-scrollbar items-center">
+          <div className="flex-1 flex gap-3 overflow-x-auto pb-2 xl:pb-0 hide-scrollbar items-center">
             
-            <select value={filterHotel} onChange={(e) => setFilterHotel(e.target.value)} className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[140px]">
-              <option value="">Tüm Oteller</option>
-              {availableHotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+            <select 
+              value={filterHotel} 
+              onChange={(e) => setFilterHotel(e.target.value)} 
+              className={cn(
+                "flex-1 px-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm min-w-[130px] transition-colors",
+                filterHotel ? "bg-[#7C8363] text-white font-semibold border-[#7C8363]" : "bg-white text-stone-700 font-medium border-[#E8E6E1]"
+              )}
+            >
+              <option value="" className="bg-white text-stone-700 font-medium">Tüm Oteller</option>
+              {availableHotels.map(h => <option key={h.id} value={h.id} className="bg-white text-stone-700 font-medium">{h.name}</option>)}
             </select>
 
-            <select value={filterFacility} onChange={(e) => setFilterFacility(e.target.value)} className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[140px]">
-              <option value="">Tüm Lojmanlar</option>
-              {availableFacilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            <select 
+              value={filterFacility} 
+              onChange={(e) => setFilterFacility(e.target.value)} 
+              className={cn(
+                "flex-1 px-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm min-w-[130px] transition-colors",
+                filterFacility ? "bg-[#7C8363] text-white font-semibold border-[#7C8363]" : "bg-white text-stone-700 font-medium border-[#E8E6E1]"
+              )}
+            >
+              <option value="" className="bg-white text-stone-700 font-medium">Tüm Lojmanlar</option>
+              {availableFacilities.map(f => <option key={f.id} value={f.id} className="bg-white text-stone-700 font-medium">{f.name}</option>)}
             </select>
 
-            <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className="px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] bg-white shadow-sm font-medium text-stone-700 min-w-[140px]">
-              <option value="">Tüm Departmanlar</option>
-              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            <select 
+              value={filterDepartment} 
+              onChange={(e) => setFilterDepartment(e.target.value)} 
+              className={cn(
+                "flex-1 px-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm min-w-[130px] transition-colors",
+                filterDepartment ? "bg-[#7C8363] text-white font-semibold border-[#7C8363]" : "bg-white text-stone-700 font-medium border-[#E8E6E1]"
+              )}
+            >
+              <option value="" className="bg-white text-stone-700 font-medium">Tüm Departmanlar</option>
+              {departments.map(d => <option key={d} value={d} className="bg-white text-stone-700 font-medium">{d}</option>)}
+            </select>
+
+            <select 
+              value={filterPosition} 
+              onChange={(e) => setFilterPosition(e.target.value)} 
+              className={cn(
+                "flex-1 px-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm min-w-[130px] transition-colors",
+                filterPosition ? "bg-[#7C8363] text-white font-semibold border-[#7C8363]" : "bg-white text-stone-700 font-medium border-[#E8E6E1]"
+              )}
+            >
+              <option value="" className="bg-white text-stone-700 font-medium">Tüm Pozisyonlar</option>
+              {positions.map(p => <option key={p} value={p} className="bg-white text-stone-700 font-medium">{p}</option>)}
+            </select>
+
+            <select 
+              value={filterCategory} 
+              onChange={(e) => setFilterCategory(e.target.value)} 
+              className={cn(
+                "flex-1 px-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-[#7C8363] shadow-sm min-w-[130px] transition-colors",
+                filterCategory ? "bg-[#7C8363] text-white font-semibold border-[#7C8363]" : "bg-white text-stone-700 font-medium border-[#E8E6E1]"
+              )}
+            >
+              <option value="" className="bg-white text-stone-700 font-medium">Tüm Kategoriler</option>
+              <option value="Personel" className="bg-white text-stone-700 font-medium">Personel</option>
+              <option value="Stajyer" className="bg-white text-stone-700 font-medium">Stajyer</option>
+              <option value="Yönetici" className="bg-white text-stone-700 font-medium">Yönetici</option>
+              <option value="Taşeron" className="bg-white text-stone-700 font-medium">Taşeron</option>
             </select>
 
              <button 
               onClick={clearFilters}
-              className="p-2 text-stone-400 hover:text-stone-700 bg-white border border-[#E8E6E1] hover:bg-stone-50 rounded-xl transition-colors shrink-0 shadow-sm"
+              className="p-2 text-stone-400 hover:text-stone-700 bg-white border border-[#E8E6E1] hover:bg-stone-50 rounded-xl transition-colors shrink-0 shadow-sm ml-auto"
               title="Filtreleri Temizle"
             >
               <X className="w-5 h-5" />
@@ -818,11 +1063,11 @@ export default function StaffManagement() {
       {viewMode === 'list' && (
       <div className="card-standard flex flex-col bg-white">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left relative">
+            <table className="w-full text-left relative table-fixed">
               <thead className="bg-[#FDFCFB] sticky top-0 z-10 shadow-sm border-b border-[#E8E6E1]">
                 <tr>
-                  {canDeleteStaff && (
-                    <th className="px-6 py-4 w-12 text-center">
+                  {canSelectRow && (
+                    <th className="px-3 py-3 w-10 text-center">
                       <input 
                         type="checkbox" 
                         checked={selectedStaffIds.length > 0 && selectedStaffIds.length === unifiedStaffData.length}
@@ -831,55 +1076,63 @@ export default function StaffManagement() {
                       />
                     </th>
                   )}
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('hotel') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('hotel')}>
+                  <th className={cn("px-3 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[11%]", isSorted('hotel') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('hotel')}>
                     <div className="flex items-center">Otel Adı {getSortIcon('hotel')}</div>
                   </th>
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('department') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('department')}>
-                    <div className="flex items-center">Departman & Görev {getSortIcon('department')}</div>
+                  <th className={cn("px-3 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[13%]", isSorted('department') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('department')}>
+                    <div className="flex items-center truncate">Departman {getSortIcon('department')}</div>
                   </th>
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('fullName') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('fullName')}>
+                  <th className={cn("px-3 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[20%]", isSorted('fullName') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('fullName')}>
                     <div className="flex items-center">Personel Adı {getSortIcon('fullName')}</div>
                   </th>
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('facility') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('facility')}>
-                    <div className="flex items-center">Lojman {getSortIcon('facility')}</div>
+                  <th className={cn("px-3 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[13%]", isSorted('facility') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('facility')}>
+                    <div className="flex items-center truncate">Lojman {getSortIcon('facility')}</div>
                   </th>
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none", isSorted('room') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('room')}>
+                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[6%]", isSorted('room') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('room')}>
                     <div className="flex items-center">Oda {getSortIcon('room')}</div>
                   </th>
-                  <th className={cn("px-6 py-4 text-xs font-bold uppercase tracking-wider", isSorted('gender') ? 'text-[#7C8363]' : 'text-stone-500')}>
-                    <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none" onClick={() => requestSort('gender')}>Cinsiyet {getSortIcon('gender')}</div>
+                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider w-[7%]", isSorted('gender') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                    <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none" onClick={() => requestSort('gender')}>Cins {getSortIcon('gender')}</div>
                   </th>
-                  <th className={cn("px-4 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB]", isSorted('checkIn') ? 'text-[#7C8363]' : 'text-stone-500')}>
-                    <div className="flex items-center justify-between gap-2">
-                      <input type="date" title="Giriş Tarihi" value={filterCheckIn} onChange={e => setFilterCheckIn(e.target.value)} className="text-[11px] border border-[#E8E6E1] bg-white rounded p-1.5 font-normal w-[110px] focus:outline-none focus:border-[#7C8363]" />
-                      <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-1 rounded shrink-0" onClick={() => requestSort('checkIn')} title="Giriş Tarihi'ne Göre Sırala">
+                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB] w-[12%]", isSorted('checkIn') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                    <div className="flex items-center justify-between gap-1">
+                      <input type="date" title="Giriş Tarihi" value={filterCheckIn} onChange={e => setFilterCheckIn(e.target.value)} className="text-[10px] border border-[#E8E6E1] bg-white rounded p-1 font-normal w-full max-w-[95px] focus:outline-none focus:border-[#7C8363]" />
+                      <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-0.5 rounded shrink-0" onClick={() => requestSort('checkIn')} title="Giriş Tarihi'ne Göre Sırala">
                           {getSortIcon('checkIn')}
                       </div>
                     </div>
                   </th>
-                  <th className={cn("px-4 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB]", isSorted('checkOut') ? 'text-[#7C8363]' : 'text-stone-500')}>
-                     <div className="flex items-center justify-between gap-2">
-                      <input type="date" title="Çıkış Tarihi" value={filterCheckOut} onChange={e => setFilterCheckOut(e.target.value)} className="text-[11px] border border-[#E8E6E1] bg-white rounded p-1.5 font-normal w-[110px] focus:outline-none focus:border-[#7C8363]" />
-                      <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-1 rounded shrink-0" onClick={() => requestSort('checkOut')} title="Çıkış Tarihi'ne Göre Sırala">
+                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB] w-[12%]", isSorted('checkOut') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                     <div className="flex items-center justify-between gap-1">
+                      <input type="date" title="Çıkış Tarihi" value={filterCheckOut} onChange={e => setFilterCheckOut(e.target.value)} className="text-[10px] border border-[#E8E6E1] bg-white rounded p-1 font-normal w-full max-w-[95px] focus:outline-none focus:border-[#7C8363]" />
+                      <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-0.5 rounded shrink-0" onClick={() => requestSort('checkOut')} title="Çıkış Tarihi'ne Göre Sırala">
                           {getSortIcon('checkOut')}
                       </div>
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-right">İşlemler</th>
+                  <th className="px-3 py-3 w-10 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8E6E1] bg-white">
                 {unifiedStaffData.length === 0 ? (
                   <tr>
-                    <td colSpan={canDeleteStaff ? 9 : 8} className="px-6 py-12 text-center text-stone-500">
+                    <td colSpan={canSelectRow ? 10 : 9} className="px-6 py-12 text-center text-stone-500">
                       Seçilen kriterlere uygun personel bulunamadı.
                     </td>
                   </tr>
                 ) : (
                   unifiedStaffData.map(({ staff: s, hotel: h, acc, facility: f, room: r }) => (
-                    <tr key={s.id} className={cn("hover:bg-stone-50 transition-colors", selectedStaffIds.includes(s.id) && "bg-[#FDFCFB]")}>
-                      {canDeleteStaff && (
-                        <td className="px-6 py-4 text-center">
+                    <tr 
+                      key={s.id} 
+                      onClick={() => canSelectRow && toggleSelectStaff(s.id)}
+                      className={cn(
+                        "transition-colors", 
+                        canSelectRow && "cursor-pointer hover:bg-stone-50",
+                        selectedStaffIds.includes(s.id) && "bg-[#FDFCFB]"
+                      )}
+                    >
+                      {canSelectRow && (
+                        <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <input 
                             type="checkbox" 
                             checked={selectedStaffIds.includes(s.id)}
@@ -888,19 +1141,27 @@ export default function StaffManagement() {
                           />
                         </td>
                       )}
-                      <td className="px-6 py-4 text-sm font-semibold text-stone-700">
+                      <td className="px-3 py-3 text-sm font-semibold text-stone-700 truncate">
                         {h?.name || '-'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-stone-600">
-                        <p className="font-medium text-stone-800">{s.department || '-'}</p>
-                        <p className="text-[11px] text-stone-500 mt-0.5">{s.position || '-'}</p>
-                      </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-3 text-sm text-stone-600 truncate">
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-[#2D332D]">{s.fullName}</p>
+                          <p className="font-medium text-stone-800 truncate">{s.department || 'Bilinmiyor'}</p>
+                          {s.category === 'Stajyer' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-100 uppercase tracking-wider">Stajyer</span>}
+                          {s.category === 'Yönetici' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-600 border border-purple-100 uppercase tracking-wider">Yönetici</span>}
+                          {s.category === 'Taşeron' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wider">Taşeron</span>}
+                        </div>
+                        <p className="text-[11px] text-stone-500 mt-0.5 truncate">{s.position || 'Bilinmiyor'}</p>
+                      </td>
+                      <td className="px-3 py-3 truncate">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-[#2D332D] truncate">
+                            {s.fullName}
+                            {s.isForeigner && <span className="ml-1.5 text-lg" title="Yabancı Uyruklu">🌍</span>}
+                          </p>
                           {/* Tooltip info icon */}
                           <div 
-                            className="relative flex items-center justify-center"
+                            className="relative flex items-center justify-center shrink-0"
                             onMouseEnter={(e) => {
                               const rect = e.currentTarget.getBoundingClientRect();
                               setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: s.id });
@@ -911,14 +1172,14 @@ export default function StaffManagement() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-semibold">
+                      <td className="px-3 py-3 text-sm font-semibold truncate">
                         {s.status === 'pending_placement' ? (
                           <span className="text-stone-400 italic font-normal">-</span>
                         ) : (
                           f ? (
                             <span 
                               className={cn(
-                                "line-clamp-2",
+                                "truncate",
                                 currentUser?.role === 'hotel_hr_manager' && !availableFacilities.some(af => af.id === f.id) 
                                   ? "text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-100 inline-block mb-1"
                                   : "text-[#7C8363]"
@@ -930,22 +1191,22 @@ export default function StaffManagement() {
                           ) : 'Bilinmeyen Lojman'
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm font-mono font-medium text-stone-600">
+                      <td className="px-3 py-3 text-sm font-mono font-medium text-stone-600 truncate">
                         {s.status === 'pending_placement' ? (
                           <span className="text-stone-400 italic font-sans font-normal">-</span>
                         ) : (
                           r?.roomNumber || '-'
                         )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-3">
                         <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider", s.gender === 'female' ? "bg-pink-50 text-pink-700" : "bg-blue-50 text-blue-700")}>
                           {s.gender === 'female' ? 'Kadın' : 'Erkek'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-stone-700 whitespace-nowrap">
+                      <td className="px-3 py-3 text-sm font-medium text-stone-700 whitespace-nowrap">
                         {acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                      <td className="px-3 py-3 text-sm font-medium whitespace-nowrap">
                          {s.status === 'pending_checkout' ? (
                             <span className="text-orange-600 bg-orange-50 px-2 py-0.5 rounded text-xs border border-orange-200">
                                {s.checkOutDate ? new Date(s.checkOutDate).toLocaleDateString('tr-TR') : 'Bekliyor'}
@@ -958,7 +1219,7 @@ export default function StaffManagement() {
                             <span className="text-stone-400">-</span>
                          )}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         {(canPlaceStaff || canCheckoutStaff || canEditStaff || canDeleteStaff || canViewDoc) ? (
                           <ActionMenu>
                             {s.status === 'pending_placement' && canPlaceStaff && (
@@ -1046,12 +1307,29 @@ export default function StaffManagement() {
                               </button>
                             )}
                             {canDeleteStaff && (
-                              <button 
-                                onClick={() => { if(confirm(`${s.fullName} isimli personelin kaydını tamamen silmek istediğinize emin misiniz?`)) deleteStaff(s.id); }}
-                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
-                              >
-                                <Trash2 className="w-4 h-4" /> Kaydı Sil
-                              </button>
+                              filterStatus === 'deleted' ? (
+                                <>
+                                  <button 
+                                    onClick={() => { if(confirm(`${s.fullName} isimli personeli geri yüklemek istediğinize emin misiniz?`)) useStore.getState().restoreStaff(s.id); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
+                                  >
+                                    <RefreshCw className="w-4 h-4" /> Geri Yükle
+                                  </button>
+                                  <button 
+                                    onClick={() => { if(confirm(`${s.fullName} isimli personeli tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) useStore.getState().hardDeleteStaff(s.id); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                  >
+                                    <Trash className="w-4 h-4" /> Kalıcı Olarak Sil
+                                  </button>
+                                </>
+                              ) : (
+                                <button 
+                                  onClick={() => { if(confirm(`${s.fullName} isimli personeli çöp kutusuna göndermek istediğinize emin misiniz?`)) deleteStaff(s.id); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
+                                >
+                                  <Trash2 className="w-4 h-4" /> Kaydı Çöpe Taşı
+                                </button>
+                              )
                             )}
                           </ActionMenu>
                         ) : (
@@ -1127,10 +1405,33 @@ export default function StaffManagement() {
                   ) : (
                     <div className="divide-y divide-[#E8E6E1]">
                        {group.items.map(item => (
-                         <div key={item.staff.id} className="px-6 py-3 flex items-center hover:bg-stone-50 transition-colors">
+                         <div 
+                           key={item.staff.id} 
+                           onClick={() => canSelectRow && toggleSelectStaff(item.staff.id)}
+                           className={cn(
+                             "px-6 py-3 flex items-center transition-colors", 
+                             canSelectRow && "cursor-pointer hover:bg-stone-50",
+                             selectedStaffIds.includes(item.staff.id) && "bg-[#FDFCFB]"
+                           )}
+                         >
+                           {canSelectRow && (
+                             <div className="shrink-0 mr-4 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                               <input 
+                                 type="checkbox" 
+                                 checked={selectedStaffIds.includes(item.staff.id)}
+                                 onChange={() => toggleSelectStaff(item.staff.id)}
+                                 className="w-4 h-4 rounded border-stone-300 text-[#7C8363] focus:ring-[#7C8363]"
+                               />
+                             </div>
+                           )}
                            <div className="flex-1 flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center shrink-0">
-                               <span className="text-stone-500 text-xs font-bold">{item.staff.fullName.charAt(0)}</span>
+                             <div className={cn(
+                               "w-8 h-8 rounded-full flex items-center justify-center shrink-0 border shadow-sm",
+                               item.staff.gender === 'female' 
+                                 ? "bg-pink-100 border-pink-200 text-pink-700" 
+                                 : "bg-blue-100 border-blue-200 text-blue-700"
+                             )} title={item.staff.gender === 'female' ? 'Kadın' : 'Erkek'}>
+                               <span className="text-xs font-bold">{item.staff.gender === 'female' ? 'K' : 'E'}</span>
                              </div>
                              <div>
                                <div className="flex items-center gap-2">
@@ -1154,7 +1455,7 @@ export default function StaffManagement() {
                                </div>
                                <div className="flex text-[11px] text-stone-500 font-medium mt-0.5 divide-x divide-stone-300">
                                  <span className="pr-2">{item.hotel?.name || '-'}</span>
-                                 <span className="px-2">{item.staff.department || '-'} / {item.staff.position || '-'}</span>
+                                 <span className="px-2">{item.staff.department || 'Bilinmiyor'} / {item.staff.position || 'Bilinmiyor'}</span>
                                </div>
                              </div>
                            </div>
@@ -1176,7 +1477,7 @@ export default function StaffManagement() {
                              </div>
                            </div>
                            
-                           <div className="shrink-0 pl-2">
+                           <div className="shrink-0 pl-2" onClick={(e) => e.stopPropagation()}>
                              {(canPlaceStaff || canCheckoutStaff || canEditStaff || canDeleteStaff || canViewDoc) ? (
                                <ActionMenu>
                                  {item.staff.status === 'placed' && canEditStaff && item.acc && (
@@ -1239,12 +1540,29 @@ export default function StaffManagement() {
                                   </button>
                                 )}
                                  {canDeleteStaff && (
-                                   <button 
-                                     onClick={() => { if(confirm(`${item.staff.fullName} isimli personelin kaydını tamamen silmek istediğinize emin misiniz?`)) deleteStaff(item.staff.id); }}
-                                     className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
-                                   >
-                                     <Trash2 className="w-4 h-4" /> Kaydı Sil
-                                   </button>
+                                   filterStatus === 'deleted' ? (
+                                     <>
+                                       <button 
+                                         onClick={() => { if(confirm(`${item.staff.fullName} isimli personeli geri yüklemek istediğinize emin misiniz?`)) useStore.getState().restoreStaff(item.staff.id); }}
+                                         className="w-full text-left px-4 py-2 text-sm text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
+                                       >
+                                         <RefreshCw className="w-4 h-4" /> Geri Yükle
+                                       </button>
+                                       <button 
+                                         onClick={() => { if(confirm(`${item.staff.fullName} isimli personeli tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) useStore.getState().hardDeleteStaff(item.staff.id); }}
+                                         className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                       >
+                                         <Trash className="w-4 h-4" /> Kalıcı Olarak Sil
+                                       </button>
+                                     </>
+                                   ) : (
+                                     <button 
+                                       onClick={() => { if(confirm(`${item.staff.fullName} isimli personeli çöp kutusuna göndermek istediğinize emin misiniz?`)) deleteStaff(item.staff.id); }}
+                                       className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-stone-100 mt-1 pt-1"
+                                     >
+                                       <Trash2 className="w-4 h-4" /> Kaydı Çöpe Taşı
+                                     </button>
+                                   )
                                  )}
                                </ActionMenu>
                              ) : (
@@ -1326,6 +1644,21 @@ export default function StaffManagement() {
                     <option value="male">Erkek</option>
                     <option value="female">Kadın</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Personel Kategorisi *</label>
+                  <select required value={newStaff.category} onChange={e => setNewStaff({...newStaff, category: e.target.value as 'Personel' | 'Yönetici' | 'Stajyer' | 'Taşeron'})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
+                    <option value="Personel">Personel</option>
+                    <option value="Yönetici">Yönetici</option>
+                    <option value="Stajyer">Stajyer</option>
+                    <option value="Taşeron">Taşeron</option>
+                  </select>
+                </div>
+                <div className="flex items-center mt-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={newStaff.isForeigner} onChange={e => setNewStaff({...newStaff, isForeigner: e.target.checked})} className="w-4 h-4 text-[#7C8363] rounded border-stone-300 focus:ring-[#7C8363]" />
+                    <span className="text-sm font-semibold text-stone-700">Yabancı Uyruklu (Non-Citizen)</span>
+                  </label>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Departman</label>
@@ -1461,6 +1794,21 @@ export default function StaffManagement() {
                   <option value="male">Erkek</option>
                   <option value="female">Kadın</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Personel Kategorisi *</label>
+                <select required value={editForm.category || 'Personel'} onChange={e => setEditForm({...editForm, category: e.target.value as 'Personel' | 'Yönetici' | 'Stajyer' | 'Taşeron'})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]">
+                  <option value="Personel">Personel</option>
+                  <option value="Yönetici">Yönetici</option>
+                  <option value="Stajyer">Stajyer</option>
+                  <option value="Taşeron">Taşeron</option>
+                </select>
+              </div>
+              <div className="flex items-center mt-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={editForm.isForeigner || false} onChange={e => setEditForm({...editForm, isForeigner: e.target.checked})} className="w-4 h-4 text-[#7C8363] rounded border-stone-300 focus:ring-[#7C8363]" />
+                  <span className="text-sm font-semibold text-stone-700">Yabancı Uyruklu (Non-Citizen)</span>
+                </label>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Departman</label>

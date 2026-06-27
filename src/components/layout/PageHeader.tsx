@@ -5,9 +5,10 @@ import { cn } from '../../lib/utils';
 
 export interface HeaderAction {
   key: string;
-  icon: React.ComponentType<{ className?: string }>;
-  tooltip: string;
-  onClick: () => void;
+  isSeparator?: boolean;
+  icon?: React.ComponentType<{ className?: string }>;
+  tooltip?: string;
+  onClick?: () => void;
   colorClass?: string;
   permissionKey?: string;
   disabled?: boolean;
@@ -71,14 +72,20 @@ export function PageHeader({ title, description, actions, customActions }: PageH
 
             if (!hasPermission) return null;
 
+            if (action.isSeparator) {
+              return <div key={action.key} className="w-px h-8 bg-stone-300 mx-2" />;
+            }
+
+            if (!action.icon || !action.onClick) return null;
+
             return (
               <div key={action.key} className="relative group">
                 <button
                   onClick={action.onClick}
                   disabled={action.disabled}
                   className={cn(
-                    "p-2.5 bg-white border border-stone-200 rounded-lg shadow-sm transition-all duration-200 cursor-pointer flex items-center justify-center",
-                    action.disabled ? "opacity-50 cursor-not-allowed text-stone-400" : action.colorClass || "text-stone-600 hover:text-[#7C8363] hover:bg-[#7C8363]/5 border-stone-200 hover:border-[#7C8363]/30"
+                    "p-2.5 bg-white border border-stone-200 rounded-lg shadow-sm transition-all duration-200 flex items-center justify-center",
+                    action.disabled ? "opacity-50 cursor-not-allowed text-stone-400" : "cursor-pointer " + (action.colorClass || "text-stone-600 hover:text-[#7C8363] hover:bg-[#7C8363]/5 border-stone-200 hover:border-[#7C8363]/30")
                   )}
                   aria-label={action.tooltip}
                 >

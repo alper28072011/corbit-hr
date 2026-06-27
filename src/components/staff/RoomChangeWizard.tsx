@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Settings, ShieldAlert, DoorOpen, Users, BedDouble, AlertTriangle, ArrowRight, Home, Building, Check, X, Replace } from 'lucide-react';
+import { Settings, ShieldAlert, DoorOpen, Users, BedDouble, AlertTriangle, ArrowRight, Home, Building, Check, X, Replace, Search } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { Staff, Room, Facility } from '../../types';
 import { cn } from '../../lib/utils';
@@ -25,6 +25,7 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
   
   const [filterGender, setFilterGender] = useState<'all' | 'male' | 'female' | 'Aile'>('all');
   const [showFullRooms, setShowFullRooms] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,18 +41,24 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
     return accommodations.filter(a => a.roomId === roomId && a.status === 'active').length;
   };
 
-  const getEffectiveGender = (roomId: string, defaultGender: string) => {
+  const getRoomResidents = (roomId: string) => {
     const activeAccs = accommodations.filter(a => a.roomId === roomId && a.status === 'active');
-    const residents = allStaff.filter(s => activeAccs.some(a => a.staffId === s.id));
+    return allStaff.filter(s => activeAccs.some(a => a.staffId === s.id));
+  };
+
+  const getEffectiveGender = (roomId: string, defaultGender: string) => {
+    const residents = getRoomResidents(roomId);
     
-    if (defaultGender === 'mixed') {
-       if (residents.length === 0) return 'mixed';
-       const hasFemale = residents.some(s => s.gender === 'female');
-       const hasMale = residents.some(s => s.gender === 'male');
-       if (hasFemale && hasMale) return 'mixed';
-       return hasFemale ? 'female' : 'male';
+    if (residents.length === 0) {
+      if (defaultGender === 'Aile') return 'Aile';
+      return 'empty';
     }
-    return defaultGender;
+    
+    const hasMale = residents.some(r => r.gender === 'male');
+    const hasFemale = residents.some(r => r.gender === 'female');
+    
+    if (hasMale && hasFemale) return 'mixed';
+    return hasMale ? 'male' : 'female';
   };
 
   const targetFacilityId = activeTab === 'same_dorm' ? currentFacilityId : selectedTargetFacilityId;
@@ -78,10 +85,22 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
         if (filterGender === 'Aile' && room.genderType !== 'Aile') return false;
         if (filterGender !== 'Aile' && room.genderType !== 'Aile' && effectiveGender !== 'mixed' && effectiveGender !== filterGender) return false;
       }
+      
+      // Arama
+      if (searchQuery) {
+        const sq = searchQuery.toLowerCase();
+        const residents = getRoomResidents(room.id);
+        const residentNames = residents.map(r => r.fullName.toLowerCase()).join(' ');
+        if (!room.roomNumber.toLowerCase().includes(sq) && !residentNames.includes(sq)) {
+          return false;
+        }
+      }
 
       return true;
+    }).sort((a, b) => {
+       return String(a.roomNumber).localeCompare(String(b.roomNumber), undefined, { numeric: true });
     });
-  }, [targetFacilityId, rooms, filterGender, showFullRooms, accommodations, allStaff]);
+  }, [targetFacilityId, rooms, filterGender, showFullRooms, accommodations, allStaff, searchQuery, currentRoomId]);
 
   // Selected Room checks
   const selectedRoom = rooms.find(r => r.id === selectedRoomId);
@@ -89,7 +108,13 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
   let exceptionMessages: string[] = [];
 
   if (selectedRoom && targetFacility) {
-    if (selectedRoom.genderType === 'Aile') {
+    const residents = getRoomResidents(selectedRoom.id).filter(r => r.id !== staff.id);
+    const hasOppositeGender = residents.some(r => r.gender !== staff.gender);
+    
+    if (hasOppositeGender) {
+      isException = true;
+      exceptionMessages.push('Odada karşı cinsten personel konaklamaktadır. Bu işlem Potansiyel Aile Konaklaması olarak değerlendirilecek ve onaya sunulacaktır.');
+    } else if (selectedRoom.genderType === 'Aile') {
       isException = true;
       exceptionMessages.push('Aile Odası yerleşimi talep ediliyor.');
     }
@@ -145,9 +170,9 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
-        className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col h-[90vh]"
       >
-        <div className="p-6 border-b border-[#E8E6E1] flex justify-between items-center bg-[#FDFCFB]">
+        <div className="p-6 border-b border-[#E8E6E1] flex justify-between items-center bg-[#FDFCFB] shrink-0">
           <div>
             <h2 className="text-xl font-bold text-stone-800 flex items-center gap-2">
               <Replace className="w-5 h-5 text-[#7C8363]" />
@@ -160,23 +185,23 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
           </button>
         </div>
 
-        <div className="flex bg-stone-50 border-b border-[#E8E6E1] px-6 pt-2">
+        <div className="flex bg-stone-50 border-b border-[#E8E6E1] px-6 shrink-0">
            <button 
-             onClick={() => { setActiveTab('same_dorm'); setSelectedRoomId(''); setFilterGender('all'); }}
+             onClick={() => { setActiveTab('same_dorm'); setSelectedRoomId(''); setFilterGender('all'); setSearchQuery(''); }}
              className={cn("px-4 py-3 text-sm font-semibold border-b-2 transition-colors", activeTab === 'same_dorm' ? "border-[#7C8363] text-[#7C8363]" : "border-transparent text-stone-500 hover:text-stone-700")}
            >
              Aynı Lojmanda Değişim
            </button>
            <button 
-             onClick={() => { setActiveTab('different_dorm'); setSelectedTargetFacilityId(''); setSelectedRoomId(''); setFilterGender('all'); }}
+             onClick={() => { setActiveTab('different_dorm'); setSelectedTargetFacilityId(''); setSelectedRoomId(''); setFilterGender('all'); setSearchQuery(''); }}
              className={cn("px-4 py-3 text-sm font-semibold border-b-2 transition-colors", activeTab === 'different_dorm' ? "border-[#7C8363] text-[#7C8363]" : "border-transparent text-stone-500 hover:text-stone-700")}
            >
              Farklı Lojmana Transfer
            </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-           <div className="bg-stone-50 p-4 rounded-xl border border-[#E8E6E1] flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
+           <div className="bg-stone-50 p-4 rounded-xl border border-[#E8E6E1] flex flex-col md:flex-row justify-between md:items-center gap-4 shrink-0">
              <div>
                <div className="text-xs font-semibold text-stone-500 uppercase">Mevcut Konum</div>
                <div className="font-bold text-stone-800 text-lg">{currentFacility?.name}</div>
@@ -197,7 +222,7 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
            </div>
 
            {activeTab === 'different_dorm' && (
-             <div>
+             <div className="shrink-0">
                <label className="block text-sm font-semibold text-stone-700 mb-2">Hedef Lojman Seçiniz</label>
                <select 
                  value={selectedTargetFacilityId}
@@ -213,9 +238,9 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
            )}
 
            {targetFacilityId && (
-             <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-                  <div className="flex bg-stone-100 p-1 rounded-lg self-start">
+             <div className="flex flex-col h-full overflow-hidden border border-[#E8E6E1] rounded-xl">
+                <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-stone-50 p-4 border-b border-[#E8E6E1] shrink-0">
+                  <div className="flex bg-stone-200/50 p-1 rounded-lg self-start">
                     {['all', 'male', 'female', 'Aile'].map((g) => (
                       <button
                         key={g}
@@ -224,83 +249,139 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
                           "px-4 py-1.5 rounded-md text-sm font-semibold transition-all",
                           filterGender === g 
                             ? "bg-white text-stone-800 shadow-sm" 
-                            : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50"
+                            : "text-stone-500 hover:text-stone-700 hover:bg-stone-300/30"
                         )}
                       >
                         {g === 'all' ? 'Tümü' : g === 'male' ? 'Erkek' : g === 'female' ? 'Kız' : 'Aile'}
                       </button>
                     ))}
                   </div>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-stone-50 px-3 py-1.5 rounded-lg transition-colors">
-                    <input 
-                      type="checkbox" 
-                      checked={showFullRooms}
-                      onChange={e => setShowFullRooms(e.target.checked)}
-                      className="w-4 h-4 rounded text-[#7C8363] focus:ring-[#7C8363]"
-                    />
-                    <span className="font-semibold text-stone-600">Dolu Odaları da Göster</span>
-                  </label>
+                  
+                  <div className="flex items-center gap-4 flex-1 justify-end">
+                    <div className="relative w-full max-w-xs">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+                      <input 
+                        type="text"
+                        placeholder="Oda no veya kişi ara..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 border border-[#E8E6E1] rounded-lg text-sm focus:outline-none focus:border-[#7C8363]"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-stone-100 px-3 py-2 rounded-lg transition-colors shrink-0">
+                      <input 
+                        type="checkbox" 
+                        checked={showFullRooms}
+                        onChange={e => setShowFullRooms(e.target.checked)}
+                        className="w-4 h-4 rounded text-[#7C8363] focus:ring-[#7C8363]"
+                      />
+                      <span className="font-semibold text-stone-600">Dolu Odaları Göster</span>
+                    </label>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto pr-2">
+                <div className="flex-1 overflow-y-auto bg-white p-2">
                   {availableRooms.length === 0 ? (
-                     <div className="col-span-full py-8 text-center text-stone-500 flex flex-col items-center">
+                     <div className="h-full flex flex-col items-center justify-center text-stone-500">
                         <DoorOpen className="w-10 h-10 mb-3 opacity-20" />
-                        Kriterlere uygun boş oda bulunamadı.
+                        <p>Kriterlere uygun boş oda bulunamadı.</p>
                      </div>
                   ) : (
-                    availableRooms.map(room => {
-                      const occupancy = getRoomOccupancy(room.id);
-                      const isFull = occupancy >= room.bedCount && room.genderType !== 'Aile';
-                      const effectiveGender = getEffectiveGender(room.id, room.genderType);
-                      const isSelected = selectedRoomId === room.id;
+                    <div className="space-y-2">
+                      {availableRooms.map(room => {
+                        const residents = getRoomResidents(room.id);
+                        const occupancy = residents.length;
+                        const isFull = occupancy >= room.bedCount && room.genderType !== 'Aile';
+                        const effectiveGender = getEffectiveGender(room.id, room.genderType);
+                        const isSelected = selectedRoomId === room.id;
 
-                      return (
-                        <div 
-                          key={room.id}
-                          onClick={() => setSelectedRoomId(room.id)}
-                          className={cn(
-                            "p-4 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden group",
-                            isSelected 
-                               ? "border-[#7C8363] bg-[#7C8363]/5" 
-                               : "border-[#E8E6E1] bg-white hover:border-[#7C8363]/50 hover:shadow-sm"
-                          )}
-                        >
-                           {/* İkon / Avatar */}
-                           <div className="flex justify-between items-start mb-3">
-                             <div className="flex items-center gap-2">
-                                <span className={cn(
-                                   "px-2 py-0.5 rounded text-xs font-bold",
-                                   room.genderType === 'male' ? "bg-blue-100 text-blue-700" :
-                                   room.genderType === 'female' ? "bg-pink-100 text-pink-700" :
-                                   room.genderType === 'Aile' ? "bg-purple-100 text-purple-700" :
-                                   "bg-stone-100 text-stone-700"
-                                )}>
-                                   {room.genderType === 'female' ? 'Kadın' : room.genderType === 'male' ? 'Erkek' : room.genderType === 'Aile' ? 'Aile' : 'Karma'}
-                                </span>
-                             </div>
-                             {isFull && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">DOLU</span>}
-                           </div>
+                        // Identify if room is mostly intern, manager, etc.
+                        const hasIntern = residents.some(r => r.category === 'Stajyer');
+                        const hasManager = residents.some(r => r.category === 'Yönetici');
+                        const hasSubcontractor = residents.some(r => r.category === 'Taşeron');
 
-                           <div className="font-bold text-xl text-stone-800 mb-1">{room.roomNumber}</div>
-                           
-                           <div className="flex items-center justify-between text-sm mt-3 pt-3 border-t border-stone-100/80">
-                             <div className="text-stone-500 font-medium">Doluluk</div>
-                             <div className={cn("font-bold flex items-center gap-1", isFull ? "text-red-600" : "text-[#7C8363]")}>
-                               <Users className="w-4 h-4" />
-                               {occupancy} / {room.bedCount}
+                        return (
+                          <div 
+                            key={room.id}
+                            onClick={() => setSelectedRoomId(room.id)}
+                            className={cn(
+                              "flex flex-col md:flex-row items-stretch p-3 rounded-xl border transition-all cursor-pointer",
+                              isSelected 
+                                 ? "border-[#7C8363] bg-[#7C8363]/5 shadow-sm" 
+                                 : "border-[#E8E6E1] bg-white hover:border-[#7C8363]/40"
+                            )}
+                          >
+                             {/* Sol Kısım: Oda Özeti */}
+                             <div className="flex flex-col justify-center min-w-[120px] md:pr-4 md:border-r border-stone-100 mb-3 md:mb-0">
+                                <div className="font-bold text-xl text-stone-800">{room.roomNumber}</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className={cn(
+                                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                                     room.genderType === 'male' ? "bg-blue-100 text-blue-700" :
+                                     room.genderType === 'female' ? "bg-pink-100 text-pink-700" :
+                                     room.genderType === 'Aile' ? "bg-purple-100 text-purple-700" :
+                                     "bg-stone-100 text-stone-700"
+                                  )}>
+                                     {room.genderType === 'female' ? 'Kız Odası' : room.genderType === 'male' ? 'Erkek Odası' : room.genderType === 'Aile' ? 'Aile Odası' : 'Karma'}
+                                  </span>
+                                </div>
+                                <div className={cn("text-sm font-semibold mt-2 flex items-center gap-1", isFull ? "text-red-600" : "text-[#7C8363]")}>
+                                  <Users className="w-4 h-4" />
+                                  {occupancy} / {room.bedCount} Kapasite
+                                </div>
                              </div>
-                           </div>
-                        </div>
-                      );
-                    })
+
+                             {/* Sağ Kısım: Kalan Kişiler */}
+                             <div className="flex-1 md:pl-4 flex flex-col justify-center">
+                               {residents.length > 0 ? (
+                                 <div className="flex flex-wrap gap-2">
+                                   {residents.map(r => (
+                                     <div key={r.id} className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-xs flex flex-col min-w-[180px]">
+                                       <span className="font-bold text-stone-800">{r.fullName}</span>
+                                       <div className="flex items-center gap-1.5 mt-1 text-stone-500 font-medium">
+                                          <span className="truncate max-w-[100px]" title={r.department}>{r.department || 'Bilinmiyor'}</span>
+                                          <span className="w-1 h-1 rounded-full bg-stone-300"></span>
+                                          <span className="truncate max-w-[100px]" title={r.position}>{r.position || 'Bilinmiyor'}</span>
+                                       </div>
+                                       {r.category && r.category !== 'Personel' && (
+                                         <div className="mt-1">
+                                           <span className={cn(
+                                             "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider",
+                                             r.category === 'Stajyer' ? "bg-orange-50 text-orange-600 border border-orange-100" :
+                                             r.category === 'Taşeron' ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                             "bg-purple-50 text-purple-600 border border-purple-100"
+                                           )}>
+                                             {r.category}
+                                           </span>
+                                         </div>
+                                       )}
+                                     </div>
+                                   ))}
+                                 </div>
+                               ) : (
+                                 <div className="text-stone-400 text-sm font-medium italic flex items-center h-full">
+                                   Bu oda şu anda boş
+                                 </div>
+                               )}
+                             </div>
+                             
+                             {/* Info Badge for Room Profile */}
+                             <div className="hidden lg:flex flex-col justify-center items-end ml-4 pl-4 border-l border-stone-100 gap-1">
+                               {hasIntern && <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-md">Stajyer Odası</span>}
+                               {hasManager && <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-md">Yönetici Odası</span>}
+                               {hasSubcontractor && <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-md">Taşeron Odası</span>}
+                             </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
              </div>
            )}
         </div>
 
-        <div className="p-6 border-t border-[#E8E6E1] bg-stone-50 flex flex-col gap-4">
+        <div className="p-6 border-t border-[#E8E6E1] bg-stone-50 flex flex-col gap-4 shrink-0">
            {error && (
              <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm font-medium flex items-center gap-2">
                <ShieldAlert className="w-4 h-4" />
@@ -347,3 +428,4 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
     </div>
   );
 }
+

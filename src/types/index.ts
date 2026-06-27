@@ -85,11 +85,14 @@ export interface Staff {
   position: string;
   hotelId: string;
   gender: 'male' | 'female';
+  category: 'Personel' | 'Yönetici' | 'Stajyer' | 'Taşeron';
+  isForeigner: boolean;
   status: 'pending_placement' | 'placed' | 'left' | 'pending_approval' | 'pending_checkout';
   notes?: string;
   specialNote?: string;
   checkInDate?: string;
   checkOutDate?: string;
+  deletedAt?: number;
 }
 
 export interface Accommodation {

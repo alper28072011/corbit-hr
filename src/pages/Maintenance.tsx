@@ -634,7 +634,7 @@ export default function Maintenance() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl overflow-y-auto max-h-[90vh]">
+          <div className={cn("bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh]", isRoomDropdownOpen ? "overflow-visible" : "overflow-y-auto")}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-[#2D332D]">
                 {editingTicket ? 'Arıza Kaydını Düzenle' : 'Yeni Arıza Kaydı'}

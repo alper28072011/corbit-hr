@@ -15,16 +15,18 @@ interface CheckInWizardProps {
 export const getEffectiveRoomGender = (
   room: { genderType: string }, 
   currentResidents: { gender: string }[]
-): 'male' | 'female' | 'mixed' | 'Aile' => {
-  if (room.genderType !== 'mixed') return room.genderType as any;
+): 'male' | 'female' | 'mixed' | 'Aile' | 'empty' => {
+  if (currentResidents.length === 0) {
+    if (room.genderType === 'Aile') return 'Aile';
+    return 'empty';
+  }
   
   const hasFemale = currentResidents.some(r => r.gender === 'female');
   const hasMale = currentResidents.some(r => r.gender === 'male');
   
   if (hasFemale && hasMale) return 'mixed';
   if (hasFemale) return 'female';
-  if (hasMale) return 'male';
-  return 'mixed';
+  return 'male';
 };
 
 export default function CheckInWizard({ staffMember, onClose }: CheckInWizardProps) {
@@ -59,24 +61,25 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       const currentResidents = staff.filter(s => roomAccs.some(a => a.staffId === s.id));
       
       const effectiveGender = getEffectiveRoomGender(room, currentResidents);
-      let isCompatible = false;
-      if (room.genderType === staffMember.gender) isCompatible = true;
-      if (room.genderType === 'mixed' && (effectiveGender === 'mixed' || effectiveGender === staffMember.gender)) isCompatible = true;
-      if (room.genderType === 'Aile') isCompatible = true;
       
-      if (!isCompatible) return null;
-
       const availableBeds = room.bedCount - currentResidents.length;
       
       const requiresCrossDormApproval = !facility?.allowedHotelIds.includes(staffMember.hotelId);
       const isFamilyRoom = room.genderType === 'Aile';
       
-      // Determine if there is a gender mismatch
-      // Example: placing male into female room, or into mixed/family room that currently has females.
-      let hasGenderMismatch = false;
-      if (room.genderType !== 'mixed' && room.genderType !== 'Aile' && room.genderType !== staffMember.gender) {
-        hasGenderMismatch = true;
+      const isRoomEmpty = currentResidents.length === 0;
+      const roomCategory = isRoomEmpty ? null : currentResidents[0].category;
+      const roomIsForeigner = isRoomEmpty ? null : currentResidents[0].isForeigner;
+
+      // Category & Nationality Locks (Strict)
+      if (!isRoomEmpty) {
+        if (roomCategory !== staffMember.category) return null;
+        if (roomIsForeigner !== staffMember.isForeigner) return null;
       }
+      
+      // Determine if there is a gender mismatch
+      // Only check residents. If empty, no mismatch.
+      let hasGenderMismatch = false;
       if (currentResidents.some(r => r.gender !== staffMember.gender)) {
         hasGenderMismatch = true;
       }
@@ -90,6 +93,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       let recommendedScore = 0;
       if (currentResidents.some(r => r.hotelId === staffMember.hotelId)) recommendedScore += 1;
       if (currentResidents.some(r => r.department === staffMember.department)) recommendedScore += 1;
+      if (!hasGenderMismatch && !isRoomEmpty) recommendedScore += 1; // Prefer rooms with same gender rather than empty
       
       return {
         ...room,
@@ -97,13 +101,15 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
         effectiveGender,
         currentResidents,
         availableBeds,
+        roomCategory,
+        roomIsForeigner,
         requiresApproval,
         requiresCrossDormApproval,
         requiresFamilyApproval,
         isFamilyRoom,
         hasGenderMismatch,
         hasMaintenance,
-        isRecommended: recommendedScore > 0,
+        isRecommended: recommendedScore > 0 && !requiresApproval,
         recommendedScore
       };
     }).filter((r): r is any => r !== null && r.availableBeds > 0);
@@ -121,12 +127,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
     });
 
     return filtered.sort((a, b) => {
-      if (a.isRecommended && !b.isRecommended) return -1;
-      if (!a.isRecommended && b.isRecommended) return 1;
-      if (a.recommendedScore !== b.recommendedScore) {
-        return b.recommendedScore - a.recommendedScore;
-      }
-      // Orthen sort by room number ascending
+      // Sort by room number ascending
       return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true });
     });
 
@@ -204,7 +205,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
-        className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-2xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden"
       >
         
         {/* Header */}
@@ -287,20 +288,37 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                                 <h4 className="font-bold text-[#2D332D] text-lg">{room.roomNumber}</h4>
                                 <span className="text-sm font-medium text-stone-500">· {room.facilityName}</span>
                                 
-                                {room.genderType === 'mixed' && (
-                                  <span className={cn(
-                                     "px-2 py-0.5 text-xs font-bold rounded flex items-center gap-1",
-                                     room.effectiveGender === 'mixed' ? "bg-stone-100 text-stone-600 border border-stone-200" :
-                                     room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border border-pink-200" :
-                                     "bg-blue-100 text-blue-700 border border-blue-200"
-                                  )}>
-                                     {room.effectiveGender === 'mixed' ? 'Karma (Boş)' : `Karma ➔ ${room.effectiveGender === 'female' ? 'Kadın' : 'Erkek'}`}
-                                  </span>
+                                <span className={cn(
+                                   "px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider flex items-center gap-1 border",
+                                   room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border-pink-200" :
+                                   room.effectiveGender === 'male' ? "bg-blue-100 text-blue-700 border-blue-200" :
+                                   room.effectiveGender === 'Aile' ? "bg-purple-100 text-purple-700 border-purple-200" :
+                                   "bg-stone-100 text-stone-600 border-stone-200"
+                                )}>
+                                   {room.effectiveGender === 'female' ? 'Kız Odası' : 
+                                    room.effectiveGender === 'male' ? 'Erkek Odası' : 
+                                    room.effectiveGender === 'Aile' ? 'Aile Odası' : 
+                                    room.effectiveGender === 'mixed' ? 'Karma' : 
+                                    room.genderType === 'female' ? 'Kız Odası (Boş)' :
+                                    room.genderType === 'male' ? 'Erkek Odası (Boş)' :
+                                    'Karma (Boş)'}
+                                </span>
+
+                                {room.roomCategory && (
+                                   <span className={cn("px-2 py-0.5 text-xs font-bold rounded border", 
+                                      room.roomCategory === 'Stajyer' ? "bg-orange-50 text-orange-600 border-orange-100" :
+                                      room.roomCategory === 'Yönetici' ? "bg-purple-50 text-purple-600 border-purple-100" :
+                                      "bg-stone-100 text-stone-600 border-stone-200"
+                                   )}>
+                                      {room.roomCategory}
+                                   </span>
                                 )}
-                                
-                                {room.genderType === 'Aile' && (
-                                   <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded">
-                                      Aile Odası
+
+                                {room.roomIsForeigner !== null && (
+                                   <span className={cn("px-2 py-0.5 text-xs font-bold rounded border",
+                                      room.roomIsForeigner ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-teal-50 text-teal-600 border-teal-100"
+                                   )}>
+                                      {room.roomIsForeigner ? "Yabancı" : "Yerli"}
                                    </span>
                                 )}
 
@@ -327,9 +345,26 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                                 {room.currentResidents.length > 0 ? (
                                   <div className="flex flex-wrap gap-2">
                                      {room.currentResidents.map((res: any) => (
-                                       <span key={res.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-stone-200 rounded text-xs font-medium text-stone-700 shadow-sm">
-                                         {hotels.find(h => h.id === res.hotelId)?.name || 'Bilinmeyen'} / {res.department}
-                                       </span>
+                                       <div key={res.id} className="bg-white border border-stone-200 rounded-lg p-2 text-xs flex flex-col min-w-[180px] shadow-sm">
+                                         <span className="font-bold text-stone-800">{res.fullName}</span>
+                                         <div className="flex items-center gap-1.5 mt-1 text-stone-500 font-medium">
+                                            <span className="truncate max-w-[100px]" title={res.department}>{res.department || 'Bilinmiyor'}</span>
+                                            <span className="w-1 h-1 rounded-full bg-stone-300"></span>
+                                            <span className="truncate max-w-[100px]" title={res.position}>{res.position || 'Bilinmiyor'}</span>
+                                         </div>
+                                         {res.category && res.category !== 'Personel' && (
+                                           <div className="mt-1">
+                                             <span className={cn(
+                                               "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider",
+                                               res.category === 'Stajyer' ? "bg-orange-50 text-orange-600 border border-orange-100" :
+                                               res.category === 'Taşeron' ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                               "bg-purple-50 text-purple-600 border border-purple-100"
+                                             )}>
+                                               {res.category}
+                                             </span>
+                                           </div>
+                                         )}
+                                       </div>
                                      ))}
                                   </div>
                                 ) : (
@@ -400,20 +435,37 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                             <h4 className="font-bold text-[#2D332D] text-lg">{room.roomNumber}</h4>
                             <span className="text-sm font-medium text-stone-500">· {room.facilityName}</span>
                             
-                            {room.genderType === 'mixed' && (
-                              <span className={cn(
-                                 "px-2 py-0.5 text-xs font-bold rounded flex items-center gap-1",
-                                 room.effectiveGender === 'mixed' ? "bg-stone-100 text-stone-600 border border-stone-200" :
-                                 room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border border-pink-200" :
-                                 "bg-blue-100 text-blue-700 border border-blue-200"
-                              )}>
-                                 {room.effectiveGender === 'mixed' ? 'Karma (Boş)' : `Karma ➔ ${room.effectiveGender === 'female' ? 'Kadın' : 'Erkek'}`}
-                              </span>
+                                <span className={cn(
+                                   "px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider flex items-center gap-1 border",
+                                   room.effectiveGender === 'female' ? "bg-pink-100 text-pink-700 border-pink-200" :
+                                   room.effectiveGender === 'male' ? "bg-blue-100 text-blue-700 border-blue-200" :
+                                   room.effectiveGender === 'Aile' ? "bg-purple-100 text-purple-700 border-purple-200" :
+                                   "bg-stone-100 text-stone-600 border-stone-200"
+                                )}>
+                                   {room.effectiveGender === 'female' ? 'Kız Odası' : 
+                                    room.effectiveGender === 'male' ? 'Erkek Odası' : 
+                                    room.effectiveGender === 'Aile' ? 'Aile Odası' : 
+                                    room.effectiveGender === 'mixed' ? 'Karma' : 
+                                    room.genderType === 'female' ? 'Kız Odası (Boş)' :
+                                    room.genderType === 'male' ? 'Erkek Odası (Boş)' :
+                                    'Karma (Boş)'}
+                                </span>
+
+                            {room.roomCategory && (
+                               <span className={cn("px-2 py-0.5 text-xs font-bold rounded border", 
+                                  room.roomCategory === 'Stajyer' ? "bg-orange-50 text-orange-600 border-orange-100" :
+                                  room.roomCategory === 'Yönetici' ? "bg-purple-50 text-purple-600 border-purple-100" :
+                                  "bg-stone-100 text-stone-600 border-stone-200"
+                               )}>
+                                  {room.roomCategory}
+                               </span>
                             )}
-                            
-                            {room.genderType === 'Aile' && (
-                               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded">
-                                  Aile Odası
+
+                            {room.roomIsForeigner !== null && (
+                               <span className={cn("px-2 py-0.5 text-xs font-bold rounded border",
+                                  room.roomIsForeigner ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-teal-50 text-teal-600 border-teal-100"
+                               )}>
+                                  {room.roomIsForeigner ? "Yabancı" : "Yerli"}
                                </span>
                             )}
 
@@ -440,9 +492,26 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                             {room.currentResidents.length > 0 ? (
                               <div className="flex flex-wrap gap-2">
                                  {room.currentResidents.map((res: any) => (
-                                   <span key={res.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-stone-200 rounded text-xs font-medium text-stone-700 shadow-sm">
-                                     {hotels.find(h => h.id === res.hotelId)?.name || 'Bilinmeyen'} / {res.department}
-                                   </span>
+                                   <div key={res.id} className="bg-white border border-stone-200 rounded-lg p-2 text-xs flex flex-col min-w-[180px] shadow-sm">
+                                     <span className="font-bold text-stone-800">{res.fullName}</span>
+                                     <div className="flex items-center gap-1.5 mt-1 text-stone-500 font-medium">
+                                        <span className="truncate max-w-[100px]" title={res.department}>{res.department || 'Bilinmiyor'}</span>
+                                        <span className="w-1 h-1 rounded-full bg-stone-300"></span>
+                                        <span className="truncate max-w-[100px]" title={res.position}>{res.position || 'Bilinmiyor'}</span>
+                                     </div>
+                                     {res.category && res.category !== 'Personel' && (
+                                       <div className="mt-1">
+                                         <span className={cn(
+                                           "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider",
+                                           res.category === 'Stajyer' ? "bg-orange-50 text-orange-600 border border-orange-100" :
+                                           res.category === 'Taşeron' ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                           "bg-purple-50 text-purple-600 border border-purple-100"
+                                         )}>
+                                           {res.category}
+                                         </span>
+                                       </div>
+                                     )}
+                                   </div>
                                  ))}
                               </div>
                             ) : (

@@ -77,6 +77,10 @@ interface AppState {
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
   bulkDeleteStaff: (ids: string[]) => Promise<void>;
+  restoreStaff: (id: string) => Promise<void>;
+  bulkRestoreStaff: (ids: string[]) => Promise<void>;
+  hardDeleteStaff: (id: string) => Promise<void>;
+  bulkHardDeleteStaff: (ids: string[]) => Promise<void>;
   placeStaff: (staffId: string, facilityId: string, roomId: string) => Promise<void>;
   changeStaffRoom: (staffId: string, oldRoomId: string, newRoomId: string, newFacilityId?: string) => Promise<void>;
   changeRoom: (accommodationId: string, newFacilityId: string, newRoomId: string) => Promise<void>;
@@ -479,23 +483,21 @@ export const useStore = create<AppState>()(
          try {
            const state = get();
            const oldData = state.staff.find(s => s.id === id);
+           if (!oldData) return;
            
            const batch = writeBatch(db);
            
-           // Personeli sil
-           batch.delete(doc(db, "staff", id));
+           // Soft delete: Personel durumunu güncelle ve silinme tarihi ekle
+           const staffRef = doc(db, "staff", id);
+           batch.update(staffRef, { 
+             deletedAt: Date.now(),
+             status: 'pending_placement' // Lojman kaydı silindiği için
+           });
            
            // İlgili konaklama kayıtlarını (accommodations) bul ve sil
            const accQuery = query(collection(db, "accommodations"), where("staffId", "==", id));
            const accSnapshot = await getDocs(accQuery);
            accSnapshot.forEach(docSnap => {
-             batch.delete(docSnap.ref);
-           });
-           
-           // İlgili logları (action_logs) bul ve sil (İsteğe bağlı temizlik - istenirse yoruma alınabilir ama şu an veritabanında "kırıntı" kalmaması için ekliyoruz)
-           const logQuery = query(collection(db, "action_logs"), where("entityId", "==", id));
-           const logSnapshot = await getDocs(logQuery);
-           logSnapshot.forEach(docSnap => {
              batch.delete(docSnap.ref);
            });
            
@@ -505,7 +507,7 @@ export const useStore = create<AppState>()(
                  entityId: state.currentUser.id, 
                  entityType: 'staff',
                  action: 'delete',
-                 changes: `Personel kaydı ve tüm bağlantılı verileri silindi (${oldData.fullName}).`,
+                 changes: `Personel kaydı çöp kutusuna taşındı (${oldData.fullName}).`,
                  performedBy: state.currentUser.fullName || state.currentUser.email,
                  timestamp: Date.now()
               });
@@ -528,15 +530,17 @@ export const useStore = create<AppState>()(
              
              const batch = writeBatch(db);
              
-             chunk.forEach(id => batch.delete(doc(db, "staff", id)));
+             // Soft delete staff
+             chunk.forEach(id => {
+               batch.update(doc(db, "staff", id), { 
+                 deletedAt: Date.now(),
+                 status: 'pending_placement'
+               });
+             });
              
              const accQuery = query(collection(db, "accommodations"), where("staffId", "in", chunk));
              const accSnapshot = await getDocs(accQuery);
              accSnapshot.forEach(docSnap => batch.delete(docSnap.ref));
-             
-             const logQuery = query(collection(db, "action_logs"), where("entityId", "in", chunk));
-             const logSnapshot = await getDocs(logQuery);
-             logSnapshot.forEach(docSnap => batch.delete(docSnap.ref));
              
              await batch.commit();
            }
@@ -546,13 +550,123 @@ export const useStore = create<AppState>()(
                  entityId: state.currentUser.id,
                  entityType: 'staff',
                  action: 'delete',
-                 changes: `${ids.length} adet personel kaydı ve tüm bağlantılı verileri toplu olarak silindi.`,
+                 changes: `${ids.length} adet personel kaydı çöp kutusuna taşındı.`,
                  performedBy: state.currentUser.fullName || state.currentUser.email,
                  timestamp: Date.now()
               });
            }
          } catch (error) {
            handleFirestoreError(error, OperationType.DELETE, "bulkDeleteStaff");
+         }
+      },
+
+      restoreStaff: async (id) => {
+        try {
+          const state = get();
+          const batch = writeBatch(db);
+          batch.update(doc(db, "staff", id), { deletedAt: deleteField() });
+          
+          if (state.currentUser) {
+            const logDocRef = doc(collection(db, "logs"));
+            batch.set(logDocRef, {
+               entityId: state.currentUser.id, 
+               entityType: 'staff',
+               action: 'update',
+               changes: `Personel kaydı çöp kutusundan geri yüklendi.`,
+               performedBy: state.currentUser.fullName || state.currentUser.email,
+               timestamp: Date.now()
+            });
+          }
+          await batch.commit();
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `staff/${id}`);
+        }
+      },
+
+      bulkRestoreStaff: async (ids) => {
+        try {
+          const state = get();
+          const chunkSize = 30;
+          for (let i = 0; i < ids.length; i += chunkSize) {
+            const chunk = ids.slice(i, i + chunkSize);
+            if (chunk.length === 0) break;
+            const batch = writeBatch(db);
+            chunk.forEach(id => {
+              batch.update(doc(db, "staff", id), { deletedAt: deleteField() });
+            });
+            await batch.commit();
+          }
+          if (state.currentUser && ids.length > 0) {
+            await get().addLog({
+               entityId: state.currentUser.id,
+               entityType: 'staff',
+               action: 'update',
+               changes: `${ids.length} adet personel çöp kutusundan geri yüklendi.`,
+               performedBy: state.currentUser.fullName || state.currentUser.email,
+               timestamp: Date.now()
+            });
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, "bulkRestoreStaff");
+        }
+      },
+
+      hardDeleteStaff: async (id) => {
+         try {
+           const state = get();
+           const batch = writeBatch(db);
+           batch.delete(doc(db, "staff", id));
+           
+           const logQuery = query(collection(db, "action_logs"), where("entityId", "==", id));
+           const logSnapshot = await getDocs(logQuery);
+           logSnapshot.forEach(docSnap => batch.delete(docSnap.ref));
+           
+           if (state.currentUser) {
+              const logDocRef = doc(collection(db, "logs"));
+              batch.set(logDocRef, {
+                 entityId: state.currentUser.id, 
+                 entityType: 'staff',
+                 action: 'delete',
+                 changes: `Personel kaydı tamamen silindi.`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
+           await batch.commit();
+         } catch (error) {
+           handleFirestoreError(error, OperationType.DELETE, `staff/${id}`);
+         }
+      },
+
+      bulkHardDeleteStaff: async (ids) => {
+         try {
+           const state = get();
+           const chunkSize = 30;
+           for (let i = 0; i < ids.length; i += chunkSize) {
+             const chunk = ids.slice(i, i + chunkSize);
+             if (chunk.length === 0) break;
+             
+             const batch = writeBatch(db);
+             chunk.forEach(id => batch.delete(doc(db, "staff", id)));
+             
+             const logQuery = query(collection(db, "action_logs"), where("entityId", "in", chunk));
+             const logSnapshot = await getDocs(logQuery);
+             logSnapshot.forEach(docSnap => batch.delete(docSnap.ref));
+             
+             await batch.commit();
+           }
+           if (state.currentUser && ids.length > 0) {
+              await get().addLog({
+                 entityId: state.currentUser.id,
+                 entityType: 'staff',
+                 action: 'delete',
+                 changes: `${ids.length} adet personel kaydı tamamen silindi.`,
+                 performedBy: state.currentUser.fullName || state.currentUser.email,
+                 timestamp: Date.now()
+              });
+           }
+         } catch (error) {
+           handleFirestoreError(error, OperationType.DELETE, "bulkHardDeleteStaff");
          }
       },
         

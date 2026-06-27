@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -13,7 +13,8 @@ import {
   Edit2,
   MessageSquare,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useStore } from "../../store/useStore";
@@ -30,10 +31,29 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
   const currentUser = useStore(state => state.currentUser);
   const rolesPermissions = useStore(state => state.rolesPermissions);
   const staff = useStore(state => state.staff);
+  const facilities = useStore(state => state.facilities);
   const appSettings = useStore(state => state.appSettings);
   const updateAppVersion = useStore(state => state.updateAppVersion);
   const supportTickets = useStore((state) => state.supportTickets);
-  const pendingStaffCount = staff.filter(s => s.status === "pending_placement").length;
+  
+  const pendingStaffCount = useMemo(() => {
+    let pending = staff.filter(s => s.status === "pending_placement");
+    if (currentUser?.role === 'hotel_hr_manager') {
+      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+      pending = pending.filter(s => s.hotelId && hotelIds.includes(s.hotelId));
+    } else if (currentUser?.role === 'facility_manager') {
+      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      const managedFacs = facilities.filter(f => facIds.includes(f.id));
+      const allowedHotelIds = managedFacs.flatMap(f => {
+        if (f.allowedHotelIds && f.allowedHotelIds.length > 0) return f.allowedHotelIds;
+        if ((f as any).hotelId) return [(f as any).hotelId];
+        return [];
+      });
+      pending = pending.filter(s => s.hotelId && allowedHotelIds.includes(s.hotelId));
+    }
+    return pending.length;
+  }, [staff, currentUser, facilities]);
+  
   const openTicketsCount = supportTickets?.filter(t => t.status === 'Açık').length || 0;
   
   const [isEditingVersion, setIsEditingVersion] = useState(false);
@@ -195,9 +215,18 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
                 </div>
               ) : (
                 <>
-                  <div className="w-full">
-                    <p className="text-xs text-stone-400">Sistem Durumu</p>
-                    <p className="text-sm font-semibold text-white">%99.9 Aktif</p>
+                  <div className="w-full flex justify-between items-center">
+                    <div>
+                      <p className="text-xs text-stone-400">Sistem Durumu</p>
+                      <p className="text-sm font-semibold text-white">%99.9 Aktif</p>
+                    </div>
+                    <button 
+                      onClick={() => window.location.href = "/"}
+                      className="p-1.5 bg-stone-700 hover:bg-stone-600 rounded-lg text-stone-300 hover:text-white transition-colors"
+                      title="Sistemi Yenile (CTRL+F5)"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                   <div className="border-t border-white/10 pt-2 mt-1 w-full">
                      {isEditingVersion ? (
