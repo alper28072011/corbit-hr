@@ -703,6 +703,13 @@ export const useStore = create<AppState>()(
          try {
            const batch = writeBatch(db);
 
+           // Prevent multiple active accommodations
+           const existingAccs = state.accommodations.filter(a => a.staffId === staffId && a.status === 'active');
+           existingAccs.forEach(a => {
+             const aRef = doc(db, "accommodations", a.id);
+             batch.update(aRef, { status: 'checked_out', checkOutDate: new Date().toISOString().split('T')[0] });
+           });
+
            const accData = {
               staffId,
               facilityId,

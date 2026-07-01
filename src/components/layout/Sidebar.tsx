@@ -35,9 +35,12 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
   const appSettings = useStore(state => state.appSettings);
   const updateAppVersion = useStore(state => state.updateAppVersion);
   const supportTickets = useStore((state) => state.supportTickets);
+  const maintenanceTickets = useStore(state => state.maintenanceTickets);
+  const rooms = useStore(state => state.rooms);
+  const accommodations = useStore(state => state.accommodations);
   
   const pendingStaffCount = useMemo(() => {
-    let pending = staff.filter(s => s.status === "pending_placement");
+    let pending = staff.filter(s => s.status === "pending_placement" && !s.deletedAt);
     if (currentUser?.role === 'hotel_hr_manager') {
       const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
       pending = pending.filter(s => s.hotelId && hotelIds.includes(s.hotelId));
@@ -53,6 +56,48 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
     }
     return pending.length;
   }, [staff, currentUser, facilities]);
+
+  const openMaintenanceCount = useMemo(() => {
+    if (!maintenanceTickets) return 0;
+    const hasFullAccess = ['super_admin', 'hr_director'].includes(currentUser?.role || '');
+    const openTickets = maintenanceTickets.filter(t => t.status === 'Açık');
+    
+    if (hasFullAccess) {
+      return openTickets.length;
+    }
+
+    // 1. directDormIds: Doğrudan yetkili olunan lojmanlar
+    const directDormIds = currentUser?.assignedFacilityIds || (currentUser?.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+
+    // 2. staffRoomIds: Personelin Kaldığı Odalar
+    const userHotelIds = currentUser?.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser?.assignedHotelId ? [currentUser.assignedHotelId] : []);
+    
+    // Sistemdeki personelleri tarayıp otel yetkimizde olanları bul
+    const activeStaffIds = new Set(
+      staff.filter(s => ['placed', 'pending_checkout'].includes(s.status) && userHotelIds.includes(s.hotelId)).map(s => s.id)
+    );
+
+    // Bu personellerin konakladığı odaları bul
+    const roomIds = accommodations
+      .filter(acc => acc.status === 'active' && activeStaffIds.has(acc.staffId))
+      .map(acc => acc.roomId);
+
+    const staffRoomIds = new Set(roomIds);
+
+    // 3. staffDormIds: Personelin Kaldığı Lojmanlar
+    const staffDormIds = new Set(
+      rooms.filter(r => staffRoomIds.has(r.id)).map(r => r.facilityId)
+    );
+
+    const filtered = openTickets.filter(t => {
+      const hasDormAccess = directDormIds.includes(t.dormId);
+      const hasRoomAccess = staffRoomIds.has(t.roomId || '');
+      const isCommonAreaInStaffDorm = !t.roomId && staffDormIds.has(t.dormId);
+      return hasDormAccess || hasRoomAccess || isCommonAreaInStaffDorm;
+    });
+
+    return filtered.length;
+  }, [currentUser, maintenanceTickets, staff, accommodations, rooms]);
   
   const openTicketsCount = supportTickets?.filter(t => t.status === 'Açık').length || 0;
   
@@ -84,7 +129,12 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
       icon: Users,
       badge: pendingStaffCount
     },
-    canViewPage(currentUser?.role, PAGE_KEYS.maintenance, rolesPermissions) && { name: "Arıza ve Bakım", href: "/maintenance", icon: Wrench },
+    canViewPage(currentUser?.role, PAGE_KEYS.maintenance, rolesPermissions) && { 
+      name: "Arıza ve Bakım", 
+      href: "/maintenance", 
+      icon: Wrench,
+      badge: openMaintenanceCount
+    },
     { 
       name: "Destek & Geribildirim", 
       href: "/feedback", 

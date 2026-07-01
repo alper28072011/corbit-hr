@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Bell, Menu, UserCircle, LogOut, ShieldAlert, Check, X, User as UserIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useStore } from "../../store/useStore";
@@ -21,11 +21,15 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const [showApprovals, setShowApprovals] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const approvalsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setShowProfileMenu(false);
+      }
+      if (approvalsRef.current && !approvalsRef.current.contains(event.target as Node)) {
+        setShowApprovals(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -36,8 +40,41 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const canManageApprovals = currentUser?.role === 'super_admin' || currentUser?.role === 'hr_director';
   const pendingApprovals = approvalRequests.filter(r => r.status === 'Bekliyor');
   
-  const pendingPlacement = staff.filter(s => s.status === 'pending_placement').length;
-  const pendingCheckout = staff.filter(s => s.status === 'pending_checkout').length;
+  const pendingPlacement = useMemo(() => {
+    let pending = staff.filter(s => s.status === "pending_placement" && !s.deletedAt);
+    if (currentUser?.role === 'hotel_hr_manager') {
+      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+      pending = pending.filter(s => s.hotelId && hotelIds.includes(s.hotelId));
+    } else if (currentUser?.role === 'facility_manager') {
+      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      const managedFacs = facilities.filter(f => facIds.includes(f.id));
+      const allowedHotelIds = managedFacs.flatMap(f => {
+        if (f.allowedHotelIds && f.allowedHotelIds.length > 0) return f.allowedHotelIds;
+        if ((f as any).hotelId) return [(f as any).hotelId];
+        return [];
+      });
+      pending = pending.filter(s => s.hotelId && allowedHotelIds.includes(s.hotelId));
+    }
+    return pending.length;
+  }, [staff, currentUser, facilities]);
+
+  const pendingCheckout = useMemo(() => {
+    let pending = staff.filter(s => s.status === "pending_checkout" && !s.deletedAt);
+    if (currentUser?.role === 'hotel_hr_manager') {
+      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
+      pending = pending.filter(s => s.hotelId && hotelIds.includes(s.hotelId));
+    } else if (currentUser?.role === 'facility_manager') {
+      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+      const managedFacs = facilities.filter(f => facIds.includes(f.id));
+      const allowedHotelIds = managedFacs.flatMap(f => {
+        if (f.allowedHotelIds && f.allowedHotelIds.length > 0) return f.allowedHotelIds;
+        if ((f as any).hotelId) return [(f as any).hotelId];
+        return [];
+      });
+      pending = pending.filter(s => s.hotelId && allowedHotelIds.includes(s.hotelId));
+    }
+    return pending.length;
+  }, [staff, currentUser, facilities]);
 
   const handleLogout = () => {
     auth.signOut();
@@ -52,22 +89,27 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   };
 
   const handleApprove = async (approvalId: string, staffId: string, facilityId: string, roomId: string) => {
-    // resolve then place staff then log
     await resolveApprovalRequest(approvalId, 'Onaylandı');
-    await placeStaff(staffId, facilityId, roomId);
-    await addLog({
-      entityId: staffId,
-      entityType: 'staff',
-      action: 'update',
-      changes: 'İK Onayı ile yerleşti.',
-      performedBy: currentUser?.fullName || 'System',
-      timestamp: Date.now()
-    });
+    const targetStaff = staff.find(s => s.id === staffId);
+    if (targetStaff?.status !== 'placed') {
+      await placeStaff(staffId, facilityId, roomId);
+      await addLog({
+        entityId: staffId,
+        entityType: 'staff',
+        action: 'update',
+        changes: 'İK Onayı ile yerleşti.',
+        performedBy: currentUser?.fullName || 'System',
+        timestamp: Date.now()
+      });
+    }
   };
 
   const handleReject = async (approvalId: string, staffId: string) => {
     await resolveApprovalRequest(approvalId, 'Reddedildi');
-    await updateStaff(staffId, { status: 'pending_placement' });
+    const targetStaff = staff.find(s => s.id === staffId);
+    if (targetStaff?.status === 'pending_approval') {
+      await updateStaff(staffId, { status: 'pending_placement' });
+    }
   };
 
   return (
@@ -110,7 +152,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
           )}
         </div>
         <div className="flex items-center gap-x-6">
-          <div className="relative">
+          <div className="relative" ref={approvalsRef}>
              <button
                type="button"
                onClick={() => canManageApprovals && setShowApprovals(!showApprovals)}

@@ -395,7 +395,7 @@ export default function StaffManagement() {
 
   const handleAddStaff = (e: import('react').FormEvent) => {
     e.preventDefault();
-    if (!newStaff.fullName || !newStaff.hotelId || !canAddStaff) return;
+    if (!newStaff.fullName || !newStaff.hotelId || !newStaff.department || !canAddStaff) return;
     addStaff({ ...newStaff, status: 'pending_placement' });
     setShowAddStaffForm(false);
     
@@ -1076,7 +1076,7 @@ export default function StaffManagement() {
                       />
                     </th>
                   )}
-                  <th className={cn("px-3 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[11%]", isSorted('hotel') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('hotel')}>
+                  <th className={cn("px-3 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[19%]", isSorted('hotel') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('hotel')}>
                     <div className="flex items-center">Otel Adı {getSortIcon('hotel')}</div>
                   </th>
                   <th className={cn("px-3 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 select-none w-[13%]", isSorted('department') ? 'text-[#7C8363]' : 'text-stone-500')} onClick={() => requestSort('department')}>
@@ -1094,7 +1094,7 @@ export default function StaffManagement() {
                   <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider w-[7%]", isSorted('gender') ? 'text-[#7C8363]' : 'text-stone-500')}>
                     <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none" onClick={() => requestSort('gender')}>Cins {getSortIcon('gender')}</div>
                   </th>
-                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB] w-[12%]", isSorted('checkIn') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB] w-[8%]", isSorted('checkIn') ? 'text-[#7C8363]' : 'text-stone-500')}>
                     <div className="flex items-center justify-between gap-1">
                       <input type="date" title="Giriş Tarihi" value={filterCheckIn} onChange={e => setFilterCheckIn(e.target.value)} className="text-[10px] border border-[#E8E6E1] bg-white rounded p-1 font-normal w-full max-w-[95px] focus:outline-none focus:border-[#7C8363]" />
                       <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-0.5 rounded shrink-0" onClick={() => requestSort('checkIn')} title="Giriş Tarihi'ne Göre Sırala">
@@ -1102,7 +1102,7 @@ export default function StaffManagement() {
                       </div>
                     </div>
                   </th>
-                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB] w-[12%]", isSorted('checkOut') ? 'text-[#7C8363]' : 'text-stone-500')}>
+                  <th className={cn("px-2 py-3 text-xs font-bold uppercase tracking-wider bg-[#FDFCFB] w-[8%]", isSorted('checkOut') ? 'text-[#7C8363]' : 'text-stone-500')}>
                      <div className="flex items-center justify-between gap-1">
                       <input type="date" title="Çıkış Tarihi" value={filterCheckOut} onChange={e => setFilterCheckOut(e.target.value)} className="text-[10px] border border-[#E8E6E1] bg-white rounded p-1 font-normal w-full max-w-[95px] focus:outline-none focus:border-[#7C8363]" />
                       <div className="flex items-center cursor-pointer hover:bg-stone-50 select-none text-stone-400 hover:text-[#7C8363] transition-colors p-0.5 rounded shrink-0" onClick={() => requestSort('checkOut')} title="Çıkış Tarihi'ne Göre Sırala">
@@ -1141,10 +1141,10 @@ export default function StaffManagement() {
                           />
                         </td>
                       )}
-                      <td className="px-3 py-3 text-sm font-semibold text-stone-700 truncate">
+                      <td className="px-3 py-3 text-sm font-semibold text-stone-700 truncate" title={h?.name || '-'}>
                         {h?.name || '-'}
                       </td>
-                      <td className="px-3 py-3 text-sm text-stone-600 truncate">
+                      <td className="px-3 py-3 text-sm text-stone-600 truncate" title={`${s.department || 'Bilinmiyor'} - ${s.position || 'Bilinmiyor'}`}>
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-stone-800 truncate">{s.department || 'Bilinmiyor'}</p>
                           {s.category === 'Stajyer' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-100 uppercase tracking-wider">Stajyer</span>}
@@ -1153,7 +1153,7 @@ export default function StaffManagement() {
                         </div>
                         <p className="text-[11px] text-stone-500 mt-0.5 truncate">{s.position || 'Bilinmiyor'}</p>
                       </td>
-                      <td className="px-3 py-3 truncate">
+                      <td className="px-3 py-3 truncate" title={s.fullName}>
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-[#2D332D] truncate">
                             {s.fullName}
@@ -1172,7 +1172,7 @@ export default function StaffManagement() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-sm font-semibold truncate">
+                      <td className="px-3 py-3 text-sm font-semibold truncate" title={f ? f.name : '-'}>
                         {s.status === 'pending_placement' ? (
                           <span className="text-stone-400 italic font-normal">-</span>
                         ) : (
@@ -1184,29 +1184,32 @@ export default function StaffManagement() {
                                   ? "text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-100 inline-block mb-1"
                                   : "text-[#7C8363]"
                               )}
-                              title={currentUser?.role === 'hotel_hr_manager' && !availableFacilities.some(af => af.id === f.id) ? "Farklı bir otele tahsisli lojmanda konaklıyor" : ""}
+                              title={currentUser?.role === 'hotel_hr_manager' && !availableFacilities.some(af => af.id === f.id) ? "Farklı bir otele tahsisli lojmanda konaklıyor" : f.name}
                             >
                               {f.name}
                             </span>
                           ) : 'Bilinmeyen Lojman'
                         )}
                       </td>
-                      <td className="px-3 py-3 text-sm font-mono font-medium text-stone-600 truncate">
+                      <td className="px-3 py-3 text-sm font-mono font-medium text-stone-600 truncate" title={r?.roomNumber || '-'}>
                         {s.status === 'pending_placement' ? (
                           <span className="text-stone-400 italic font-sans font-normal">-</span>
                         ) : (
                           r?.roomNumber || '-'
                         )}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3" title={s.gender === 'female' ? 'Kadın' : 'Erkek'}>
                         <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider", s.gender === 'female' ? "bg-pink-50 text-pink-700" : "bg-blue-50 text-blue-700")}>
                           {s.gender === 'female' ? 'Kadın' : 'Erkek'}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-sm font-medium text-stone-700 whitespace-nowrap">
+                      <td className="px-3 py-3 text-sm font-medium text-stone-700 whitespace-nowrap" title={acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}>
                         {acc?.checkInDate ? new Date(acc.checkInDate).toLocaleDateString('tr-TR') : '-'}
                       </td>
-                      <td className="px-3 py-3 text-sm font-medium whitespace-nowrap">
+                      <td className="px-3 py-3 text-sm font-medium whitespace-nowrap" title={
+                         s.status === 'pending_checkout' ? (s.checkOutDate ? new Date(s.checkOutDate).toLocaleDateString('tr-TR') : 'Bekliyor') :
+                         s.status === 'left' ? (acc?.checkOutDate ? new Date(acc.checkOutDate).toLocaleDateString('tr-TR') : (s.checkOutDate ? new Date(s.checkOutDate).toLocaleDateString('tr-TR') : 'Çıkış Yaptı')) : '-'
+                      }>
                          {s.status === 'pending_checkout' ? (
                             <span className="text-orange-600 bg-orange-50 px-2 py-0.5 rounded text-xs border border-orange-200">
                                {s.checkOutDate ? new Date(s.checkOutDate).toLocaleDateString('tr-TR') : 'Bekliyor'}
@@ -1661,8 +1664,8 @@ export default function StaffManagement() {
                   </label>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Departman</label>
-                  <input type="text" list="departments-list" value={newStaff.department} onChange={e => setNewStaff({...newStaff, department: e.target.value})} placeholder="Örn: Mutfak" className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Departman *</label>
+                  <input required type="text" list="departments-list" value={newStaff.department} onChange={e => setNewStaff({...newStaff, department: e.target.value})} placeholder="Örn: Mutfak" className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
                   <datalist id="departments-list">
                     {departments.map(d => <option key={d} value={d} />)}
                   </datalist>

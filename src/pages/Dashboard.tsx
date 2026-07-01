@@ -93,7 +93,10 @@ export default function Dashboard() {
     vacantRoomCount,
     dedicatedRoomCount,
     sharedRoomCount,
-    hotelRoomDistribution
+    hotelRoomDistribution,
+    matrixHotels,
+    facilityHotelMatrix,
+    hotelTotals
   } = useMemo(() => {
     // 1. Capacity
     const activeRooms = rooms.filter(r => r.status === 'active' && authorizedFacilityIds.includes(r.facilityId));
@@ -238,6 +241,36 @@ export default function Dashboard() {
       sharedDetails: stat.sharedDetails
     })).filter((d: any) => d.totalRooms > 0);
 
+    const matrixHotels = hotels.filter(h => activeAccs.some(a => {
+      const s = activeStaff.find(st => st.id === a.staffId);
+      return s && s.hotelId === h.id;
+    }));
+
+    const facilityHotelMatrix = authorizedFacilities.map(fac => {
+      const rowStats: Record<string, number> = {};
+      matrixHotels.forEach(h => { rowStats[h.id] = 0; });
+      let rowTotal = 0;
+      
+      const facAccs = activeAccs.filter(a => a.facilityId === fac.id);
+      facAccs.forEach(a => {
+        const s = activeStaff.find(st => st.id === a.staffId);
+        if (s && s.hotelId && rowStats[s.hotelId] !== undefined) {
+          rowStats[s.hotelId]++;
+          rowTotal++;
+        }
+      });
+      return {
+        facility: fac,
+        stats: rowStats,
+        total: rowTotal
+      };
+    }).filter(row => row.total > 0 || true);
+
+    const hotelTotals: Record<string, number> = {};
+    matrixHotels.forEach(h => {
+      hotelTotals[h.id] = facilityHotelMatrix.reduce((sum, row) => sum + (row.stats[h.id] || 0), 0);
+    });
+
     return {
       activeRoomsCount: activeRooms.length,
       totalCapacity,
@@ -256,7 +289,10 @@ export default function Dashboard() {
       vacantRoomCount,
       dedicatedRoomCount,
       sharedRoomCount,
-      hotelRoomDistribution
+      hotelRoomDistribution,
+      matrixHotels,
+      facilityHotelMatrix,
+      hotelTotals
     };
 
   }, [rooms, accommodations, authorizedFacilityIds, staff, authorizedFacilities, hotels, currentUser]);
@@ -508,8 +544,66 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 3. Distribution Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Lojman - Otel Konaklama Matrisi */}
+      <h3 className="text-xl font-serif font-bold text-[#2D332D] mt-8 mb-4 border-b border-stone-200 pb-2 flex items-center gap-2">
+        <Building2 className="w-5 h-5 text-stone-400" />
+        Lojman - Otel Konaklama Matrisi
+      </h3>
+      <Card className="overflow-hidden border border-stone-200">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead>
+              <tr className="bg-[#F8F7F5] border-b border-stone-200 text-stone-600 font-bold">
+                <th className="px-4 py-3 sticky left-0 bg-[#F8F7F5] z-10 border-r border-stone-200 shadow-[1px_0_0_0_#E8E6E1]">Lojman Adı</th>
+                {matrixHotels.map((h: any) => (
+                  <th key={h.id} className="px-4 py-3 text-center" title={h.name}>
+                    {h.branchCode || h.name.substring(0, 5)}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-center bg-stone-100 font-bold border-l border-stone-200 text-[#2D332D]">Toplam</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {facilityHotelMatrix.map((row: any) => (
+                <tr key={row.facility.id} className="hover:bg-stone-50 transition-colors">
+                  <td className="px-4 py-3 font-semibold text-[#2D332D] sticky left-0 bg-white group-hover:bg-stone-50 z-10 border-r border-stone-200 shadow-[1px_0_0_0_#E8E6E1]">
+                    {row.facility.name}
+                  </td>
+                  {matrixHotels.map((h: any) => (
+                    <td key={h.id} className="px-4 py-3 text-center font-mono text-stone-600">
+                      {row.stats[h.id] > 0 ? (
+                        <span className="bg-[#F5F2ED] text-[#7C8363] px-2 py-0.5 rounded-md font-bold">{row.stats[h.id]}</span>
+                      ) : (
+                        <span className="text-stone-300">-</span>
+                      )}
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 text-center font-mono font-bold text-[#2D332D] bg-stone-50 border-l border-stone-200">
+                    {row.total}
+                  </td>
+                </tr>
+              ))}
+              {/* Footer row for totals */}
+              <tr className="bg-[#F8F7F5] border-t-2 border-stone-200 font-bold">
+                <td className="px-4 py-3 text-right text-stone-700 sticky left-0 bg-[#F8F7F5] z-10 border-r border-stone-200 shadow-[1px_0_0_0_#E8E6E1]">
+                  Genel Toplam:
+                </td>
+                {matrixHotels.map((h: any) => (
+                  <td key={h.id} className="px-4 py-3 text-center font-mono text-[#7C8363]">
+                    {hotelTotals[h.id]}
+                  </td>
+                ))}
+                <td className="px-4 py-3 text-center font-mono text-[#2D332D] bg-stone-100 border-l border-stone-200">
+                  {activeStaffCount}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* 4. Distribution Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
         <Card>
           <CardHeader>
             <CardTitle icon={PieChartIcon}>Kategori Dağılımı</CardTitle>

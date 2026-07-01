@@ -68,13 +68,15 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
       const isFamilyRoom = room.genderType === 'Aile';
       
       const isRoomEmpty = currentResidents.length === 0;
-      const roomCategory = isRoomEmpty ? null : currentResidents[0].category;
-      const roomIsForeigner = isRoomEmpty ? null : currentResidents[0].isForeigner;
+      const roomCategory = isRoomEmpty ? null : (currentResidents[0].category || 'Personel');
+      const roomIsForeigner = isRoomEmpty ? null : (currentResidents[0].isForeigner || false);
 
-      // Category & Nationality Locks (Strict)
+      // Category & Nationality Locks (Strict with defaults)
       if (!isRoomEmpty) {
-        if (roomCategory !== staffMember.category) return null;
-        if (roomIsForeigner !== staffMember.isForeigner) return null;
+        const staffCategory = staffMember.category || 'Personel';
+        const staffForeigner = staffMember.isForeigner || false;
+        if (roomCategory !== staffCategory) return null;
+        if (roomIsForeigner !== staffForeigner) return null;
       }
       
       // Determine if there is a gender mismatch

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { collection, onSnapshot, query, where, orderBy, doc, limit } from "firebase/firestore";
+import { collection, onSnapshot, query, where, orderBy, doc, limit, updateDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
 import { useStore } from "../../store/useStore";
 import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, ActionLog, ApprovalRequest } from "../../types";
@@ -135,6 +135,35 @@ export default function DataSync() {
       unsubs.push(
         onSnapshot(accsQuery, (snapshot: any) => {
           const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Accommodation));
+          
+          // Deduplicate active accommodations (fix for bug where staff takes up multiple spots)
+          const activeAccs = data.filter(a => a.status === 'active');
+          const staffAccsMap = new Map<string, Accommodation[]>();
+          activeAccs.forEach(a => {
+            const list = staffAccsMap.get(a.staffId) || [];
+            list.push(a);
+            staffAccsMap.set(a.staffId, list);
+          });
+          
+          let hasDuplicates = false;
+          staffAccsMap.forEach((accs, staffId) => {
+            if (accs.length > 1) {
+              hasDuplicates = true;
+              // sort by checkInDate descending
+              accs.sort((a, b) => new Date(b.checkInDate || 0).getTime() - new Date(a.checkInDate || 0).getTime());
+              // set all except the newest to checked_out in memory
+              for (let i = 1; i < accs.length; i++) {
+                const toCheckout = accs[i];
+                const index = data.findIndex(d => d.id === toCheckout.id);
+                if (index !== -1) {
+                  data[index] = { ...data[index], status: 'checked_out' };
+                  // Fix in Firestore
+                  updateDoc(doc(db, "accommodations", toCheckout.id), { status: 'checked_out' }).catch(console.error);
+                }
+              }
+            }
+          });
+
           setAccommodations(data);
         }, (error: any) => handleFirestoreError(error, OperationType.LIST, "accommodations"))
       );
