@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import FacilityManagement from "./pages/FacilityManagement";
@@ -24,7 +24,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Toaster position="bottom-right" toastOptions={{ duration: 3000, style: { background: '#2D332D', color: '#fff', borderRadius: '12px' } }} />
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
@@ -40,7 +40,7 @@ export default function App() {
             </Route>
           </Route>
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </AuthProvider>
   );
 }
