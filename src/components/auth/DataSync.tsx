@@ -60,6 +60,28 @@ export default function DataSync() {
       }, (error) => handleFirestoreError(error, OperationType.LIST, "users"))
     );
 
+    // Keep currentUser in sync in real-time
+    unsubs.push(
+      onSnapshot(doc(db, "users", currentUser.id), (docSnap) => {
+        if (docSnap.exists()) {
+          const userData = { id: docSnap.id, ...docSnap.data() } as User;
+          const currentStoreUser = useStore.getState().currentUser;
+          if (
+            !currentStoreUser ||
+            currentStoreUser.fullName !== userData.fullName ||
+            currentStoreUser.role !== userData.role ||
+            JSON.stringify(currentStoreUser.assignedFacilityIds) !== JSON.stringify(userData.assignedFacilityIds) ||
+            currentStoreUser.assignedFacilityId !== userData.assignedFacilityId ||
+            JSON.stringify(currentStoreUser.assignedHotelIds) !== JSON.stringify(userData.assignedHotelIds) ||
+            currentStoreUser.assignedHotelId !== userData.assignedHotelId ||
+            currentStoreUser.status !== userData.status
+          ) {
+            useStore.getState().setCurrentUser(userData);
+          }
+        }
+      }, (error) => handleFirestoreError(error, OperationType.GET, `users/${currentUser.id}`))
+    );
+
     // 2. Hotels
     unsubs.push(
       onSnapshot(collection(db, "hotels"), (snapshot) => {

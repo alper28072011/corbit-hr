@@ -61,7 +61,18 @@ const ActionMenu = ({ children }: { children: ReactNode }) => {
 };
 
 export default function StaffManagement() {
-  const { hotels, facilities, rooms, staff, accommodations, addStaff, bulkAddStaffWithPlacements, placeStaff, checkoutStaff, undoCheckoutStaff, deleteStaff, bulkDeleteStaff, notifyCheckoutStaff, currentUser, roles } = useStore();
+  const { hotels, facilities, rooms, staff, accommodations, addStaff, bulkAddStaffWithPlacements, placeStaff, checkoutStaff, undoCheckoutStaff, deleteStaff, bulkDeleteStaff, notifyCheckoutStaff, currentUser, roles, logs } = useStore();
+
+  const getStaffCreationTime = (st: any) => {
+    if (st?.createdAt) return st.createdAt;
+    const createLog = logs.find(l => l.entityId === st?.id && l.action === 'create');
+    if (createLog) return createLog.timestamp;
+    const staffLogs = logs.filter(l => l.entityId === st?.id);
+    if (staffLogs.length > 0) {
+      return Math.min(...staffLogs.map(l => l.timestamp));
+    }
+    return null;
+  };
 
   const refreshAction = usePageRefresh();
 
@@ -1160,16 +1171,29 @@ export default function StaffManagement() {
                             {s.isForeigner && <span className="ml-1.5 text-lg" title="Yabancı Uyruklu">🌍</span>}
                           </p>
                           {/* Tooltip info icon */}
-                          <div 
-                            className="relative flex items-center justify-center shrink-0"
-                            onMouseEnter={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: s.id });
-                            }}
-                            onMouseLeave={() => setTooltipData(null)}
-                          >
-                            <Info className="w-4 h-4 text-stone-400 hover:text-[#7C8363] cursor-help" />
-                          </div>
+                          {(() => {
+                            const cTime = getStaffCreationTime(s);
+                            const isDelayed = s.status === 'pending_placement' && cTime && (Date.now() - cTime > 24 * 60 * 60 * 1000);
+                            return (
+                              <div 
+                                className="relative flex items-center justify-center shrink-0"
+                                onMouseEnter={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: s.id });
+                                }}
+                                onMouseLeave={() => setTooltipData(null)}
+                              >
+                                <Info 
+                                  className={cn(
+                                    "w-4 h-4 cursor-help transition-colors",
+                                    isDelayed 
+                                      ? "text-red-500 hover:text-red-700 animate-pulse font-bold" 
+                                      : "text-stone-400 hover:text-[#7C8363]"
+                                  )} 
+                                />
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-sm font-semibold truncate" title={f ? f.name : '-'}>
@@ -1445,16 +1469,29 @@ export default function StaffManagement() {
                                    </span>
                                  )}
                                  {/* Tooltip info icon implementation directly on names or info icon if exists */}
-                                 <div 
-                                   className="relative flex items-center justify-center"
-                                   onMouseEnter={(e) => {
-                                     const rect = e.currentTarget.getBoundingClientRect();
-                                     setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: item.staff.id });
-                                   }}
-                                   onMouseLeave={() => setTooltipData(null)}
-                                 >
-                                   <Info className="w-4 h-4 text-stone-400 hover:text-[#7C8363] cursor-help" />
-                                 </div>
+                                 {(() => {
+                                   const cTime = getStaffCreationTime(item.staff);
+                                   const isDelayed = item.staff.status === 'pending_placement' && cTime && (Date.now() - cTime > 24 * 60 * 60 * 1000);
+                                   return (
+                                     <div 
+                                       className="relative flex items-center justify-center"
+                                       onMouseEnter={(e) => {
+                                         const rect = e.currentTarget.getBoundingClientRect();
+                                         setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: item.staff.id });
+                                       }}
+                                       onMouseLeave={() => setTooltipData(null)}
+                                     >
+                                       <Info 
+                                         className={cn(
+                                           "w-4 h-4 cursor-help transition-colors",
+                                           isDelayed 
+                                             ? "text-red-500 hover:text-red-700 animate-pulse font-bold" 
+                                             : "text-stone-400 hover:text-[#7C8363]"
+                                         )} 
+                                       />
+                                     </div>
+                                   );
+                                 })()}
                                </div>
                                <div className="flex text-[11px] text-stone-500 font-medium mt-0.5 divide-x divide-stone-300">
                                  <span className="pr-2">{item.hotel?.name || '-'}</span>
@@ -1923,6 +1960,9 @@ export default function StaffManagement() {
       {tooltipData && (() => {
         const s = staff.find(st => st.id === tooltipData.staffId);
         if (!s) return null;
+        const cTime = getStaffCreationTime(s);
+        const daysWaiting = cTime ? Math.floor((Date.now() - cTime) / (1000 * 60 * 60 * 24)) : 0;
+        const hoursWaiting = cTime ? (Date.now() - cTime) / (1000 * 60 * 60) : 0;
         return (
           <div 
             className="fixed flex flex-col bg-gray-800 text-white text-xs rounded-lg px-3 py-3 z-[9999] shadow-xl items-center pointer-events-none before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-800 transform -translate-x-1/2 -translate-y-full origin-bottom"
@@ -1939,6 +1979,25 @@ export default function StaffManagement() {
               </span>
             ) : (
               <span className="block text-gray-400 italic border-t border-gray-600 mt-1 pt-1">Doğum Tarihi Belirtilmemiş</span>
+            )}
+            {cTime ? (
+              <span className="block text-gray-200 border-t border-gray-600 mt-1 pt-1 w-full text-center">
+                Oluşturulma Tarihi: {new Date(cTime).toLocaleString('tr-TR')}
+              </span>
+            ) : (
+              <span className="block text-gray-400 italic border-t border-gray-600 mt-1 pt-1 w-full text-center">Oluşturulma Tarihi Belirtilmemiş</span>
+            )}
+            {s?.status === 'pending_placement' && cTime && (
+              <span className={cn(
+                "block font-semibold mt-1.5 pt-1.5 border-t border-gray-600 w-full text-center",
+                Date.now() - cTime > 24 * 60 * 60 * 1000 ? "text-red-400 animate-pulse" : "text-emerald-400"
+              )}>
+                Yerleşim Bekleme Süresi: {
+                  daysWaiting > 0 
+                    ? `${daysWaiting} gün ${Math.floor(hoursWaiting % 24)} saat` 
+                    : `${Math.floor(hoursWaiting)} saat`
+                }
+              </span>
             )}
             {s?.notes && (
               <span className="block text-gray-200 border-t border-gray-600 mt-2 pt-2 max-w-[200px] whitespace-normal break-words text-left self-start w-full">

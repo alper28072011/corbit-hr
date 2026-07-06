@@ -793,7 +793,10 @@ export default function RackManagement() {
                    type="button"
                    onClick={() => {
                      // Directly checkout now
-                     useStore.getState().checkoutStaff(notifyCheckoutModal.staffId);
+                     const acc = accommodations.find(a => a.staffId === notifyCheckoutModal.staffId && a.status === 'active');
+                     if (acc) {
+                       useStore.getState().checkoutStaff(acc.id, new Date().toISOString().split('T')[0]);
+                     }
                      setNotifyCheckoutModal({ open: false, staffId: '', staffName: '', date: '' });
                    }}
                    className="px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 font-semibold text-sm flex-1"

@@ -230,7 +230,14 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
                  className="w-full px-4 py-2.5 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]"
                >
                  <option value="">Lojman Seçin...</option>
-                 {facilities.filter(f => f.id !== currentFacilityId && f.status === 'active').map(fac => (
+                 {facilities.filter(f => {
+                   if (f.id === currentFacilityId || f.status !== 'active') return false;
+                   if (currentUser?.role === 'facility_manager') {
+                     const facilityIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+                     return facilityIds.includes(f.id);
+                   }
+                   return true;
+                 }).map(fac => (
                    <option key={fac.id} value={fac.id}>{fac.name}</option>
                  ))}
                </select>

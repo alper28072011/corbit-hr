@@ -424,8 +424,7 @@ export default function Maintenance() {
             key: 'export_excel',
             icon: Download,
             tooltip: "Excel'e Aktar",
-            onClick: handleExportExcel,
-            variant: 'outline'
+            onClick: handleExportExcel
           },
           ...(canCreate ? [{
             key: 'new_ticket',

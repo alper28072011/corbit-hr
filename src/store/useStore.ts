@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions, SupportTicket } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion, deleteField } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
 
 export interface UiPreferences {
@@ -378,7 +378,8 @@ export const useStore = create<AppState>()(
          try {
            const batch = writeBatch(db);
            const staffDocRef = doc(collection(db, "staff"));
-           batch.set(staffDocRef, staffData);
+           const finalStaffData = { ...staffData, createdAt: Date.now() };
+           batch.set(staffDocRef, finalStaffData);
 
            const state = get();
            if (state.currentUser) {
@@ -405,7 +406,7 @@ export const useStore = create<AppState>()(
           
           staffList.forEach(item => {
             const docRef = doc(collection(db, "staff"));
-            const staffData = { ...item.staff };
+            const staffData = { ...item.staff, createdAt: Date.now() };
             
             if (item.placement) {
               staffData.status = 'placed';
@@ -422,6 +423,18 @@ export const useStore = create<AppState>()(
             }
             
             batch.set(docRef, staffData);
+
+            if (state.currentUser) {
+              const individualLogRef = doc(collection(db, "logs"));
+              batch.set(individualLogRef, {
+                entityId: docRef.id,
+                entityType: 'staff',
+                action: 'create',
+                changes: 'Personel kaydı toplu yükleme ile oluşturuldu.',
+                performedBy: state.currentUser.fullName || state.currentUser.email,
+                timestamp: Date.now()
+              });
+            }
           });
           
           if (state.currentUser) {

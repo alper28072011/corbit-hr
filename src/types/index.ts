@@ -93,6 +93,7 @@ export interface Staff {
   checkInDate?: string;
   checkOutDate?: string;
   deletedAt?: number;
+  createdAt?: number;
 }
 
 export interface Accommodation {
