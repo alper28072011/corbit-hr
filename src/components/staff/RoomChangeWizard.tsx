@@ -29,6 +29,7 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [customNote, setCustomNote] = useState('');
 
   const currentRolePerms = rolesPermissions.find(r => r.roleKey === currentUser?.role);
   const canApproveExceptions = currentUser?.role === 'super_admin' || currentRolePerms?.allowedFeatures.includes('approve_exceptions');
@@ -148,7 +149,7 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
            requestedBy: currentUser.fullName || currentUser.email,
            requestedById: currentUser.id,
            viewedByRequester: false,
-           note: exceptionMessages.join(' ')
+           note: exceptionMessages.join(' ') + (customNote.trim() ? " | Talep Notu: " + customNote.trim() : "")
          });
          alert('İstisnai durum nedeniyle talebiniz İK onayına gönderildi.');
          onClose();
@@ -407,7 +408,19 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
                     {exceptionMessages.map((msg, i) => <li key={i}>{msg}</li>)}
                   </ul>
                   {!canApproveExceptions && (
-                    <p className="text-xs text-amber-800 mt-2 font-bold italic">Yetkiniz bulunmadığından bu işlem İK onayına düşecektir.</p>
+                    <>
+                      <p className="text-xs text-amber-800 mt-2 font-bold italic">Yetkiniz bulunmadığından bu işlem İK onayına düşecektir.</p>
+                       <div className="mt-3">
+                         <label className="block text-[10px] font-bold text-amber-900 mb-1 uppercase tracking-wider">Talep Notu / Gerekçe (Opsiyonel)</label>
+                         <textarea
+                           className="w-full bg-white border border-amber-200 rounded-lg p-2 text-xs focus:outline-none focus:border-amber-500 resize-none text-stone-700"
+                           rows={2}
+                           placeholder="Bu oda değişikliği için İK departmanına iletmek istediğiniz ek gerekçe..."
+                           value={customNote}
+                           onChange={(e) => setCustomNote(e.target.value)}
+                         />
+                       </div>
+                    </>
                   )}
                 </div>
               </div>

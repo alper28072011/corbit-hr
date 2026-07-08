@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Bell, Menu, UserCircle, LogOut, ShieldAlert, Check, X, User as UserIcon } from "lucide-react";
+import { Bell, Menu, UserCircle, LogOut, ShieldAlert, Check, X, User as UserIcon, Archive } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useStore } from "../../store/useStore";
 import { auth, db } from "../../lib/firebase";
 import { cn } from "../../lib/utils";
+import NotificationArchiveModal from "./NotificationArchiveModal";
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -20,10 +21,11 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const { 
     currentUser, roles, approvalRequests, resolveApprovalRequest, 
     placeStaff, updateStaff, staff, rooms, facilities, addLog,
-    changeStaffRoom, accommodations, markApprovalRequestAsRead
+    changeStaffRoom, accommodations, markApprovalRequestAsRead, hotels
   } = useStore();
   const [showApprovals, setShowApprovals] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const approvalsRef = useRef<HTMLDivElement>(null);
 
@@ -214,54 +216,90 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
 
              {/* Approvals and Notifications Dropdown */}
              {showApprovals && (
-                <div className="absolute right-0 mt-2 w-84 bg-white rounded-2xl shadow-xl border border-[#E8E6E1] py-2 z-50">
+                <div className="absolute right-0 mt-2 w-96 sm:w-[460px] bg-white rounded-2xl shadow-xl border border-[#E8E6E1] py-2 z-50">
                    {canManageApprovals ? (
                      <>
                        <div className="px-4 py-2 border-b border-stone-100">
-                          <h4 className="font-bold text-sm text-[#2D332D]">Onay Bekleyen İşlemler</h4>
+                          <h4 className="font-bold text-sm text-[#2D332D]">Onay Bekleyen İşlemler</h4><span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{pendingApprovals.length} Talep</span>
                        </div>
                        <div className="max-h-[300px] overflow-y-auto">
                           {pendingApprovals.length === 0 ? (
                              <div className="p-4 text-center text-sm text-stone-500">Bekleyen onay talebi yok.</div>
                           ) : (
                              <div className="divide-y divide-stone-100">
-                                {pendingApprovals.map(req => {
-                                   const reqStaff = staff.find(s => s.id === req.staffId);
-                                   const reqRoom = rooms.find(r => r.id === req.targetRoomId);
-                                   const reqFacility = facilities.find(f => f.id === reqRoom?.facilityId);
-                                   
-                                   return (
-                                      <div key={req.id} className="p-4 flex flex-col gap-2 relative group hover:bg-stone-50 transition-colors">
-                                         <div className="flex items-start gap-2">
-                                            <ShieldAlert className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
-                                            <div className="flex-1">
-                                               <div className="text-sm text-stone-700">
-                                                  <strong>{req.requestedBy || 'Lojman Görevlisi'}</strong>, <strong>{reqStaff?.fullName || 'Bilinmeyen'}</strong> personelini {req.sourceRoomId ? 'oda değişikliği ile' : ''} <strong>{reqFacility?.name} - {reqRoom?.roomNumber}</strong> odasına yerleştirmek istiyor.
-                                               </div>
-                                               <div className="text-xs text-stone-500 bg-stone-100 p-2 rounded mt-2 border border-stone-200">
-                                                  " {req.note} "
-                                               </div>
-                                            </div>
-                                         </div>
-                                         <div className="flex gap-2 justify-end mt-2">
-                                            <button onClick={() => handleReject(req.id, req.staffId)} className="w-8 h-8 rounded-full flex items-center justify-center border border-red-200 text-red-500 hover:bg-red-50" title="Reddet">
-                                               <X className="w-4 h-4" />
-                                            </button>
-                                            <button onClick={() => reqRoom && handleApprove(req.id, req.staffId, reqRoom.facilityId, reqRoom.id)} className="w-8 h-8 rounded-full flex items-center justify-center border border-green-200 text-green-500 hover:bg-green-50" title="Onayla">
-                                               <Check className="w-4 h-4" />
-                                            </button>
-                                         </div>
-                                      </div>
-                                   );
-                                })}
-                             </div>
+                                 {pendingApprovals.map(req => {
+                                    const reqStaff = staff.find(s => s.id === req.staffId);
+                                    const reqRoom = rooms.find(r => r.id === req.targetRoomId);
+                                    const reqFacility = facilities.find(f => f.id === reqRoom?.facilityId);
+                                    
+                                    const activeAcc = accommodations.find(a => a.staffId === req.staffId && a.status === 'active');
+                                    const sourceRoom = activeAcc ? rooms.find(r => r.id === activeAcc.roomId) : null;
+                                    const sourceFacility = sourceRoom ? facilities.find(f => f.id === sourceRoom.facilityId) : null;
+
+                                    const residents = accommodations
+                                      .filter(a => a.roomId === req.targetRoomId && a.status === 'active' && a.staffId !== req.staffId)
+                                      .map(a => staff.find(s => s.id === a.staffId))
+                                      .filter(Boolean);
+
+                                    return (
+                                       <div key={req.id} className="p-4 flex flex-col gap-3 hover:bg-stone-50/60 transition-colors">
+                                          <div className="flex items-start gap-2.5">
+                                             <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-1" />
+                                             <div className="flex-1 space-y-1.5">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                   <span className="text-sm font-bold text-stone-900">{reqStaff?.fullName || 'Bilinmeyen'}</span>
+                                                   <span className={cn(
+                                                      "text-[9px] font-bold px-1 rounded",
+                                                      reqStaff?.gender === 'female' ? "bg-pink-50 text-pink-700" : "bg-blue-50 text-blue-700"
+                                                   )}>
+                                                      {reqStaff?.gender === 'female' ? 'Kadın' : 'Erkek'}
+                                                   </span>
+                                                   <span className="text-[10px] text-stone-500">({hotels.find(h => h.id === reqStaff?.hotelId)?.name || 'Otel Bilgisi Yok'})</span>
+                                                </div>
+
+                                                <div className="text-xs text-stone-600 bg-stone-50 p-2.5 rounded-lg border border-stone-200/60 leading-relaxed">
+                                                   <div className="font-semibold text-stone-500 text-[10px] uppercase mb-1">Talep Edilen Hareket:</div>
+                                                   {sourceRoom ? (
+                                                      <span><strong>{sourceFacility?.name} - {sourceRoom.roomNumber}</strong> odasından <span className="text-[#7C8363] font-bold">➔</span> <strong>{reqFacility?.name} - {reqRoom?.roomNumber}</strong> odasına geçiş.</span>
+                                                   ) : (
+                                                      <span>Yeni Giriş: <strong>{reqFacility?.name} - {reqRoom?.roomNumber}</strong> odasına ilk yerleşim.</span>
+                                                   )}
+                                                </div>
+
+                                                {residents.length > 0 && (
+                                                   <div className="text-[11px] text-amber-800 bg-amber-50/50 p-2 rounded-lg border border-amber-100 font-medium">
+                                                      <strong>Hedef Odadakiler:</strong> {residents.map(r => r ? `${r.fullName} (${r.gender === 'female' ? 'K' : 'E'})` : '').filter(Boolean).join(', ')}
+                                                   </div>
+                                                )}
+
+                                                <div className="text-xs text-stone-600 bg-[#FCFBF9] p-2.5 rounded-lg border border-[#E8E6E1] italic">
+                                                   "{req.note || 'Talep gerekçesi eklenmemiş.'}"
+                                                </div>
+
+                                                <div className="text-[10px] text-stone-400">
+                                                   Talep Eden: <strong>{req.requestedBy}</strong>
+                                                </div>
+                                             </div>
+                                          </div>
+                                          <div className="flex gap-2 justify-end mt-1 border-t border-stone-100 pt-2">
+                                             <button onClick={() => handleReject(req.id, req.staffId)} className="px-3 py-1.5 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 text-xs font-bold flex items-center gap-1 transition-all" title="Reddet">
+                                                <X className="w-3.5 h-3.5" /> Reddet
+                                             </button>
+                                             <button onClick={() => reqRoom && handleApprove(req.id, req.staffId, reqRoom.facilityId, reqRoom.id)} className="px-3 py-1.5 rounded-xl border border-green-200 text-green-500 hover:bg-green-50 text-xs font-bold flex items-center gap-1 transition-all" title="Onayla">
+                                                <Check className="w-3.5 h-3.5" /> Onayla
+                                             </button>
+                                          </div>
+                                       </div>
+                                    );
+                                 })}
+                              </div>
                           )}
                        </div>
                      </>
                    ) : (
                      <>
                        <div className="px-4 py-2 border-b border-stone-100">
-                          <h4 className="font-bold text-sm text-[#2D332D]">Taleplerim ve Bildirimler</h4>
+                          <h4 className="font-bold text-sm text-[#2D332D]">Taleplerim ve Bildirimler</h4><span className="text-[10px] font-bold bg-[#7C8363]/10 text-[#7C8363] px-2 py-0.5 rounded-full">{myResolvedRequests.length} Yeni</span>
                        </div>
                        <div className="max-h-[300px] overflow-y-auto">
                           {myResolvedRequests.length === 0 ? (
@@ -305,6 +343,15 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                        </div>
                      </>
                    )}
+                    <button 
+                      onClick={() => {
+                         setShowApprovals(false);
+                         setShowArchiveModal(true);
+                      }}
+                      className="w-full text-center py-2.5 text-xs font-bold text-stone-600 hover:text-stone-900 hover:bg-stone-50 border-t border-stone-100 flex items-center justify-center gap-1.5 transition-colors rounded-b-2xl bg-stone-50/30"
+                    >
+                      <Archive className="w-3.5 h-3.5 text-stone-500" /> Tüm Onay Talepleri ve Bildirim Arşivi
+                    </button>
                 </div>
              )}
           </div>
@@ -413,6 +460,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
           })}
         </div>
       )}
+      <NotificationArchiveModal isOpen={showArchiveModal} onClose={() => setShowArchiveModal(false)} />
     </header>
   );
 }

@@ -582,13 +582,13 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
            >
               <h3 className="text-lg font-bold text-[#2D332D] mb-2">İK Onayına Gönder</h3>
               <p className="text-sm text-stone-500 mb-4">
-                 Bu yerleşim için İnsan Kaynakları departmanının onayı gerekmektedir. Lütfen onay talebiniz için bir gerekçe/not yazın.
+                 Bu yerleşim için İnsan Kaynakları departmanının onayı gerekmektedir. İsterseniz onay talebiniz için ek bir gerekçe/not yazabilirsiniz.
               </p>
               <textarea
                  autoFocus
                  className="w-full border border-[#E8E6E1] rounded-xl p-3 text-sm focus:outline-none focus:border-[#7C8363] resize-none mb-4"
                  rows={4}
-                 placeholder="Örn: Eşi Ayşe ile aile odası tahsisi..."
+                 placeholder="Gerekçe veya açıklama yazabilirsiniz (Opsiyonel)..."
                  value={approvalModal.reason}
                  onChange={(e) => setApprovalModal({...approvalModal, reason: e.target.value})}
               />
@@ -602,7 +602,7 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
                  </button>
                  <button 
                     onClick={() => handlePlaceStaff(approvalModal.roomId, approvalModal.facilityId, true, approvalModal.requestType, approvalModal.reason)}
-                    disabled={isSubmitting || !approvalModal.reason.trim()}
+                    disabled={isSubmitting}
                     className="px-4 py-2 bg-amber-500 text-white font-bold text-sm hover:bg-amber-600 rounded-xl disabled:opacity-50"
                  >
                     Onaya Gönder
