@@ -38,9 +38,10 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
   const maintenanceTickets = useStore(state => state.maintenanceTickets);
   const rooms = useStore(state => state.rooms);
   const accommodations = useStore(state => state.accommodations);
+  const approvalRequests = useStore(state => state.approvalRequests);
   
   const pendingStaffCount = useMemo(() => {
-    let pending = staff.filter(s => s.status === "pending_placement" && !s.deletedAt);
+    let pending = staff.filter(s => (s.status === "pending_placement" || s.status === "pending_approval") && !s.deletedAt);
     if (currentUser?.role === 'hotel_hr_manager') {
       const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
       pending = pending.filter(s => s.hotelId && hotelIds.includes(s.hotelId));
@@ -52,10 +53,23 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
         if ((f as any).hotelId) return [(f as any).hotelId];
         return [];
       });
-      pending = pending.filter(s => s.hotelId && allowedHotelIds.includes(s.hotelId));
+      pending = pending.filter(s => {
+        if (s.status === 'pending_placement') {
+          return s.hotelId && allowedHotelIds.includes(s.hotelId);
+        } else if (s.status === 'pending_approval') {
+          const req = approvalRequests.find(r => r.staffId === s.id && r.status === 'Bekliyor');
+          if (!req) return false;
+          const reqRoom = rooms.find(r => r.id === req.targetRoomId);
+          const isTargetFacilityManaged = reqRoom && facIds.includes(reqRoom.facilityId);
+          const isRequestedByMe = req.requestedById === currentUser.id || req.requestedBy === currentUser.email || req.requestedBy === currentUser.fullName;
+          const isHotelAllowed = s.hotelId && allowedHotelIds.includes(s.hotelId);
+          return !!(isTargetFacilityManaged || isRequestedByMe || isHotelAllowed);
+        }
+        return false;
+      });
     }
     return pending.length;
-  }, [staff, currentUser, facilities]);
+  }, [staff, currentUser, facilities, approvalRequests, rooms]);
 
   const openMaintenanceCount = useMemo(() => {
     if (!maintenanceTickets) return 0;

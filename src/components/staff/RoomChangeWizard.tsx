@@ -146,6 +146,8 @@ export default function RoomChangeWizard({ staff, currentRoomId, currentFacility
            sourceRoomId: currentRoomId,
            requestType: targetFacilityId === currentFacilityId ? 'family_placement' : 'cross_dorm_placement', // Use room_change/dorm_change internally 
            requestedBy: currentUser.fullName || currentUser.email,
+           requestedById: currentUser.id,
+           viewedByRequester: false,
            note: exceptionMessages.join(' ')
          });
          alert('İstisnai durum nedeniyle talebiniz İK onayına gönderildi.');

@@ -124,6 +124,8 @@ export interface ApprovalRequest {
   sourceRoomId?: string; // Eklenen alan
   requestType: 'check_in' | 'room_change' | 'dorm_change' | 'family_placement' | 'cross_dorm_placement';
   requestedBy: string; // Lojman görevlisinin ID/E-posta
+  requestedById?: string; // Talep eden kullanıcının ID'si
+  viewedByRequester?: boolean; // Talebi yapan kişi tarafından bildirim görüldü mü?
   status: 'Bekliyor' | 'Onaylandı' | 'Reddedildi' | 'İptal Edildi';
   createdAt: number;
   note: string; // Örn: "A Otelinden X kişisi ile evli, Aile odası talebi."

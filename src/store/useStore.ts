@@ -97,6 +97,7 @@ interface AppState {
   addApprovalRequest: (reqData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
   resolveApprovalRequest: (id: string, status: 'Onaylandı' | 'Reddedildi' | 'İptal Edildi') => Promise<void>;
   cancelApprovalRequest: (id: string, staffId: string) => Promise<void>;
+  markApprovalRequestAsRead: (id: string) => Promise<void>;
   
   addSensitiveDataAccessRequest: (userId: string, userName: string, userEmail: string) => Promise<void>;
   resolveSensitiveDataAccessRequest: (id: string, status: 'Onaylandı' | 'Reddedildi') => Promise<void>;
@@ -995,6 +996,14 @@ export const useStore = create<AppState>()(
       resolveApprovalRequest: async (id, status) => {
         try {
           await updateDoc(doc(db, "approvalRequests", id), { status });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `approvalRequests/${id}`);
+        }
+      },
+
+      markApprovalRequestAsRead: async (id) => {
+        try {
+          await updateDoc(doc(db, "approvalRequests", id), { viewedByRequester: true });
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, `approvalRequests/${id}`);
         }

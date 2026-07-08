@@ -274,12 +274,21 @@ export default function StaffManagement() {
       
       let f = null;
       let r = null;
+      let activeReq = null;
       if (acc) {
         f = facilities.find(x => x.id === acc.facilityId);
         r = rooms.find(x => x.id === acc.roomId);
+      } else if (s.status === 'pending_approval') {
+        activeReq = approvalRequests.find(req => req.staffId === s.id && req.status === 'Bekliyor');
+        if (activeReq) {
+          r = rooms.find(x => x.id === activeReq.targetRoomId);
+          if (r) {
+            f = facilities.find(x => x.id === r.facilityId);
+          }
+        }
       }
 
-      return { staff: s, hotel: h, acc, facility: f, room: r };
+      return { staff: s, hotel: h, acc, facility: f, room: r, activeReq };
     }).filter(item => {
       // Logic from pre-unified arrays to restrict by role
       if (currentUser?.role === 'hotel_hr_manager') {
@@ -297,6 +306,25 @@ export default function StaffManagement() {
             return [];
           });
           if (item.staff.hotelId && !allowedHotelIds.includes(item.staff.hotelId)) return false;
+        } else if (item.staff.status === 'pending_approval') {
+          // Lojman görevlisi pending_approval durumundaki kişileri görebilmeli:
+          // 1. Eğer hedef lojman bu lojman görevlisinin yetkili olduğu lojmanlardan biriyse,
+          // 2. VEYA talebi kendisi oluşturduysa,
+          // 3. VEYA personelin oteli yetkili lojmanların otelleriyle uyuşuyorsa (pending_placement ile aynı mantık)
+          const isTargetFacilityManaged = item.facility && facIds.includes(item.facility.id);
+          const isRequestedByMe = item.activeReq && (item.activeReq.requestedById === currentUser.id || item.activeReq.requestedBy === currentUser.email || item.activeReq.requestedBy === currentUser.fullName);
+          
+          const managedFacs = facilities.filter(f => facIds.includes(f.id));
+          const allowedHotelIds = managedFacs.flatMap(f => {
+            if (f.allowedHotelIds && f.allowedHotelIds.length > 0) return f.allowedHotelIds;
+            if ((f as any).hotelId) return [(f as any).hotelId];
+            return [];
+          });
+          const isHotelAllowed = item.staff.hotelId && allowedHotelIds.includes(item.staff.hotelId);
+
+          if (!isTargetFacilityManaged && !isRequestedByMe && !isHotelAllowed) {
+            return false;
+          }
         } else {
           if (!item.acc?.facilityId || !facIds.includes(item.acc.facilityId)) return false;
         }
@@ -1404,6 +1432,16 @@ export default function StaffManagement() {
                       <td className="px-3 py-3 text-sm font-semibold truncate" title={f ? f.name : '-'}>
                         {s.status === 'pending_placement' ? (
                           <span className="text-stone-400 italic font-normal">-</span>
+                        ) : s.status === 'pending_approval' ? (
+                          f ? (
+                            <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block" title={`${f.name} (İK Onayı Bekliyor)`}>
+                              {f.name} <span className="text-[10px] font-normal text-amber-500">(Onayda)</span>
+                            </span>
+                          ) : (
+                            <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block">
+                              Onay Bekliyor
+                            </span>
+                          )
                         ) : (
                           f ? (
                             <span 
@@ -1423,6 +1461,10 @@ export default function StaffManagement() {
                       <td className="px-3 py-3 text-sm font-mono font-medium text-stone-600 truncate" title={r?.roomNumber || '-'}>
                         {s.status === 'pending_placement' ? (
                           <span className="text-stone-400 italic font-sans font-normal">-</span>
+                        ) : s.status === 'pending_approval' ? (
+                          r ? (
+                            <span className="text-amber-700 font-semibold">{r.roomNumber}</span>
+                          ) : '-'
                         ) : (
                           r?.roomNumber || '-'
                         )}

@@ -178,7 +178,9 @@ export default function CheckInWizard({ staffMember, onClose }: CheckInWizardPro
           staffId: staffMember.id,
           targetRoomId: roomId,
           requestType: requestType || 'cross_dorm_placement',
-          requestedBy: currentUser?.id || 'System',
+          requestedBy: currentUser?.fullName || currentUser?.email || 'System',
+          requestedById: currentUser?.id,
+          viewedByRequester: false,
           note: reason || ''
         });
         
