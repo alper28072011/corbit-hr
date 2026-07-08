@@ -63,6 +63,20 @@ const ActionMenu = ({ children }: { children: ReactNode }) => {
 
 export default function RackManagement() {
   const { facilities, rooms, hotels, staff, accommodations, maintenanceTickets, currentUser, roles } = useStore();
+  const sensitiveRequests = useStore(state => state.sensitiveDataAccessRequests || []);
+
+  const userSensitiveRequest = sensitiveRequests.find(r => r.userId === currentUser?.id);
+  const hasSensitiveDataAccess = currentUser?.email === 'alper28072011@gmail.com' || 
+                                 currentUser?.isPrimarySensitiveDataOwner === true || 
+                                 userSensitiveRequest?.status === 'Onaylandı';
+
+  const maskPhone = (phoneStr?: string) => {
+    if (!phoneStr) return '-';
+    if (hasSensitiveDataAccess) return phoneStr;
+    const clean = phoneStr.trim();
+    if (clean.length < 4) return '***';
+    return clean.slice(0, 3) + ' *** ** ' + clean.slice(-2);
+  };
 
   // Read preferences
   const uiPrefs = useStore(state => state.uiPreferences);
@@ -579,7 +593,7 @@ export default function RackManagement() {
                                      </p>
                                      <div className="mt-2 flex items-center gap-3 text-[10px] text-stone-400">
                                         <span title="TC / Passport"><FileText className="w-3 h-3 inline mr-1" />{res.tcNo || '-'}</span>
-                                        <span title="Telefon"><Phone className="w-3 h-3 inline mr-1" />{res.phone || '-'}</span>
+                                        <span title="Telefon"><Phone className="w-3 h-3 inline mr-1" />{maskPhone(res.phone)}</span>
                                      </div>
                                   </div>
                                   

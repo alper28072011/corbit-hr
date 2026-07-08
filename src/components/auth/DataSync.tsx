@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { collection, onSnapshot, query, where, orderBy, doc, limit, updateDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
 import { useStore } from "../../store/useStore";
-import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, ActionLog, ApprovalRequest } from "../../types";
+import { User, Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, ActionLog, ApprovalRequest, SensitiveDataAccessRequest } from "../../types";
 import { can } from "../../lib/permissions";
 
 export default function DataSync() {
@@ -16,6 +16,7 @@ export default function DataSync() {
     setAccommodations, 
     setMaintenanceTickets,
     setApprovalRequests,
+    setSensitiveDataAccessRequests,
     refreshTrigger
   } = useStore();
 
@@ -216,6 +217,14 @@ export default function DataSync() {
         const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as ApprovalRequest));
         useStore.getState().setApprovalRequests(data);
       }, (error: any) => handleFirestoreError(error, OperationType.LIST, "approvalRequests"))
+    );
+
+    // Sensitive Data Access Requests
+    unsubs.push(
+      onSnapshot(collection(db, "sensitiveDataAccessRequests"), (snapshot: any) => {
+        const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as SensitiveDataAccessRequest));
+        setSensitiveDataAccessRequests(data);
+      }, (error: any) => handleFirestoreError(error, OperationType.LIST, "sensitiveDataAccessRequests"))
     );
 
     // Support Tickets

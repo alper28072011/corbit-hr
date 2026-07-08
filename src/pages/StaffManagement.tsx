@@ -61,7 +61,29 @@ const ActionMenu = ({ children }: { children: ReactNode }) => {
 };
 
 export default function StaffManagement() {
-  const { hotels, facilities, rooms, staff, accommodations, addStaff, bulkAddStaffWithPlacements, placeStaff, checkoutStaff, undoCheckoutStaff, deleteStaff, bulkDeleteStaff, notifyCheckoutStaff, currentUser, roles, logs } = useStore();
+  const { 
+    hotels, 
+    facilities, 
+    rooms, 
+    staff, 
+    accommodations, 
+    addStaff, 
+    bulkAddStaffWithPlacements, 
+    placeStaff, 
+    checkoutStaff, 
+    undoCheckoutStaff, 
+    deleteStaff, 
+    bulkDeleteStaff, 
+    notifyCheckoutStaff, 
+    currentUser, 
+    roles, 
+    logs, 
+    approvalRequests, 
+    cancelApprovalRequest,
+    sensitiveDataAccessRequests,
+    addSensitiveDataAccessRequest,
+    resolveSensitiveDataAccessRequest
+  } = useStore();
 
   const getStaffCreationTime = (st: any) => {
     if (st?.createdAt) return st.createdAt;
@@ -75,6 +97,25 @@ export default function StaffManagement() {
   };
 
   const refreshAction = usePageRefresh();
+
+  const userSensitiveRequest = (sensitiveDataAccessRequests || []).find(r => r.userId === currentUser?.id);
+  const hasSensitiveDataAccess = currentUser?.email === 'alper28072011@gmail.com' || 
+                                 currentUser?.isPrimarySensitiveDataOwner === true || 
+                                 userSensitiveRequest?.status === 'Onaylandı';
+
+  const maskPhone = (phoneStr?: string) => {
+    if (!phoneStr) return '-';
+    if (hasSensitiveDataAccess) return phoneStr;
+    const clean = phoneStr.trim();
+    if (clean.length < 4) return '***';
+    return clean.slice(0, 3) + ' *** ** ' + clean.slice(-2);
+  };
+
+  const maskBirthDate = (birthStr?: string) => {
+    if (!birthStr) return '-';
+    if (hasSensitiveDataAccess) return new Date(birthStr).toLocaleDateString('tr-TR') + ` (Yaş: ${calculateAge(birthStr)})`;
+    return '**/**/****';
+  };
 
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
 
@@ -275,7 +316,13 @@ export default function StaffManagement() {
         if (!item.staff.deletedAt) return false;
       } else {
         if (item.staff.deletedAt) return false;
-        if (filterStatus && item.staff.status !== filterStatus) return false;
+        if (filterStatus) {
+          if (filterStatus === 'pending_placement') {
+            if (item.staff.status !== 'pending_placement' && item.staff.status !== 'pending_approval') return false;
+          } else {
+            if (item.staff.status !== filterStatus) return false;
+          }
+        }
       }
       if (filterHotel && item.staff.hotelId !== filterHotel) return false;
       if (filterFacility) {
@@ -406,7 +453,7 @@ export default function StaffManagement() {
 
   const handleAddStaff = (e: import('react').FormEvent) => {
     e.preventDefault();
-    if (!newStaff.fullName || !newStaff.hotelId || !newStaff.department || !canAddStaff) return;
+    if (!newStaff.fullName || !newStaff.hotelId || !newStaff.department || !newStaff.phone || !newStaff.birthDate || !canAddStaff) return;
     addStaff({ ...newStaff, status: 'pending_placement' });
     setShowAddStaffForm(false);
     
@@ -946,6 +993,128 @@ export default function StaffManagement() {
         />
       </div>
 
+      {/* Hassas Veri Erişim Kontrol Paneli */}
+      {(() => {
+        const isPrimaryOwner = currentUser?.isPrimarySensitiveDataOwner || currentUser?.email === 'alper28072011@gmail.com';
+        
+        // 1. Eğer Esas Sorumlu ise, beklemedeki istekleri listele
+        if (isPrimaryOwner) {
+          const pendingReqs = (sensitiveDataAccessRequests || []).filter(r => r.status === 'Bekliyor');
+          if (pendingReqs.length > 0) {
+            return (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shrink-0 shadow-sm animate-fade-in">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-amber-600 text-lg">🛡️</span>
+                  <h4 className="font-bold text-amber-900 text-sm">Hassas Veri Erişim Talepleri ({pendingReqs.length})</h4>
+                  <span className="text-[11px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full font-medium ml-auto">Esas Sorumlu Yetkisi</span>
+                </div>
+                <p className="text-xs text-amber-800 mb-3">Diğer kullanıcılar, Telefon Numarası ve Doğum Tarihi gibi hassas verileri görüntülemek için onayınızı bekliyor.</p>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {pendingReqs.map(req => (
+                    <div key={req.id} className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-amber-100/50">
+                      <div>
+                        <p className="text-xs font-bold text-stone-800">{req.userName || req.userEmail}</p>
+                        <p className="text-[10px] text-stone-500">{req.userEmail} · {new Date(req.createdAt).toLocaleString('tr-TR')}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            if (confirm(`${req.userName || req.userEmail} için erişim iznini onaylıyor musunuz?`)) {
+                              await resolveSensitiveDataAccessRequest(req.id, 'Onaylandı');
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                        >
+                          Onayla
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`${req.userName || req.userEmail} için erişim iznini reddediyor musunuz?`)) {
+                              await resolveSensitiveDataAccessRequest(req.id, 'Reddedildi');
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                        >
+                          Reddet
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        }
+
+        // 2. Eğer Esas Sorumlu DEĞİLSE ve erişimi yoksa, talep gönderme banner'ı göster
+        if (!hasSensitiveDataAccess) {
+          return (
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 shrink-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                  <span className="text-amber-600 text-lg">🔒</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-stone-800 text-sm">Hassas Veriler Gizlendi</h4>
+                  <p className="text-xs text-stone-500 mt-1">Personel Telefon Numarası ve Doğum Tarihi bilgileri güvenlik gereği sadece "Esas Sorumlu" tarafından görülür. Bilgileri görüntülemek için erişim talebinde bulunabilirsiniz.</p>
+                </div>
+              </div>
+              <div className="shrink-0 flex items-center gap-3">
+                {userSensitiveRequest?.status === 'Bekliyor' ? (
+                  <span className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold rounded-xl flex items-center gap-1.5">
+                    <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+                    Erişim İsteği Onay Bekliyor
+                  </span>
+                ) : userSensitiveRequest?.status === 'Reddedildi' ? (
+                  <div className="flex flex-col items-end gap-1.5">
+                    <span className="text-[10px] text-red-600 font-semibold bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg">Önceki İstek Reddedildi</span>
+                    <button
+                      onClick={async () => {
+                        if (confirm("Hassas verilere erişmek için talep göndermek istiyor musunuz?")) {
+                          await addSensitiveDataAccessRequest(currentUser?.id || '', currentUser?.fullName || currentUser?.email || '', currentUser?.email || '');
+                          alert("Talep başarıyla lojman esas sorumlusuna iletildi.");
+                        }
+                      }}
+                      className="px-4 py-2 bg-[#7C8363] hover:bg-[#686D53] text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      🛡️ Yeniden Talep Gönder
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (confirm("Hassas verilere erişmek için talep göndermek istiyor musunuz?")) {
+                        await addSensitiveDataAccessRequest(currentUser?.id || '', currentUser?.fullName || currentUser?.email || '', currentUser?.email || '');
+                        alert("Talep başarıyla lojman esas sorumlusuna iletildi.");
+                      }
+                    }}
+                    className="px-4 py-2 bg-[#7C8363] hover:bg-[#686D53] text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    🛡️ Erişim İzni Talep Et
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        // 3. Eğer erişimi onaylandıysa, yeşil bir bilgi rozeti gösterelim
+        if (userSensitiveRequest?.status === 'Onaylandı') {
+          return (
+            <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 shrink-0 flex items-center justify-between text-xs text-emerald-800">
+              <span className="flex items-center gap-1.5 font-medium">
+                <span className="text-emerald-600 text-sm">🛡️</span>
+                Lojman Esas Sorumlusu tarafından onaylı hassas veri erişim yetkiniz bulunmaktadır.
+              </span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Yetkili</span>
+            </div>
+          );
+        }
+
+        return null;
+      })()}
+
       {/* Status Tabs */}
       <div className="flex justify-between items-center border-b border-[#E8E6E1] shrink-0 px-2">
         <div className="flex gap-4">
@@ -1164,35 +1333,71 @@ export default function StaffManagement() {
                         </div>
                         <p className="text-[11px] text-stone-500 mt-0.5 truncate">{s.position || 'Bilinmiyor'}</p>
                       </td>
-                      <td className="px-3 py-3 truncate" title={s.fullName}>
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-[#2D332D] truncate">
-                            {s.fullName}
-                            {s.isForeigner && <span className="ml-1.5 text-lg" title="Yabancı Uyruklu">🌍</span>}
-                          </p>
-                          {/* Tooltip info icon */}
+                      <td className="px-3 py-3" title={s.fullName}>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-[#2D332D] truncate">
+                              {s.fullName}
+                              {s.isForeigner && <span className="ml-1.5 text-lg" title="Yabancı Uyruklu">🌍</span>}
+                            </p>
+                            {/* Tooltip info icon */}
+                            {(() => {
+                              const cTime = getStaffCreationTime(s);
+                              const isDelayed = s.status === 'pending_placement' && cTime && (Date.now() - cTime > 24 * 60 * 60 * 1000);
+                              return (
+                                <div 
+                                  className="relative flex items-center justify-center shrink-0"
+                                  onMouseEnter={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: s.id });
+                                  }}
+                                  onMouseLeave={() => setTooltipData(null)}
+                                >
+                                  <Info 
+                                    className={cn(
+                                      "w-4 h-4 cursor-help transition-colors",
+                                      isDelayed 
+                                        ? "text-red-500 hover:text-red-700 animate-pulse font-bold" 
+                                        : "text-stone-400 hover:text-[#7C8363]"
+                                    )} 
+                                  />
+                                </div>
+                              );
+                            })()}
+                          </div>
                           {(() => {
-                            const cTime = getStaffCreationTime(s);
-                            const isDelayed = s.status === 'pending_placement' && cTime && (Date.now() - cTime > 24 * 60 * 60 * 1000);
-                            return (
-                              <div 
-                                className="relative flex items-center justify-center shrink-0"
-                                onMouseEnter={(e) => {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  setTooltipData({ x: rect.left + rect.width / 2, y: rect.top, staffId: s.id });
-                                }}
-                                onMouseLeave={() => setTooltipData(null)}
-                              >
-                                <Info 
-                                  className={cn(
-                                    "w-4 h-4 cursor-help transition-colors",
-                                    isDelayed 
-                                      ? "text-red-500 hover:text-red-700 animate-pulse font-bold" 
-                                      : "text-stone-400 hover:text-[#7C8363]"
-                                  )} 
-                                />
-                              </div>
-                            );
+                            const activeReq = approvalRequests.find(r => r.staffId === s.id && r.status === 'Bekliyor');
+                            if (activeReq) {
+                              const reqRoom = rooms.find(room => room.id === activeReq.targetRoomId);
+                              const reqFac = facilities.find(fac => fac.id === reqRoom?.facilityId);
+                              const targetRoomStr = reqRoom && reqFac ? `${reqFac.name} - Oda ${reqRoom.roomNumber}` : 'Bilinmeyen Oda';
+                              return (
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white flex items-center gap-1 shadow-sm uppercase tracking-wider" title={`Hedef Oda: ${targetRoomStr} | Not: ${activeReq.note}`}>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                                    İstisnai Yerleşim (İK Onayı Bekliyor)
+                                  </span>
+                                  <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/50">
+                                    Hedef: {targetRoomStr}
+                                  </span>
+                                  {(currentUser?.role === 'super_admin' || currentUser?.role === 'facility_manager' || activeReq.requestedBy === currentUser?.id) && (
+                                    <button
+                                      type="button"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`${s.fullName} için yapılan istisnai yerleşim talebini geri çekmek (iptal etmek) istediğinize emin misiniz?`)) {
+                                          await cancelApprovalRequest(activeReq.id, s.id);
+                                        }
+                                      }}
+                                      className="text-[10px] text-red-600 hover:text-red-800 hover:underline font-semibold flex items-center gap-1 cursor-pointer bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded border border-red-200 transition-colors"
+                                    >
+                                      Geri Çek
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
                           })()}
                         </div>
                       </td>
@@ -1256,6 +1461,26 @@ export default function StaffManagement() {
                               >
                                 <CheckCircle className="w-4 h-4 text-[#7C8363]" /> Yerleştir
                               </button>
+                            )}
+                            {s.status === 'pending_approval' && (
+                              (() => {
+                                const activeReq = approvalRequests.find(r => r.staffId === s.id && r.status === 'Bekliyor');
+                                if (activeReq && (currentUser?.role === 'super_admin' || currentUser?.role === 'facility_manager' || activeReq.requestedBy === currentUser?.id)) {
+                                  return (
+                                    <button 
+                                      onClick={async () => {
+                                        if (confirm(`${s.fullName} için yapılan istisnai yerleşim talebini geri çekmek (iptal etmek) istediğinize emin misiniz?`)) {
+                                          await cancelApprovalRequest(activeReq.id, s.id);
+                                        }
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 animate-pulse font-semibold"
+                                    >
+                                      <X className="w-4 h-4 text-red-500 animate-none" /> Talebi Geri Çek (İptal)
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()
                             )}
                             {s.status === 'placed' && canEditStaff && acc && (
                               <button 
@@ -1654,16 +1879,16 @@ export default function StaffManagement() {
                   <input required type="text" value={newStaff.fullName} onChange={e => setNewStaff({...newStaff, fullName: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Personel ad ve soyadı" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Doğum Tarihi</label>
-                  <input type="date" value={newStaff.birthDate} onChange={e => setNewStaff({...newStaff, birthDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Doğum Tarihi *</label>
+                  <input required type="date" value={newStaff.birthDate} onChange={e => setNewStaff({...newStaff, birthDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">TC Kimlik / Pasaport</label>
                   <input type="text" value={newStaff.tcNo} onChange={e => setNewStaff({...newStaff, tcNo: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="TC veya Pasaport No" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Telefon</label>
-                  <input type="text" value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Başında sıfır olmadan..." />
+                  <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Telefon *</label>
+                  <input required type="text" value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" placeholder="Başında sıfır olmadan..." />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çalıştığı Otel *</label>
@@ -1804,16 +2029,16 @@ export default function StaffManagement() {
                 <input required type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Doğum Tarihi</label>
-                <input type="date" value={editForm.birthDate} onChange={e => setEditForm({...editForm, birthDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Doğum Tarihi *</label>
+                <input required type="date" value={editForm.birthDate} onChange={e => setEditForm({...editForm, birthDate: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">TC Kimlik / Pasaport</label>
                 <input type="text" value={editForm.tcNo} onChange={e => setEditForm({...editForm, tcNo: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Telefon</label>
-                <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
+                <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Telefon *</label>
+                <input required type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363]" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-500 uppercase mb-1">Çalıştığı Otel *</label>
@@ -1972,10 +2197,10 @@ export default function StaffManagement() {
             }}
           >
             <span className="font-semibold block mb-1">TC Kimlik No: {s?.tcNo || '-'}</span>
-            <span className="block text-gray-200 mb-1">Telefon: {s?.phone || '-'}</span>
+            <span className="block text-gray-200 mb-1">Telefon: {maskPhone(s?.phone)}</span>
             {s?.birthDate ? (
               <span className="block text-gray-200 border-t border-gray-600 mt-1 pt-1">
-                Doğum Tarihi: {new Date(s.birthDate).toLocaleDateString('tr-TR')} (Yaş: {calculateAge(s.birthDate)})
+                Doğum Tarihi: {maskBirthDate(s.birthDate)}
               </span>
             ) : (
               <span className="block text-gray-400 italic border-t border-gray-600 mt-1 pt-1">Doğum Tarihi Belirtilmemiş</span>

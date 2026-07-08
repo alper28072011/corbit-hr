@@ -92,7 +92,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
     await resolveApprovalRequest(approvalId, 'Onaylandı');
     const targetStaff = staff.find(s => s.id === staffId);
     if (targetStaff?.status !== 'placed') {
-      await placeStaff(staffId, facilityId, roomId);
+      await placeStaff(staffId, facilityId, roomId, true);
       await addLog({
         entityId: staffId,
         entityType: 'staff',

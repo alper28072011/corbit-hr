@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions, SupportTicket } from '../types';
+import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions, SupportTicket, SensitiveDataAccessRequest } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion, deleteField } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
@@ -25,14 +25,15 @@ interface AppState {
   maintenanceTickets: MaintenanceTicket[];
   approvalRequests: ApprovalRequest[];
   supportTickets: SupportTicket[];
+  sensitiveDataAccessRequests: SensitiveDataAccessRequest[];
   
   uiPreferences: UiPreferences;
   setUiPreference: <K extends keyof UiPreferences>(key: K, pageKey: string, value: any) => void;
   resetUiPreferences: () => void;
-
+  
   refreshTrigger: number;
   triggerRefresh: () => void;
-
+  
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleConfig[]) => void;
   setRolesPermissions: (perms: RolePermissions[]) => void;
@@ -44,6 +45,7 @@ interface AppState {
   setMaintenanceTickets: (tickets: MaintenanceTicket[]) => void;
   setApprovalRequests: (reqs: ApprovalRequest[]) => void;
   setSupportTickets: (tickets: SupportTicket[]) => void;
+  setSensitiveDataAccessRequests: (reqs: SensitiveDataAccessRequest[]) => void;
   
   // Actions
   addUser: (user: Omit<User, 'id'>) => Promise<void>;
@@ -81,7 +83,7 @@ interface AppState {
   bulkRestoreStaff: (ids: string[]) => Promise<void>;
   hardDeleteStaff: (id: string) => Promise<void>;
   bulkHardDeleteStaff: (ids: string[]) => Promise<void>;
-  placeStaff: (staffId: string, facilityId: string, roomId: string) => Promise<void>;
+  placeStaff: (staffId: string, facilityId: string, roomId: string, bypassGenderCheck?: boolean) => Promise<void>;
   changeStaffRoom: (staffId: string, oldRoomId: string, newRoomId: string, newFacilityId?: string) => Promise<void>;
   changeRoom: (accommodationId: string, newFacilityId: string, newRoomId: string) => Promise<void>;
   notifyCheckoutStaff: (staffId: string, checkOutDate: string) => Promise<void>;
@@ -93,7 +95,11 @@ interface AppState {
   deleteMaintenanceTicket: (id: string) => Promise<void>;
   
   addApprovalRequest: (reqData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
-  resolveApprovalRequest: (id: string, status: 'Onaylandı' | 'Reddedildi') => Promise<void>;
+  resolveApprovalRequest: (id: string, status: 'Onaylandı' | 'Reddedildi' | 'İptal Edildi') => Promise<void>;
+  cancelApprovalRequest: (id: string, staffId: string) => Promise<void>;
+  
+  addSensitiveDataAccessRequest: (userId: string, userName: string, userEmail: string) => Promise<void>;
+  resolveSensitiveDataAccessRequest: (id: string, status: 'Onaylandı' | 'Reddedildi') => Promise<void>;
   
   createSupportTicket: (ticketData: Omit<SupportTicket, 'id' | 'userId' | 'userName' | 'userEmail' | 'status' | 'messages' | 'createdAt' | 'updatedAt'>, initialMessage: string) => Promise<void>;
   sendSupportMessage: (ticketId: string, messageText: string) => Promise<void>;
@@ -126,6 +132,7 @@ export const useStore = create<AppState>()(
       maintenanceTickets: [],
       approvalRequests: [],
       supportTickets: [],
+      sensitiveDataAccessRequests: [],
       logs: [],
       appSettings: {},
       refreshTrigger: 0,
@@ -172,6 +179,7 @@ export const useStore = create<AppState>()(
       setMaintenanceTickets: (maintenanceTickets) => set({ maintenanceTickets }),
       setApprovalRequests: (approvalRequests) => set({ approvalRequests }),
       setSupportTickets: (supportTickets) => set({ supportTickets }),
+      setSensitiveDataAccessRequests: (sensitiveDataAccessRequests) => set({ sensitiveDataAccessRequests }),
       setLogs: (logs) => set({ logs }),
       setAppSettings: (appSettings) => set({ appSettings }),
 
@@ -683,14 +691,14 @@ export const useStore = create<AppState>()(
          }
       },
         
-      placeStaff: async (staffId, facilityId, roomId) => {
+      placeStaff: async (staffId, facilityId, roomId, bypassGenderCheck) => {
          const state = get();
          
          // Çift Doğrulama (Store Guard): Cinsiyet uyuşmazlığı kontrolü
          const targetRoom = state.rooms.find(r => r.id === roomId);
          const targetStaff = state.staff.find(s => s.id === staffId);
          
-         if (targetRoom && targetStaff) {
+         if (targetRoom && targetStaff && !bypassGenderCheck) {
            const roomAccs = state.accommodations.filter(a => a.roomId === roomId && a.status === 'active');
            const currentResidents = state.staff.filter(s => roomAccs.some(a => a.staffId === s.id));
            
@@ -989,6 +997,76 @@ export const useStore = create<AppState>()(
           await updateDoc(doc(db, "approvalRequests", id), { status });
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, `approvalRequests/${id}`);
+        }
+      },
+
+      cancelApprovalRequest: async (id, staffId) => {
+        try {
+          const batch = writeBatch(db);
+          batch.update(doc(db, "approvalRequests", id), { status: 'İptal Edildi' });
+          batch.update(doc(db, "staff", staffId), { status: 'pending_placement' });
+          
+          const state = get();
+          const targetStaff = state.staff.find(s => s.id === staffId);
+          if (state.currentUser && targetStaff) {
+            const logDocRef = doc(collection(db, "logs"));
+            batch.set(logDocRef, {
+               entityId: staffId,
+               entityType: 'staff',
+               action: 'update',
+               changes: `İstisnai yerleşim talebi geri çekildi (iptal edildi).`,
+               performedBy: state.currentUser.fullName || state.currentUser.email,
+               timestamp: Date.now()
+            });
+          }
+          await batch.commit();
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `approvalRequests/${id}`);
+        }
+      },
+
+      addSensitiveDataAccessRequest: async (userId, userName, userEmail) => {
+        try {
+          const payload = {
+            userId,
+            userName,
+            userEmail,
+            createdAt: Date.now(),
+            status: 'Bekliyor' as const
+          };
+          await addDoc(collection(db, "sensitiveDataAccessRequests"), payload);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.CREATE, "sensitiveDataAccessRequests");
+        }
+      },
+
+      resolveSensitiveDataAccessRequest: async (id, status) => {
+        try {
+          const state = get();
+          const req = state.sensitiveDataAccessRequests.find(r => r.id === id);
+          if (!req) return;
+          
+          const batch = writeBatch(db);
+          batch.update(doc(db, "sensitiveDataAccessRequests", id), {
+            status,
+            approvedBy: state.currentUser?.fullName || state.currentUser?.email || 'System',
+            approvedAt: Date.now()
+          });
+
+          // Log the action
+          const logDocRef = doc(collection(db, "logs"));
+          batch.set(logDocRef, {
+             entityId: id,
+             entityType: 'staff',
+             action: 'update',
+             changes: `${req.userName} (${req.userEmail}) isimli kullanıcının hassas verileri görme talebi ${status === 'Onaylandı' ? 'Onaylandı' : 'Reddedildi'}.`,
+             performedBy: state.currentUser?.fullName || state.currentUser?.email || 'System',
+             timestamp: Date.now()
+          });
+
+          await batch.commit();
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `sensitiveDataAccessRequests/${id}`);
         }
       },
 

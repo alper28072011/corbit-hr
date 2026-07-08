@@ -23,13 +23,15 @@ export default function Settings() {
     assignedHotelIds: string[];
     assignedFacilityIds: string[];
     status: 'active' | 'inactive';
+    isPrimarySensitiveDataOwner: boolean;
   }>({
     fullName: '',
     email: '',
     role: 'hotel_hr_manager',
     assignedHotelIds: [],
     assignedFacilityIds: [],
-    status: 'active'
+    status: 'active',
+    isPrimarySensitiveDataOwner: false
   });
 
   const [selectedRole, setSelectedRole] = useState<string>('hr_director');
@@ -60,7 +62,7 @@ export default function Settings() {
   const closeForm = () => {
     setShowAddForm(false);
     setEditingUser(null);
-    setFormData({ fullName: '', email: '', role: 'hotel_hr_manager', assignedHotelIds: [], assignedFacilityIds: [], status: 'active' });
+    setFormData({ fullName: '', email: '', role: 'hotel_hr_manager', assignedHotelIds: [], assignedFacilityIds: [], status: 'active', isPrimarySensitiveDataOwner: false });
   };
 
   const startEdit = (userId: string) => {
@@ -72,7 +74,8 @@ export default function Settings() {
       role: user.role,
       assignedHotelIds: user.assignedHotelIds || [],
       assignedFacilityIds: user.assignedFacilityIds || [],
-      status: user.status || 'active'
+      status: user.status || 'active',
+      isPrimarySensitiveDataOwner: user.isPrimarySensitiveDataOwner || false
     });
     setEditingUser(userId);
     setShowAddForm(true);
@@ -174,9 +177,16 @@ export default function Settings() {
                     <td className="px-6 py-4 font-medium text-stone-800">{user.fullName}</td>
                     <td className="px-6 py-4 text-sm text-stone-600">{user.email}</td>
                     <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-stone-100 text-stone-600 rounded text-xs font-semibold">
-                        {ROLE_NAMES[user.role] || user.role}
-                      </span>
+                      <div className="flex flex-col gap-1.5 items-start">
+                        <span className="px-2 py-1 bg-stone-100 text-stone-600 rounded text-xs font-semibold">
+                          {ROLE_NAMES[user.role] || user.role}
+                        </span>
+                        {(user.isPrimarySensitiveDataOwner || user.email === 'alper28072011@gmail.com') && (
+                          <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-bold uppercase tracking-wider" title="Hassas Veri Esas Sorumlusu">
+                            🛡️ Esas Sorumlu
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={cn(
@@ -400,6 +410,24 @@ export default function Settings() {
                   )}
                 </div>
 
+              </div>
+
+              <div className="mt-4 p-4 bg-[#7C8363]/5 rounded-xl border border-[#7C8363]/10 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="isPrimarySensitiveDataOwner"
+                  className="w-4.5 h-4.5 mt-0.5 rounded text-[#7C8363] focus:ring-[#7C8363] cursor-pointer"
+                  checked={formData.isPrimarySensitiveDataOwner}
+                  onChange={(e) => setFormData({...formData, isPrimarySensitiveDataOwner: e.target.checked})}
+                />
+                <div>
+                  <label htmlFor="isPrimarySensitiveDataOwner" className="block text-sm font-bold text-stone-800 cursor-pointer">
+                    Hassas Veri Esas Sorumlusu (Lojmanların Esas Sorumlusu)
+                  </label>
+                  <p className="text-xs text-stone-500 mt-1">
+                    Bu kullanıcı, personellerin Telefon ve Doğum Tarihi gibi hassas verilerini istek göndermeksizin doğrudan görebilir ve diğer kullanıcıların bu verileri görme taleplerini onaylayabilir.
+                  </p>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-[#E8E6E1]">

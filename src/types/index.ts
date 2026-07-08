@@ -42,6 +42,7 @@ export interface User {
   phone?: string;
   avatarUrl?: string;
   createdAt?: number;
+  isPrimarySensitiveDataOwner?: boolean;
 }
 
 export interface FeaturePermission {
@@ -123,7 +124,7 @@ export interface ApprovalRequest {
   sourceRoomId?: string; // Eklenen alan
   requestType: 'check_in' | 'room_change' | 'dorm_change' | 'family_placement' | 'cross_dorm_placement';
   requestedBy: string; // Lojman görevlisinin ID/E-posta
-  status: 'Bekliyor' | 'Onaylandı' | 'Reddedildi';
+  status: 'Bekliyor' | 'Onaylandı' | 'Reddedildi' | 'İptal Edildi';
   createdAt: number;
   note: string; // Örn: "A Otelinden X kişisi ile evli, Aile odası talebi."
 }
@@ -163,4 +164,15 @@ export interface SupportTicket {
   createdAt: number;
   updatedAt: number;
   messages: SupportMessage[];
+}
+
+export interface SensitiveDataAccessRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  status: 'Bekliyor' | 'Onaylandı' | 'Reddedildi';
+  createdAt: number;
+  approvedBy?: string;
+  approvedAt?: number;
 }
