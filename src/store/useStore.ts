@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions, SupportTicket, SensitiveDataAccessRequest } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion, deleteField } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion, deleteField, getDoc } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
 
 export interface UiPreferences {
@@ -995,7 +995,79 @@ export const useStore = create<AppState>()(
 
       resolveApprovalRequest: async (id, status) => {
         try {
-          await updateDoc(doc(db, "approvalRequests", id), { status });
+          const state = get();
+          
+          // Fetch the freshest approval request document directly from Firestore
+          const reqRef = doc(db, "approvalRequests", id);
+          const reqSnap = await getDoc(reqRef);
+          if (!reqSnap.exists()) return;
+          const req = { id: reqSnap.id, ...reqSnap.data() } as ApprovalRequest;
+
+          if (status === 'Onaylandı') {
+             // Fetch target staff and room directly from Firestore
+             const staffRef = doc(db, "staff", req.staffId);
+             const staffSnap = await getDoc(staffRef);
+             
+             const roomRef = doc(db, "rooms", req.targetRoomId);
+             const roomSnap = await getDoc(roomRef);
+             
+             if (staffSnap.exists() && roomSnap.exists()) {
+                 const targetStaff = { id: staffSnap.id, ...staffSnap.data() } as Staff;
+                 const reqRoom = { id: roomSnap.id, ...roomSnap.data() } as Room;
+                 
+                 const isRoomChange = !!req.sourceRoomId || targetStaff.status === 'placed';
+                 
+                 if (isRoomChange) {
+                     let oldRoomId = req.sourceRoomId;
+                     if (!oldRoomId) {
+                         const accsQuery = query(
+                             collection(db, "accommodations"),
+                             where("staffId", "==", req.staffId),
+                             where("status", "==", "active")
+                         );
+                         const accsSnap = await getDocs(accsQuery);
+                         if (!accsSnap.empty) {
+                             oldRoomId = accsSnap.docs[0].data().roomId;
+                         }
+                     }
+                     
+                     if (oldRoomId) {
+                         await state.changeStaffRoom(req.staffId, oldRoomId, req.targetRoomId, reqRoom.facilityId);
+                         await state.addLog({
+                             entityId: req.staffId,
+                             entityType: 'staff',
+                             action: 'room_change',
+                             changes: 'İK Onayı ile oda değişikliği tamamlandı.',
+                             performedBy: state.currentUser?.fullName || 'System',
+                             timestamp: Date.now()
+                         });
+                     }
+                 } else {
+                     await state.placeStaff(req.staffId, reqRoom.facilityId, req.targetRoomId, true);
+                     await state.addLog({
+                         entityId: req.staffId,
+                         entityType: 'staff',
+                         action: 'update',
+                         changes: 'İK Onayı ile yerleşti.',
+                         performedBy: state.currentUser?.fullName || 'System',
+                         timestamp: Date.now()
+                     });
+                 }
+             } else {
+                 console.error("resolveApprovalRequest: Staff or Room not found in Firestore", { staffExists: staffSnap.exists(), roomExists: roomSnap.exists() });
+             }
+          } else if (status === 'Reddedildi') {
+             const staffRef = doc(db, "staff", req.staffId);
+             const staffSnap = await getDoc(staffRef);
+             if (staffSnap.exists()) {
+                 const targetStaff = staffSnap.data();
+                 if (targetStaff.status === 'pending_approval') {
+                     await updateDoc(staffRef, { status: 'pending_placement' });
+                 }
+             }
+          }
+
+          await updateDoc(reqRef, { status });
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, `approvalRequests/${id}`);
         }

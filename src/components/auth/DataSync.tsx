@@ -17,7 +17,10 @@ export default function DataSync() {
     setMaintenanceTickets,
     setApprovalRequests,
     setSensitiveDataAccessRequests,
-    refreshTrigger
+    refreshTrigger,
+    staff,
+    approvalRequests,
+    resolveApprovalRequest
   } = useStore();
 
   useEffect(() => {
@@ -256,6 +259,20 @@ export default function DataSync() {
       unsubs.forEach(unsub => unsub());
     };
   }, [currentUser, refreshTrigger]);
+
+  useEffect(() => {
+    if (!staff || staff.length === 0 || !approvalRequests || approvalRequests.length === 0) return;
+
+    // Check for any staff in 'pending_approval' whose corresponding request is already 'Onaylandı'
+    const healingStaff = staff.filter(s => s.status === 'pending_approval');
+    healingStaff.forEach(s => {
+      const approvedReq = approvalRequests.find(r => r.staffId === s.id && r.status === 'Onaylandı');
+      if (approvedReq) {
+        console.log(`Auto-healing placement for staff: ${s.fullName} (${s.id}) via request: ${approvedReq.id}`);
+        resolveApprovalRequest(approvedReq.id, 'Onaylandı').catch(console.error);
+      }
+    });
+  }, [staff, approvalRequests, resolveApprovalRequest]);
 
   return null;
 }

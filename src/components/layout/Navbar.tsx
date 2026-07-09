@@ -117,46 +117,11 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   };
 
   const handleApprove = async (approvalId: string, staffId: string, facilityId: string, roomId: string) => {
-    const req = approvalRequests.find(r => r.id === approvalId);
     await resolveApprovalRequest(approvalId, 'Onaylandı');
-    const targetStaff = staff.find(s => s.id === staffId);
-    
-    if (req?.sourceRoomId || targetStaff?.status === 'placed') {
-      // Oda değişikliği onay akışı
-      const oldRoomId = req?.sourceRoomId || accommodations.find(a => a.staffId === staffId && a.status === 'active')?.roomId;
-      if (oldRoomId) {
-        await changeStaffRoom(staffId, oldRoomId, roomId, facilityId);
-        await addLog({
-          entityId: staffId,
-          entityType: 'staff',
-          action: 'room_change',
-          changes: 'İK Onayı ile oda değişikliği tamamlandı.',
-          performedBy: currentUser?.fullName || 'System',
-          timestamp: Date.now()
-        });
-      }
-    } else {
-      // İlk yerleşim onay akışı
-      if (targetStaff && targetStaff.status !== 'placed' as any) {
-        await placeStaff(staffId, facilityId, roomId, true);
-        await addLog({
-          entityId: staffId,
-          entityType: 'staff',
-          action: 'update',
-          changes: 'İK Onayı ile yerleşti.',
-          performedBy: currentUser?.fullName || 'System',
-          timestamp: Date.now()
-        });
-      }
-    }
   };
 
   const handleReject = async (approvalId: string, staffId: string) => {
     await resolveApprovalRequest(approvalId, 'Reddedildi');
-    const targetStaff = staff.find(s => s.id === staffId);
-    if (targetStaff?.status === 'pending_approval') {
-      await updateStaff(staffId, { status: 'pending_placement' });
-    }
   };
 
   return (
