@@ -830,7 +830,21 @@ export const useStore = create<AppState>()(
       changeStaffRoom: async (staffId, oldRoomId, newRoomId, newFacilityId) => {
          try {
            const state = get();
-           const acc = state.accommodations.find(a => a.staffId === staffId && a.roomId === oldRoomId && a.status === 'active');
+           let acc = state.accommodations.find(a => a.staffId === staffId && a.roomId === oldRoomId && a.status === 'active');
+           
+           if (!acc) {
+              const accsQuery = query(
+                  collection(db, "accommodations"),
+                  where("staffId", "==", staffId),
+                  where("roomId", "==", oldRoomId),
+                  where("status", "==", "active")
+              );
+              const accsSnap = await getDocs(accsQuery);
+              if (!accsSnap.empty) {
+                  acc = { id: accsSnap.docs[0].id, ...accsSnap.docs[0].data() } as any;
+              }
+           }
+           
            if (!acc) throw new Error("Aktif konaklama kaydı bulunamadı.");
 
            const targetRoom = state.rooms.find(r => r.id === newRoomId);
@@ -1015,24 +1029,39 @@ export const useStore = create<AppState>()(
                  const targetStaff = { id: staffSnap.id, ...staffSnap.data() } as Staff;
                  const reqRoom = { id: roomSnap.id, ...roomSnap.data() } as Room;
                  
-                 const isRoomChange = !!req.sourceRoomId || targetStaff.status === 'placed';
-                 
-                 if (isRoomChange) {
-                     let oldRoomId = req.sourceRoomId;
-                     if (!oldRoomId) {
-                         const accsQuery = query(
-                             collection(db, "accommodations"),
-                             where("staffId", "==", req.staffId),
-                             where("status", "==", "active")
-                         );
-                         const accsSnap = await getDocs(accsQuery);
-                         if (!accsSnap.empty) {
-                             oldRoomId = accsSnap.docs[0].data().roomId;
-                         }
+                 // Find any active accommodation for the staff member
+                 let activeAcc = state.accommodations.find(a => a.staffId === req.staffId && a.status === 'active');
+                 if (!activeAcc) {
+                     // Direct check from Firestore to be fully robust
+                     const accsQuery = query(
+                         collection(db, "accommodations"),
+                         where("staffId", "==", req.staffId),
+                         where("status", "==", "active")
+                     );
+                     const accsSnap = await getDocs(accsQuery);
+                     if (!accsSnap.empty) {
+                         activeAcc = { id: accsSnap.docs[0].id, ...accsSnap.docs[0].data() } as any;
                      }
-                     
-                     if (oldRoomId) {
-                         await state.changeStaffRoom(req.staffId, oldRoomId, req.targetRoomId, reqRoom.facilityId);
+                 }
+
+                 if (activeAcc) {
+                     // Staff already has an active accommodation
+                     if (activeAcc.roomId === req.targetRoomId) {
+                         // Already in the target room! Just ensure staff status is placed
+                         if (targetStaff.status !== 'placed') {
+                             await updateDoc(staffRef, { status: 'placed' });
+                         }
+                         await state.addLog({
+                             entityId: req.staffId,
+                             entityType: 'staff',
+                             action: 'update',
+                             changes: 'İK Onayı ile yerleşim doğrulandı (zaten hedef odada).',
+                             performedBy: state.currentUser?.fullName || 'System',
+                             timestamp: Date.now()
+                         });
+                     } else {
+                         // Change room from current active room to target room
+                         await state.changeStaffRoom(req.staffId, activeAcc.roomId, req.targetRoomId, reqRoom.facilityId);
                          await state.addLog({
                              entityId: req.staffId,
                              entityType: 'staff',
@@ -1043,6 +1072,7 @@ export const useStore = create<AppState>()(
                          });
                      }
                  } else {
+                     // No active accommodation, do a new check-in/placement
                      await state.placeStaff(req.staffId, reqRoom.facilityId, req.targetRoomId, true);
                      await state.addLog({
                          entityId: req.staffId,
