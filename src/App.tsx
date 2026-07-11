@@ -6,6 +6,7 @@
 import { HashRouter, Routes, Route } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
+import Reports from "./pages/Reports";
 import FacilityManagement from "./pages/FacilityManagement";
 import RoomManagement from "./pages/RoomManagement";
 import StaffManagement from "./pages/StaffManagement";
@@ -28,6 +29,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="facilities" element={<FacilityManagement />} />
             <Route path="rooms" element={<RoomManagement />} />
             <Route path="rack" element={<RackManagement />} />

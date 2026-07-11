@@ -14,7 +14,8 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  BarChart3
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useStore } from "../../store/useStore";
@@ -134,6 +135,7 @@ export default function Sidebar({ open, setOpen, isCollapsed = false, setIsColla
 
   const navigation = [
     canViewPage(currentUser?.role, PAGE_KEYS.dashboard, rolesPermissions) && { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    canViewPage(currentUser?.role, PAGE_KEYS.reports, rolesPermissions) && { name: "Raporlama", href: "/reports", icon: BarChart3 },
     canViewPage(currentUser?.role, PAGE_KEYS.facilities, rolesPermissions) && { name: "Tesis Yönetimi", href: "/facilities", icon: Building2 },
     canViewPage(currentUser?.role, PAGE_KEYS.rooms, rolesPermissions) && { name: "Oda Yönetimi", href: "/rooms", icon: BedDouble },
     canViewPage(currentUser?.role, PAGE_KEYS.rack, rolesPermissions) && { name: "Oda Doluluk", href: "/rack", icon: LayoutGrid },

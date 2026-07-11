@@ -66,6 +66,13 @@ export const PERMISSIONS_MATRIX: PagePermission[] = [
     pageKey: 'feedback',
     pageName: 'Destek & Geribildirim',
     features: []
+  },
+  {
+    pageKey: 'reports',
+    pageName: 'Raporlama ve Analiz',
+    features: [
+      { key: 'export_excel', name: 'Excel İndir', description: 'Raporlama sayfasındaki verileri Excel formatında dışa aktarabilir.' }
+    ]
   }
 ];
 
@@ -78,6 +85,7 @@ export const PAGE_KEYS = {
   maintenance: 'maintenance',
   settings: 'settings',
   feedback: 'feedback',
+  reports: 'reports',
 } as const;
 
 export function canViewPage(userRole: Role | undefined, pageKey: string, rolesPermissions: RolePermissions[]): boolean {

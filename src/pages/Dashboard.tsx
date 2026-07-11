@@ -1,257 +1,123 @@
 import React, { useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { 
   Building2, 
   Users, 
   BedDouble, 
   Activity,
   UserPlus,
-  PieChart as PieChartIcon,
-  BarChart3,
-  ListVideo,
-  DoorOpen,
-  LogOut,
   Building,
-  ShieldAlert
+  ShieldAlert,
+  Wrench
 } from "lucide-react";
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
-} from "recharts";
+
 import { useStore } from "../store/useStore";
 import { usePageRefresh } from "../hooks/usePageRefresh";
 import { canViewPage, can, PAGE_KEYS } from "../lib/permissions";
-import { cn } from "../lib/utils";
 import { PageHeader } from "../components/layout/PageHeader";
 
-const COLORS = ['#7C8363', '#2D332D', '#D9D3C1', '#C6CDB0', '#A4A895', '#F5F5F0'];
-const GENDER_COLORS = { male: '#7C8363', female: '#D9D3C1' };
-
-// --- Modular Card Components ---
-function Card({ className = "", children }: { className?: string, children: React.ReactNode }) {
-  return <div className={cn("card-standard flex flex-col", className)}>{children}</div>;
-}
-
-function CardHeader({ className = "", children }: { className?: string, children: React.ReactNode }) {
-  return <div className={cn("p-6 pb-4 flex flex-col gap-1", className)}>{children}</div>;
-}
-
-function CardTitle({ className = "", children, icon: Icon }: { className?: string, children: React.ReactNode, icon?: any }) {
-  return (
-    <div className="flex items-center justify-between mb-1">
-      <h3 className={cn("font-semibold text-stone-700", className)}>{children}</h3>
-      {Icon && <Icon className={cn("w-5 h-5 text-stone-400", className)} />}
-    </div>
-  );
-}
-
-function CardContent({ className = "", children }: { className?: string, children: React.ReactNode }) {
-  return <div className={cn("p-6 pt-0 flex-1", className)}>{children}</div>;
-}
-// -------------------------------
+// Modular sub-components
+import CapacitySection from "../components/dashboard/CapacitySection";
+import MatrixSection from "../components/dashboard/MatrixSection";
+import MaintenanceSection from "../components/dashboard/MaintenanceSection";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const refreshAction = usePageRefresh();
+
+  // Store lists
   const facilities = useStore(state => state.facilities);
   const rooms = useStore(state => state.rooms);
   const accommodations = useStore(state => state.accommodations);
   const staff = useStore(state => state.staff);
   const hotels = useStore(state => state.hotels);
+  const maintenanceTickets = useStore(state => state.maintenanceTickets);
   const currentUser = useStore(state => state.currentUser);
 
-  const authorizedFacilities = useMemo(() => {
-    if (!currentUser) return [];
-    if (currentUser.role === 'facility_manager') {
-      const facIds = currentUser.assignedFacilityIds?.length ? currentUser.assignedFacilityIds : (currentUser.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
-      return facilities.filter(f => facIds.includes(f.id));
-    }
-    if (currentUser.role === 'hotel_hr_manager') {
-      const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
-      return facilities.filter(f => f.allowedHotelIds?.some(id => hotelIds.includes(id)) || (f as any).hotelId && hotelIds.includes((f as any).hotelId));
-    }
-    return facilities;
-  }, [facilities, currentUser]);
+  // --- Dynamic Security Guards & RBAC Filtering (Stage 1) ---
+  const hasFullAccess = useMemo(() => {
+    return ['super_admin', 'hr_director'].includes(currentUser?.role || '');
+  }, [currentUser]);
 
-  const authorizedFacilityIds = authorizedFacilities.map(f => f.id);
+  const directDormIds = useMemo(() => {
+    if (hasFullAccess) return facilities.map(f => f.id);
+    return currentUser?.assignedFacilityIds || (currentUser?.assignedFacilityId ? [currentUser.assignedFacilityId] : []);
+  }, [hasFullAccess, facilities, currentUser]);
 
-  const {
-    activeRoomsCount,
-    totalCapacity,
-    activeStaffCount,
-    occupancyRate,
-    emptyBeds,
-    stajyerCount,
-    yabanciCount,
-    categoryData,
-    genderData,
-    hotelDistributionData,
-    facilityOccupancyList,
-    departmentDistributionList,
-    departedStaffCount,
-    departedStaffByDepartment,
-    vacantRoomCount,
-    dedicatedRoomCount,
-    sharedRoomCount,
-    hotelRoomDistribution,
-    matrixHotels,
-    facilityHotelMatrix,
-    hotelTotals
-  } = useMemo(() => {
-    // 1. Capacity
-    const activeRooms = rooms.filter(r => r.status === 'active' && authorizedFacilityIds.includes(r.facilityId));
-    const totalCapacity = activeRooms.reduce((sum, room) => sum + room.bedCount, 0);
+  const userHotelIds = useMemo(() => {
+    return currentUser?.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser?.assignedHotelId ? [currentUser.assignedHotelId] : []);
+  }, [currentUser]);
 
-    // 2. Active Staff via Accommodations
-    const activeAccs = accommodations.filter(a => a.status === 'active' && authorizedFacilityIds.includes(a.facilityId));
-    const activeStaffIds = new Set(activeAccs.map(a => a.staffId));
-    const activeStaff = staff.filter(s => s.status === 'placed' && activeStaffIds.has(s.id));
-    
-    const activeStaffCount = activeStaff.length;
+  const staffRoomIds = useMemo(() => {
+    if (!currentUser) return new Set<string>();
+    const activeStaffIds = new Set(
+      staff.filter(s => ['placed', 'pending_checkout'].includes(s.status) && (hasFullAccess || userHotelIds.includes(s.hotelId))).map(s => s.id)
+    );
+    const roomIds = accommodations
+      .filter(acc => acc.status === 'active' && activeStaffIds.has(acc.staffId))
+      .map(acc => acc.roomId);
+    return new Set(roomIds);
+  }, [currentUser, staff, accommodations, hasFullAccess, userHotelIds]);
 
-    // 3. Occupancy Rate & Empty Beds
-    const occupancyRate = totalCapacity > 0 ? (activeStaffCount / totalCapacity) * 100 : 0;
-    const emptyBeds = Math.max(0, totalCapacity - activeStaffCount);
+  const staffDormIds = useMemo(() => {
+    return new Set(
+      rooms.filter(r => staffRoomIds.has(r.id)).map(r => r.facilityId)
+    );
+  }, [rooms, staffRoomIds]);
 
-    // Stajyer and Foreigner counts
-    const stajyerCount = activeStaff.filter(s => s.category === 'Stajyer').length;
-    const yabanciCount = activeStaff.filter(s => s.isForeigner).length;
+  // Maximum boundary of allowed facilities for the user
+  const availableFacilities = useMemo(() => {
+    if (hasFullAccess) return facilities;
+    const result = new Set<string>(directDormIds);
+    staffDormIds.forEach(id => result.add(id));
+    const allowedSet = Array.from(result);
+    return facilities.filter(f => allowedSet.includes(f.id));
+  }, [hasFullAccess, facilities, directDormIds, staffDormIds]);
 
-    // Category Distribution (Pie Chart)
-    const categoryCounts: Record<string, number> = {};
-    activeStaff.forEach(s => {
-      const cat = s.category || 'Personel';
-      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
-    });
-    const categoryData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
+  // Maximum boundary of allowed hotels for the user
+  const availableHotels = useMemo(() => {
+    if (hasFullAccess) return hotels;
+    return hotels.filter(h => userHotelIds.includes(h.id));
+  }, [hasFullAccess, hotels, userHotelIds]);
 
-    // Gender Distribution (Pie Chart)
-    const males = activeStaff.filter(s => s.gender === 'male').length;
-    const females = activeStaff.filter(s => s.gender === 'female').length;
-    const genderData = [
-      { name: 'Erkek', value: males },
-      { name: 'Kadın', value: females }
-    ].filter(d => d.value > 0);
+  // Dynamically allowed facility/dorm IDs (scoped by permission, no selection)
+  const allowedDormIds = useMemo(() => {
+    return availableFacilities.map(f => f.id);
+  }, [availableFacilities]);
 
-    // Otele Göre Konaklama (Bar Chart)
-    const hotelCounts: Record<string, number> = {};
-    activeStaff.forEach(s => {
-      const hotel = hotels.find(h => h.id === s.hotelId);
-      const hName = hotel?.branchCode || hotel?.name || 'Bilinmeyen';
-      hotelCounts[hName] = (hotelCounts[hName] || 0) + 1;
-    });
-    const hotelDistributionData = Object.entries(hotelCounts).map(([name, count]) => ({
-      name,
-      Kişi: count
-    }));
-
-    // Facility-based Occupancy (Progress bar list)
-    const facilityOccupancyList = authorizedFacilities.map(fac => {
-      const facRooms = activeRooms.filter(r => r.facilityId === fac.id);
-      const cap = facRooms.reduce((sum, r) => sum + r.bedCount, 0);
-      const occ = activeAccs.filter(a => a.facilityId === fac.id).length;
-      return {
-        id: fac.id,
-        name: fac.name,
-        capacity: cap,
-        occupied: occ,
-        rate: cap > 0 ? (occ / cap) * 100 : 0
-      };
-    }).sort((a, b) => b.rate - a.rate);
-
-    // Department Distribution (List)
-    const deptCounts: Record<string, number> = {};
-    activeStaff.forEach(s => {
-      const dept = s.department || 'Bilinmeyen';
-      deptCounts[dept] = (deptCounts[dept] || 0) + 1;
-    });
-    const departmentDistributionList = Object.entries(deptCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-
-    // Departed Staff
-    let departedStaffIdSet: Set<string>;
-    if (currentUser?.role === 'hotel_hr_manager') {
-       const hotelIds = currentUser.assignedHotelIds?.length ? currentUser.assignedHotelIds : (currentUser.assignedHotelId ? [currentUser.assignedHotelId] : []);
-       const leftStaff = staff.filter(s => s.status === 'left' && hotelIds.includes(s.hotelId));
-       departedStaffIdSet = new Set(leftStaff.map(s => s.id));
-    } else if (currentUser?.role === 'facility_manager') {
-       const pastAccs = accommodations.filter(a => a.status === 'checked_out' && authorizedFacilityIds.includes(a.facilityId));
-       departedStaffIdSet = new Set(pastAccs.map(a => a.staffId));
-    } else {
-       departedStaffIdSet = new Set(staff.filter(s => s.status === 'left').map(s => s.id));
-    }
-    
-    const departedStaff = staff.filter(s => departedStaffIdSet.has(s.id));
-    const departedStaffCount = departedStaff.length;
-
-    const departedDeptCounts: Record<string, number> = {};
-    departedStaff.forEach(s => {
-      const dept = s.department || 'Bilinmeyen';
-      departedDeptCounts[dept] = (departedDeptCounts[dept] || 0) + 1;
-    });
-    const departedStaffByDepartment = Object.entries(departedDeptCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5); // top 5
-
-    // --- Room Analytics ---
-    let vacantRoomCount = 0;
-    let dedicatedRoomCount = 0;
-    let sharedRoomCount = 0;
-
-    const hotelRoomStats = hotels.reduce((acc, hotel) => {
-      acc[hotel.id] = { hotel, dedicatedRooms: 0, sharedRooms: 0, sharedDetails: [] };
-      return acc;
-    }, {} as Record<string, any>);
-
-    activeRooms.forEach(room => {
-      // Find active staff in this room
-      const roomAccs = activeAccs.filter(a => a.roomId === room.id);
-      const roomStaffIds = new Set(roomAccs.map(a => a.staffId));
-      const rStaff = staff.filter(s => s.status === 'placed' && roomStaffIds.has(s.id));
-
-      const uniqueHotelIds = Array.from(new Set(rStaff.map(s => s.hotelId).filter(Boolean)));
-
-      if (uniqueHotelIds.length === 0) {
-        vacantRoomCount++;
-      } else if (uniqueHotelIds.length === 1) {
-        dedicatedRoomCount++;
-        const hid = uniqueHotelIds[0];
-        if (hotelRoomStats[hid]) hotelRoomStats[hid].dedicatedRooms++;
-      } else {
-        sharedRoomCount++;
-        uniqueHotelIds.forEach(hid => {
-          if (hotelRoomStats[hid]) {
-            hotelRoomStats[hid].sharedRooms++;
-            hotelRoomStats[hid].sharedDetails.push({
-              roomName: room.roomNumber,
-              sharedWith: uniqueHotelIds.filter(id => id !== hid).map(id => hotels.find(h => h.id === id)?.name || id).join(', ')
-            });
-          }
-        });
+  // Dynamically allowed staff (scoped by permission, no selection)
+  const allowedStaff = useMemo(() => {
+    let baseStaff = staff;
+    if (!hasFullAccess) {
+      if (currentUser?.role === 'hotel_hr_manager') {
+        baseStaff = staff.filter(s => userHotelIds.includes(s.hotelId));
+      } else if (currentUser?.role === 'facility_manager') {
+        const allowedDormSet = new Set(availableFacilities.map(f => f.id));
+        const staffWithAcc = new Set(accommodations.filter(a => allowedDormSet.has(a.facilityId)).map(a => a.staffId));
+        baseStaff = staff.filter(s => staffWithAcc.has(s.id));
       }
-    });
+    }
+    return baseStaff;
+  }, [staff, hasFullAccess, currentUser, userHotelIds, availableFacilities, accommodations]);
 
-    const hotelRoomDistribution = Object.values(hotelRoomStats).map((stat: any) => ({
-      name: stat.hotel.branchCode || stat.hotel.name,
-      'Kendine Ait': stat.dedicatedRooms,
-      'Ortak Kullandığı': stat.sharedRooms,
-      totalRooms: stat.dedicatedRooms + stat.sharedRooms,
-      sharedDetails: stat.sharedDetails
-    })).filter((d: any) => d.totalRooms > 0);
+  // --- Dynamic Matrix and Shared Rooms Data (Stage 3) ---
+  const { matrixHotels, facilityHotelMatrix, hotelTotals, sharedRoomPairsList } = useMemo(() => {
+    const activeRooms = rooms.filter(r => allowedDormIds.includes(r.facilityId) && r.status === 'active');
+    const activeAccs = accommodations.filter(a => a.status === 'active' && allowedDormIds.includes(a.facilityId));
+    const activeStaffIds = new Set(activeAccs.map(a => a.staffId));
+    
+    const activeStaff = staff.filter(s => s.status === 'placed' && activeStaffIds.has(s.id) && allowedStaff.some(as => as.id === s.id));
+    const activeStaffSet = new Set(activeStaff.map(s => s.id));
+    const activeAccsFiltered = activeAccs.filter(a => activeStaffSet.has(a.staffId));
 
-    const matrixHotels = hotels.filter(h => activeAccs.some(a => {
-      const s = activeStaff.find(st => st.id === a.staffId);
-      return s && s.hotelId === h.id;
-    }));
+    const matrixHotels = hotels.filter(h => activeStaff.some(s => s.hotelId === h.id));
 
-    const facilityHotelMatrix = authorizedFacilities.map(fac => {
+    const facilityHotelMatrix = facilities.filter(f => allowedDormIds.includes(f.id)).map(fac => {
       const rowStats: Record<string, number> = {};
       matrixHotels.forEach(h => { rowStats[h.id] = 0; });
       let rowTotal = 0;
       
-      const facAccs = activeAccs.filter(a => a.facilityId === fac.id);
+      const facAccs = activeAccsFiltered.filter(a => a.facilityId === fac.id);
       facAccs.forEach(a => {
         const s = activeStaff.find(st => st.id === a.staffId);
         if (s && s.hotelId && rowStats[s.hotelId] !== undefined) {
@@ -264,55 +130,95 @@ export default function Dashboard() {
         stats: rowStats,
         total: rowTotal
       };
-    }).filter(row => row.total > 0 || true);
+    }).filter(row => row.total > 0);
 
     const hotelTotals: Record<string, number> = {};
     matrixHotels.forEach(h => {
       hotelTotals[h.id] = facilityHotelMatrix.reduce((sum, row) => sum + (row.stats[h.id] || 0), 0);
     });
 
+    // Shared Room Pairs
+    const sharedRoomPairs: Record<string, { 
+      name: string; 
+      count: number; 
+      roomNames: string[];
+      details: {
+        roomId: string;
+        roomNumber: string;
+        facilityId: string;
+        facilityName: string;
+        occupants: {
+          staffId: string;
+          name: string;
+          hotelId: string;
+          hotelName: string;
+          department: string;
+        }[];
+      }[];
+    }> = {};
+    
+    activeRooms.forEach(room => {
+      const roomAccs = activeAccsFiltered.filter(a => a.roomId === room.id);
+      const rStaff = activeStaff.filter(s => roomAccs.some(a => a.staffId === s.id));
+      const uniqueHotelIds = Array.from(new Set(rStaff.map(s => s.hotelId).filter(Boolean)));
+      
+      if (uniqueHotelIds.length > 1) {
+        const facName = facilities.find(f => f.id === room.facilityId)?.name || 'Bilinmeyen Lojman';
+        
+        const occupantsDetail = roomAccs.map(acc => {
+          const s = activeStaff.find(st => st.id === acc.staffId);
+          const hotelObj = hotels.find(h => h.id === s?.hotelId);
+          const hotelName = hotelObj?.branchCode || hotelObj?.name || 'Bilinmeyen Otel';
+          return {
+            staffId: acc.staffId,
+            name: s ? s.fullName : 'Bilinmeyen Personel',
+            hotelId: s?.hotelId || '',
+            hotelName,
+            department: s?.department || 'Tanımsız'
+          };
+        });
+
+        for (let i = 0; i < uniqueHotelIds.length; i++) {
+          for (let j = i + 1; j < uniqueHotelIds.length; j++) {
+            const h1 = uniqueHotelIds[i];
+            const h2 = uniqueHotelIds[j];
+            const h1Name = hotels.find(h => h.id === h1)?.branchCode || hotels.find(h => h.id === h1)?.name || h1;
+            const h2Name = hotels.find(h => h.id === h2)?.branchCode || hotels.find(h => h.id === h2)?.name || h2;
+            const pairName = [h1Name, h2Name].sort().join(' & ');
+            
+            if (!sharedRoomPairs[pairName]) {
+              sharedRoomPairs[pairName] = {
+                name: pairName,
+                count: 0,
+                roomNames: [],
+                details: []
+              };
+            }
+            sharedRoomPairs[pairName].count++;
+            sharedRoomPairs[pairName].roomNames.push(room.roomNumber);
+            sharedRoomPairs[pairName].details.push({
+              roomId: room.id,
+              roomNumber: room.roomNumber,
+              facilityId: room.facilityId,
+              facilityName: facName,
+              occupants: occupantsDetail
+            });
+          }
+        }
+      }
+    });
+
+    const sharedRoomPairsList = Object.values(sharedRoomPairs).sort((a, b) => b.count - a.count);
+
     return {
-      activeRoomsCount: activeRooms.length,
-      totalCapacity,
-      activeStaffCount,
-      occupancyRate,
-      emptyBeds,
-      stajyerCount,
-      yabanciCount,
-      categoryData,
-      genderData,
-      hotelDistributionData,
-      facilityOccupancyList,
-      departmentDistributionList,
-      departedStaffCount,
-      departedStaffByDepartment,
-      vacantRoomCount,
-      dedicatedRoomCount,
-      sharedRoomCount,
-      hotelRoomDistribution,
       matrixHotels,
       facilityHotelMatrix,
-      hotelTotals
+      hotelTotals,
+      sharedRoomPairsList
     };
+  }, [rooms, accommodations, staff, allowedStaff, hotels, facilities, allowedDormIds]);
 
-  }, [rooms, accommodations, authorizedFacilityIds, staff, authorizedFacilities, hotels, currentUser]);
-
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 border border-[#E8E6E1] shadow-lg rounded-xl">
-          <p className="font-bold text-[#2D332D] mb-1">{label}</p>
-          <p className="text-sm text-stone-600">
-            {payload[0].name === "Kişi" ? "Kişi Sayısı:" : "Değer:"} <span className="font-bold">{payload[0].value}</span>
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Security check
+  // RBAC Security Gate Check
   if (!canViewPage(currentUser?.role, PAGE_KEYS.dashboard, useStore.getState().rolesPermissions)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-stone-500">
@@ -324,13 +230,11 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="w-full flex flex-col p-6 space-y-6">
-      
+    <div className="w-full flex flex-col p-6 space-y-8">
+      {/* Page Header */}
       <PageHeader 
-        title="Raporlama Merkezi"
-        description={currentUser?.role === 'facility_manager' 
-          ? 'Sorumlu olduğunuz lojmanların detaylı analizleri.' 
-          : 'Zincir genelindeki konaklama istatistikleri ve analizler.'}
+        title="Anlık Durum & Özet Dashboard"
+        description="Lojmanlarınızın anlık doluluk oranları, kapasite durumları ve teknik arızaların gerçek zamanlı özeti."
         actions={[
           refreshAction,
           ...(can(currentUser?.role, 'create_staff', PAGE_KEYS.staff, useStore.getState().rolesPermissions) ? [{
@@ -349,488 +253,93 @@ export default function Dashboard() {
         ]}
       />
 
-      {/* 1. KPI Cards (Grid) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-6">
-        <Card className="bg-[#2D332D] text-white border-transparent col-span-1 md:col-span-1 xl:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-stone-300" icon={Building2}>Toplam Kapasite</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-serif font-bold">{totalCapacity}</div>
-            <p className="text-xs text-stone-400 mt-2 font-medium">aktif odalardaki yatak</p>
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
-          <CardHeader>
-            <CardTitle icon={Users}>Aktif Personel</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-serif font-bold text-[#2D332D]">{activeStaffCount}</div>
-            <p className="text-xs text-[#7C8363] mt-2 font-bold bg-[#F5F2ED] w-fit px-2 py-1 rounded-md">
-              Şu an lojmanda kalanlar
+      {/* Kapsam ve Bilgilendirme Alanı */}
+      <div className="bg-[#FAF9F6] border border-stone-200/60 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-[#7C8363]/10 text-[#7C8363] rounded-xl shrink-0">
+            <Building className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-base text-[#2D332D]">Aktif Veri Kapsamı</h3>
+            <p className="text-xs text-stone-500">
+              {currentUser?.role === 'super_admin' && "Süper Yönetici yetkisiyle tüm tesis ve otel verileri otomatik olarak listelenmektedir."}
+              {currentUser?.role === 'hr_director' && "İK Direktörü yetkisiyle tüm tesis ve otel verileri otomatik olarak listelenmektedir."}
+              {currentUser?.role === 'hotel_hr_manager' && "Sadece bağlı olduğunuz otel ve bu otel personelinin konakladığı lojmanların verileri listelenmektedir."}
+              {currentUser?.role === 'facility_manager' && "Sadece yönetmekle görevli olduğunuz lojmanların ve bu lojmanlardaki personellerin verileri listelenmektedir."}
+              {!['super_admin', 'hr_director', 'hotel_hr_manager', 'facility_manager'].includes(currentUser?.role || '') && "Rolünüz kapsamındaki sınırlandırılmış veriler otomatik olarak listelenmektedir."}
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
-          <CardHeader>
-            <CardTitle icon={Activity}>Doluluk</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-serif font-bold text-[#2D332D]">{occupancyRate.toFixed(1)}%</div>
-            <div className="mt-4 w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-              <div 
-                className={cn("h-full rounded-full transition-all duration-500", occupancyRate > 90 ? 'bg-orange-500' : 'bg-[#7C8363]')} 
-                style={{ width: `${Math.min(100, occupancyRate)}%` }}
-              />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="px-3.5 py-1.5 bg-stone-100 border border-stone-200 text-stone-700 rounded-xl text-xs font-semibold">
+            <span className="text-stone-400 mr-1.5">Rol:</span>
+            {currentUser?.role === 'super_admin' && "Süper Admin"}
+            {currentUser?.role === 'hr_director' && "İK Direktörü"}
+            {currentUser?.role === 'hotel_hr_manager' && "Otel İK Müdürü"}
+            {currentUser?.role === 'facility_manager' && "Lojman Sorumlusu"}
+            {!['super_admin', 'hr_director', 'hotel_hr_manager', 'facility_manager'].includes(currentUser?.role || '') && (currentUser?.role || 'Bilinmeyen')}
+          </div>
+
+          {availableHotels.length > 0 && (
+            <div className="px-3.5 py-1.5 bg-stone-100 border border-stone-200 text-stone-700 rounded-xl text-xs font-semibold">
+              <span className="text-stone-400 mr-1.5">Otel:</span>
+              {hasFullAccess ? "Tüm Oteller" : availableHotels.map(h => h.branchCode || h.name).join(', ')}
             </div>
-          </CardContent>
-        </Card>
+          )}
 
-        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
-          <CardHeader>
-            <CardTitle icon={BedDouble}>Boş Yatak</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-serif font-bold text-[#2D332D]">{emptyBeds}</div>
-            <p className="text-xs text-stone-500 mt-2 font-medium">atanmaya uygun</p>
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
-          <CardHeader>
-            <CardTitle icon={Users}>Toplam Stajyer</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-serif font-bold text-orange-600">{stajyerCount}</div>
-            <p className="text-xs text-stone-500 mt-2 font-medium">aktif stajyer sayısı</p>
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-1 md:col-span-1 xl:col-span-1">
-          <CardHeader>
-            <CardTitle icon={UserPlus}>Yabancı Çalışan</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-serif font-bold text-indigo-600">{yabanciCount}</div>
-            <p className="text-xs text-stone-500 mt-2 font-medium">yabancı uyruklu sayısı</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 2. Oda Bazlı Kapasite ve Tahsis Analizi */}
-      <h3 className="text-xl font-serif font-bold text-[#2D332D] mt-8 mb-4 border-b border-stone-200 pb-2 flex items-center gap-2">
-        <BedDouble className="w-5 h-5 text-stone-400" />
-        Oda Bazlı Kapasite ve Tahsis Analizi
-      </h3>
-      
-      {/* A. Genel Konsolide Durum (4'lü Küçük Metrik Grid) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-5 flex flex-col justify-center">
-            <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Toplam Tanımlı</p>
-            <div className="text-3xl font-serif font-bold text-[#2D332D] mt-1">{activeRoomsCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 flex flex-col justify-center">
-            <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Yalnızca Tek Otele Ait</p>
-            <div className="text-3xl font-serif font-bold text-[#7C8363] mt-1">{dedicatedRoomCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 flex flex-col justify-center relative overflow-visible">
-            <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Ortak Kullanılan</p>
-            <div className="text-3xl font-serif font-bold text-amber-600 mt-1">{sharedRoomCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 flex flex-col justify-center">
-            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">Hiç Kullanılmayan (Boş)</p>
-            <div className="text-3xl font-serif font-bold text-stone-400 mt-1">{vacantRoomCount} <span className="text-sm font-medium text-stone-400">Oda</span></div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* B. Otel Kırılımlı Oda Dağılım Tablosu & Stacked Bar Graph */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-2">
-        <Card>
-          <CardHeader>
-            <CardTitle icon={BarChart3}>Otel Oda Paylaşım Dağılımı</CardTitle>
-            <p className="text-sm text-stone-500">Hangi otel kaç oda kullanıyor ve ne kadarını paylaşıyor?</p>
-          </CardHeader>
-          <CardContent className="min-h-[300px]">
-             {hotelRoomDistribution.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={hotelRoomDistribution} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8E6E1" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#78716C', fontSize: 12, fontWeight: 500 }}
-                      dy={10}
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#78716C', fontSize: 12 }}
-                      allowDecimals={false}
-                    />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F5F5F4' }} />
-                    <Legend verticalAlign="top" height={36} iconType="circle" />
-                    <Bar dataKey="Kendine Ait" stackId="a" fill="#7C8363" radius={[0, 0, 4, 4]} maxBarSize={50} />
-                    <Bar dataKey="Ortak Kullandığı" stackId="a" fill="#D9D3C1" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                  </BarChart>
-                </ResponsiveContainer>
-             ) : (
-                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
-                  <BedDouble className="w-8 h-8 opacity-20" />
-                  <p className="text-sm font-medium">Veri bulunamadı</p>
-                </div>
-             )}
-          </CardContent>
-        </Card>
-
-        {/* Tablo */}
-        <Card>
-          <CardHeader>
-            <CardTitle icon={ListVideo}>Otel Kırılımlı Oda Dağılımı</CardTitle>
-            <p className="text-sm text-stone-500">Otel bazlı kullanım istisnaları (Shared Room Details)</p>
-          </CardHeader>
-          <CardContent className="overflow-visible">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead>
-                <tr className="border-b border-stone-200 text-stone-500 font-semibold mb-2">
-                  <th className="pb-3 pt-2 pl-2">Otel Adı</th>
-                  <th className="pb-3 pt-2 text-center">Tek Başına</th>
-                  <th className="pb-3 pt-2 text-center">Ortak</th>
-                  <th className="pb-3 pt-2 text-center pr-2">Toplam Temas</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {hotelRoomDistribution.map((hotel, idx) => (
-                  <tr key={idx} className="hover:bg-stone-50 transition-colors">
-                    <td className="py-3 pl-2 font-semibold text-[#2D332D]">{hotel.name}</td>
-                    <td className="py-3 text-center text-stone-600 font-mono">{hotel['Kendine Ait']}</td>
-                    <td className="py-3 text-center text-stone-600 font-mono relative group hover:z-50">
-                      <span className="border-b border-dashed border-stone-400 cursor-help font-bold text-amber-600">
-                        {hotel['Ortak Kullandığı']}
-                      </span>
-                      {hotel['Ortak Kullandığı'] > 0 && (
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 bg-[#2D332D] text-white text-xs p-3 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-[60] min-w-[220px] whitespace-normal text-left">
-                          <p className="font-bold mb-1.5 border-b border-stone-600 pb-1.5 text-amber-400">Ortak Kullanılan Odalar:</p>
-                          <ul className="list-disc pl-4 space-y-1 text-stone-300">
-                            {hotel.sharedDetails.map((sd: any, i: number) => (
-                              <li key={i}><span className="font-bold text-white max-w-[80px] truncate inline-block align-bottom">{sd.roomName}</span>: {sd.sharedWith} ile</li>
-                            ))}
-                          </ul>
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-[#2D332D] rotate-45"></div>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 text-center font-bold text-[#7C8363] font-mono pr-2">{hotel.totalRooms}</td>
-                  </tr>
-                ))}
-                {hotelRoomDistribution.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-stone-400">Oda kullanımı bulunmuyor.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Lojman - Otel Konaklama Matrisi */}
-      <h3 className="text-xl font-serif font-bold text-[#2D332D] mt-8 mb-4 border-b border-stone-200 pb-2 flex items-center gap-2">
-        <Building2 className="w-5 h-5 text-stone-400" />
-        Lojman - Otel Konaklama Matrisi
-      </h3>
-      <Card className="overflow-hidden border border-stone-200">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead>
-              <tr className="bg-[#F8F7F5] border-b border-stone-200 text-stone-600 font-bold">
-                <th className="px-4 py-3 sticky left-0 bg-[#F8F7F5] z-10 border-r border-stone-200 shadow-[1px_0_0_0_#E8E6E1]">Lojman Adı</th>
-                {matrixHotels.map((h: any) => (
-                  <th key={h.id} className="px-4 py-3 text-center" title={h.name}>
-                    {h.branchCode || h.name.substring(0, 5)}
-                  </th>
-                ))}
-                <th className="px-4 py-3 text-center bg-stone-100 font-bold border-l border-stone-200 text-[#2D332D]">Toplam</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {facilityHotelMatrix.map((row: any) => (
-                <tr key={row.facility.id} className="hover:bg-stone-50 transition-colors">
-                  <td className="px-4 py-3 font-semibold text-[#2D332D] sticky left-0 bg-white group-hover:bg-stone-50 z-10 border-r border-stone-200 shadow-[1px_0_0_0_#E8E6E1]">
-                    {row.facility.name}
-                  </td>
-                  {matrixHotels.map((h: any) => (
-                    <td key={h.id} className="px-4 py-3 text-center font-mono text-stone-600">
-                      {row.stats[h.id] > 0 ? (
-                        <span className="bg-[#F5F2ED] text-[#7C8363] px-2 py-0.5 rounded-md font-bold">{row.stats[h.id]}</span>
-                      ) : (
-                        <span className="text-stone-300">-</span>
-                      )}
-                    </td>
-                  ))}
-                  <td className="px-4 py-3 text-center font-mono font-bold text-[#2D332D] bg-stone-50 border-l border-stone-200">
-                    {row.total}
-                  </td>
-                </tr>
-              ))}
-              {/* Footer row for totals */}
-              <tr className="bg-[#F8F7F5] border-t-2 border-stone-200 font-bold">
-                <td className="px-4 py-3 text-right text-stone-700 sticky left-0 bg-[#F8F7F5] z-10 border-r border-stone-200 shadow-[1px_0_0_0_#E8E6E1]">
-                  Genel Toplam:
-                </td>
-                {matrixHotels.map((h: any) => (
-                  <td key={h.id} className="px-4 py-3 text-center font-mono text-[#7C8363]">
-                    {hotelTotals[h.id]}
-                  </td>
-                ))}
-                <td className="px-4 py-3 text-center font-mono text-[#2D332D] bg-stone-100 border-l border-stone-200">
-                  {activeStaffCount}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          {availableFacilities.length > 0 && (
+            <div className="px-3.5 py-1.5 bg-[#7C8363]/5 border border-[#7C8363]/15 text-[#3B422B] rounded-xl text-xs font-semibold">
+              <span className="text-[#7C8363] mr-1.5">Lojman:</span>
+              {hasFullAccess ? "Tüm Lojmanlar" : availableFacilities.map(f => f.name).join(', ')}
+            </div>
+          )}
         </div>
-      </Card>
-
-      {/* 4. Distribution Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle icon={PieChartIcon}>Kategori Dağılımı</CardTitle>
-            <p className="text-sm text-stone-500">Personel statüsü dağılımı</p>
-          </CardHeader>
-          <CardContent className="min-h-[280px] relative">
-             {categoryData.length > 0 ? (
-                <>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={categoryData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={70}
-                        outerRadius={90}
-                        paddingAngle={4}
-                        dataKey="value"
-                        stroke="none"
-                      >
-                        {categoryData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: '1px solid #E8E6E1', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        itemStyle={{ color: '#2D332D', fontWeight: 600 }}
-                      />
-                      <Legend 
-                        verticalAlign="bottom" 
-                        height={36} 
-                        iconType="circle"
-                        formatter={(value) => <span className="text-stone-600 font-semibold ml-1">{value}</span>}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8 text-[#2D332D]">
-                    <span className="text-3xl font-serif font-bold">{activeStaffCount}</span>
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-stone-400">Kişi</span>
-                  </div>
-                </>
-             ) : (
-                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
-                  <Users className="w-8 h-8 opacity-20" />
-                  <p className="text-sm font-medium">Veri bulunamadı</p>
-                </div>
-             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle icon={PieChartIcon}>Cinsiyet Dağılımı</CardTitle>
-            <p className="text-sm text-stone-500">Aktif konaklayan personelin demografisi</p>
-          </CardHeader>
-          <CardContent className="min-h-[280px] relative">
-             {genderData.length > 0 ? (
-                <>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={genderData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={70}
-                        outerRadius={90}
-                        paddingAngle={4}
-                        dataKey="value"
-                        stroke="none"
-                      >
-                        {genderData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.name === 'Erkek' ? GENDER_COLORS.male : GENDER_COLORS.female} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: '1px solid #E8E6E1', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        itemStyle={{ color: '#2D332D', fontWeight: 600 }}
-                      />
-                      <Legend 
-                        verticalAlign="bottom" 
-                        height={36} 
-                        iconType="circle"
-                        formatter={(value) => <span className="text-stone-600 font-semibold ml-1">{value}</span>}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8 text-[#2D332D]">
-                    <span className="text-3xl font-serif font-bold">{activeStaffCount}</span>
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-stone-400">Kişi</span>
-                  </div>
-                </>
-             ) : (
-                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
-                  <Users className="w-8 h-8 opacity-20" />
-                  <p className="text-sm font-medium">Veri bulunamadı</p>
-                </div>
-             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle icon={BarChart3}>Otele Göre Konaklama</CardTitle>
-            <p className="text-sm text-stone-500">Otellerin personelleri lojmanlarda ne kadar yer kaplıyor?</p>
-          </CardHeader>
-          <CardContent className="min-h-[280px]">
-             {hotelDistributionData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={hotelDistributionData} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8E6E1" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#78716C', fontSize: 12, fontWeight: 500 }}
-                      dy={10}
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#78716C', fontSize: 12 }}
-                      allowDecimals={false}
-                    />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F5F5F4' }} />
-                    <Bar dataKey="Kişi" fill="#7C8363" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                  </BarChart>
-                </ResponsiveContainer>
-             ) : (
-                <div className="w-full h-full min-h-[250px] flex items-center justify-center text-stone-400 flex-col gap-2">
-                  <Building className="w-8 h-8 opacity-20" />
-                  <p className="text-sm font-medium">Veri bulunamadı</p>
-                </div>
-             )}
-          </CardContent>
-        </Card>
       </div>
 
-      {/* 3. Detailed Analysis (Grid) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle icon={DoorOpen}>Lojman Bazlı Doluluk</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {facilityOccupancyList.length > 0 ? (
-              <div className="space-y-5">
-                {facilityOccupancyList.map(fac => (
-                  <div key={fac.id}>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-sm font-bold text-[#2D332D]">{fac.name}</span>
-                      <span className="text-xs font-semibold text-stone-500">
-                        {fac.occupied} / {fac.capacity} Yatak
-                      </span>
-                    </div>
-                    <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
-                      <div 
-                        className={cn("h-full rounded-full", fac.rate > 90 ? 'bg-orange-500' : 'bg-[#7C8363]')} 
-                        style={{ width: `${Math.min(100, fac.rate)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-               <div className="py-8 text-center text-sm text-stone-500">Lojman verisi bulunamadı</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle icon={ListVideo}>Departmanlara Göre Dağılım</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {departmentDistributionList.length > 0 ? (
-               <div className="space-y-3">
-                 {departmentDistributionList.map((dept, index) => (
-                   <div key={index} className="flex justify-between items-center border-b border-stone-100 last:border-0 pb-3 last:pb-0">
-                     <div className="flex items-center gap-3">
-                       <div className="w-2 h-2 rounded-full bg-[#7C8363]" />
-                       <span className="text-sm font-medium text-stone-700">{dept.name}</span>
-                     </div>
-                     <span className="text-sm font-bold text-[#2D332D] bg-[#F5F2ED] px-2.5 py-0.5 rounded-md">
-                       {dept.count} Kişi
-                     </span>
-                   </div>
-                 ))}
-               </div>
-            ) : (
-               <div className="py-8 text-center text-sm text-stone-500">Departman verisi bulunamadı</div>
-            )}
-          </CardContent>
-        </Card>
+      {/* AŞAMA 1: Kapasite ve Anlık Doluluk */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-serif font-bold text-[#2D332D] border-b border-stone-200 pb-2 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-[#7C8363]" />
+          Kapasite ve Anlık Doluluk (Real-time Snapshot)
+        </h3>
+        <CapacitySection 
+          rooms={rooms}
+          accommodations={accommodations}
+          staff={staff}
+          allowedDormIds={allowedDormIds}
+          facilities={facilities}
+          hotels={hotels}
+        />
       </div>
 
-      {/* 4. Departed/Past Staff Report */}
-      <div className="mt-8 bg-stone-100/60 border border-stone-200 rounded-xl p-8 pt-6">
-        <div className="flex items-center gap-2 mb-6">
-          <LogOut className="w-5 h-5 text-stone-500" />
-          <h3 className="font-bold text-lg text-stone-800 tracking-tight">Geçmiş Dönem Raporları</h3>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="card-standard p-6 flex flex-col justify-center items-center text-center">
-            <span className="text-xs uppercase tracking-widest font-bold text-stone-400 mb-2">Çıkış Yapan Personel</span>
-            <div className="text-5xl font-serif font-bold text-stone-800">{departedStaffCount}</div>
-            <p className="text-xs font-semibold text-stone-500 mt-2">Bugüne kadar ayrılanlar</p>
-          </div>
-          
-          <div className="md:col-span-2 card-standard p-6">
-            <h4 className="text-sm font-bold text-stone-700 mb-4">En Çok Ayrılan Departmanlar</h4>
-            {departedStaffByDepartment.length > 0 ? (
-              <div className="flex flex-wrap gap-3">
-                {departedStaffByDepartment.map((dept, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-stone-50 border border-stone-100 rounded-lg px-4 py-2">
-                     <span className="text-sm font-semibold text-stone-700">{dept.name}</span>
-                     <span className="text-xs font-bold text-stone-500 bg-white border border-stone-200 px-2 py-0.5 rounded-md">
-                       {dept.count}
-                     </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-stone-400">Geçmiş konaklama kaydı bulunamadı.</p>
-            )}
-          </div>
-        </div>
+      {/* AŞAMA 3: Otel - Lojman Kullanım Matrisi & Ortak Kullanımlar */}
+      <div className="space-y-4 relative z-20">
+        <h3 className="text-xl font-serif font-bold text-[#2D332D] border-b border-stone-200 pb-2 flex items-center gap-2">
+          <Building2 className="w-5 h-5 text-[#7C8363]" />
+          Otel - Lojman Kullanım Matrisi ve Paylaşımlar
+        </h3>
+        <MatrixSection 
+          matrixHotels={matrixHotels}
+          facilityHotelMatrix={facilityHotelMatrix}
+          hotelTotals={hotelTotals}
+          activeStaffCount={staff.filter(s => s.status === 'placed' && allowedStaff.some(as => as.id === s.id)).length}
+          sharedRoomPairsList={sharedRoomPairsList}
+        />
+      </div>
+
+      {/* AŞAMA 4: Arıza ve Bakım Derinlemesine Analizi */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-serif font-bold text-[#2D332D] border-b border-stone-200 pb-2 flex items-center gap-2">
+          <Wrench className="w-5 h-5 text-[#7C8363]" />
+          Arıza ve Bakım Teknik Analiz Raporları
+        </h3>
+        <MaintenanceSection 
+          maintenanceTickets={maintenanceTickets}
+          allowedDormIds={allowedDormIds}
+          facilities={facilities}
+          rooms={rooms}
+        />
       </div>
 
     </div>
