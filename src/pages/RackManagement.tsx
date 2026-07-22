@@ -715,7 +715,7 @@ export default function RackManagement() {
                   value={editForm.hotelId} 
                   onChange={e => setEditForm({...editForm, hotelId: e.target.value})} 
                   className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] disabled:opacity-50"
-                  disabled={currentUser?.role === 'hotel_hr_manager'}
+                  disabled={availableHotels.length <= 1}
                 >
                   <option value="">Seçiniz...</option>
                   {availableHotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}

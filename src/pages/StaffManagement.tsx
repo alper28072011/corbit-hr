@@ -485,10 +485,8 @@ export default function StaffManagement() {
     addStaff({ ...newStaff, status: 'pending_placement' });
     setShowAddStaffForm(false);
     
-    const dHotelId = currentUser?.role === 'hotel_hr_manager' 
-      ? (currentUser.assignedHotelIds?.[0] || currentUser.assignedHotelId || '') 
-      : '';
-    setNewStaff({ fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: dHotelId, gender: 'male', notes: '', specialNote: '', checkInDate: '', checkOutDate: '' });
+    const dHotelId = availableHotels.length > 0 ? availableHotels[0].id : '';
+    setNewStaff({ fullName: '', tcNo: '', phone: '', birthDate: '', department: '', position: '', hotelId: dHotelId, gender: 'male', category: 'Personel', isForeigner: false, notes: '', specialNote: '', checkInDate: '', checkOutDate: '' });
   };
 
   const downloadStaffTemplate = () => {
@@ -579,7 +577,7 @@ export default function StaffManagement() {
           }
 
           // Hotel check
-          const hotel = hotels.find(h => 
+          const hotel = availableHotels.find(h => 
             h.name.toLowerCase() === hotelNameOrCode.toLowerCase() || 
             (h.branchCode && h.branchCode.toLowerCase() === hotelNameOrCode.toLowerCase())
           );
@@ -883,7 +881,12 @@ export default function StaffManagement() {
               key: 'add_staff',
               icon: UserPlus,
               tooltip: 'Yeni Personel Kaydı',
-              onClick: () => setShowAddStaffForm(true),
+              onClick: () => {
+                if (availableHotels.length > 0 && (!newStaff.hotelId || !availableHotels.some(h => h.id === newStaff.hotelId))) {
+                  setNewStaff(prev => ({ ...prev, hotelId: availableHotels[0].id }));
+                }
+                setShowAddStaffForm(true);
+              },
               permissionKey: 'create_staff'
             }] : []),
             {
@@ -1939,7 +1942,7 @@ export default function StaffManagement() {
                     value={newStaff.hotelId} 
                     onChange={e => setNewStaff({...newStaff, hotelId: e.target.value})} 
                     className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] disabled:opacity-50"
-                    disabled={currentUser?.role === 'hotel_hr_manager'}
+                    disabled={availableHotels.length <= 1}
                   >
                     <option value="">Seçiniz...</option>
                     {availableHotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
@@ -2089,7 +2092,7 @@ export default function StaffManagement() {
                   value={editForm.hotelId} 
                   onChange={e => setEditForm({...editForm, hotelId: e.target.value})} 
                   className="w-full px-4 py-2 border border-[#E8E6E1] rounded-xl text-sm focus:outline-none focus:border-[#7C8363] disabled:opacity-50"
-                  disabled={currentUser?.role === 'hotel_hr_manager'}
+                  disabled={availableHotels.length <= 1}
                 >
                   <option value="">Seçiniz...</option>
                   {availableHotels.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
