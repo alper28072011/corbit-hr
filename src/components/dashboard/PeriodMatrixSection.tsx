@@ -4,10 +4,13 @@ import {
   Calculator, 
   Bed, 
   FileSpreadsheet,
-  Info
+  Info,
+  UserX,
+  UserCheck
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Accommodation, Staff, Hotel, Facility, Room } from "../../types";
+import { cn } from "../../lib/utils";
 
 interface PeriodMatrixSectionProps {
   accommodations: Accommodation[];
@@ -20,7 +23,7 @@ interface PeriodMatrixSectionProps {
   todayStr: string;
   visibleFacilities: Facility[];
   visibleHotels: Hotel[];
-  handleExportExcel: () => void;
+  handleExportExcel: (includeCheckedOut?: boolean) => void;
 }
 
 type MetricType = 'person_nights' | 'avg_occupants' | 'unique_staff' | 'room_nights' | 'avg_rooms' | 'unique_rooms';
@@ -40,6 +43,7 @@ export default function PeriodMatrixSection({
 }: PeriodMatrixSectionProps) {
   // Usage Matrix Metric State
   const [activeMetric, setActiveMetric] = useState<MetricType>('person_nights');
+  const [includeCheckedOut, setIncludeCheckedOut] = useState<boolean>(false);
 
   // Date Helpers local implementation
   const parseDateString = (dateStr: string): Date => {
@@ -129,6 +133,12 @@ export default function PeriodMatrixSection({
 
       const s = staffMap.get(acc.staffId);
       if (!s || !matrix[acc.facilityId][s.hotelId]) return;
+
+      // Filter out checked out accommodations and staff who left when toggle is inactive
+      if (!includeCheckedOut) {
+        if (acc.status === 'checked_out') return;
+        if (s.status === 'left') return;
+      }
 
       const hId = s.hotelId;
       const fId = acc.facilityId;
@@ -236,7 +246,7 @@ export default function PeriodMatrixSection({
       },
       daysCount
     };
-  }, [startDate, endDate, accommodations, staff, visibleFacilities, visibleHotels, todayStr]);
+  }, [startDate, endDate, accommodations, staff, visibleFacilities, visibleHotels, todayStr, includeCheckedOut]);
 
   // Helper to extract metric value for a specific cell in the matrix
   const getCellMetricValue = (fId: string, hId: string, type: MetricType): number => {
@@ -384,35 +394,72 @@ export default function PeriodMatrixSection({
         transition={{ duration: 0.2 }}
         className="space-y-4"
       >
-        {/* Metric Selector Buttons */}
-        <div className="flex flex-wrap items-center gap-2 bg-stone-50 p-2 rounded-2xl border border-stone-200/50">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400 px-2">Görünüm Metriği:</span>
-          {(Object.keys(metricLabelMap) as MetricType[]).map((mKey) => (
-            <button
-              key={mKey}
-              onClick={() => setActiveMetric(mKey)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                activeMetric === mKey 
-                  ? 'bg-[#2D332D] text-white shadow-sm' 
-                  : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50'
-              }`}
-            >
-              {metricLabelMap[mKey].split(' (')[0]}
-            </button>
-          ))}
+        {/* Metric Selector Buttons & Filter Toggle */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-stone-50 p-2.5 rounded-2xl border border-stone-200/50">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400 px-2">Görünüm Metriği:</span>
+            {(Object.keys(metricLabelMap) as MetricType[]).map((mKey) => (
+              <button
+                key={mKey}
+                onClick={() => setActiveMetric(mKey)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  activeMetric === mKey 
+                    ? 'bg-[#2D332D] text-white shadow-sm' 
+                    : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50'
+                }`}
+              >
+                {metricLabelMap[mKey].split(' (')[0]}
+              </button>
+            ))}
+          </div>
+
+          {/* Ayrılanları Dahil Et Button */}
+          <button
+            type="button"
+            onClick={() => setIncludeCheckedOut(prev => !prev)}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border self-start lg:self-center shrink-0 shadow-sm cursor-pointer",
+              includeCheckedOut
+                ? "bg-[#7C8363] text-white border-[#7C8363] hover:bg-[#6b7154]"
+                : "bg-white text-stone-700 border-stone-300 hover:bg-stone-100"
+            )}
+            title={includeCheckedOut ? "Lojmandan ayrılanlar rapora dahildir" : "Tıklayarak ayrılanları da rapora dahil edebilirsiniz"}
+          >
+            {includeCheckedOut ? <UserCheck className="w-4 h-4 text-white" /> : <UserX className="w-4 h-4 text-stone-500" />}
+            <span>Ayrılanları Dahil Et</span>
+            <span className={cn(
+              "text-[10px] px-2 py-0.5 rounded-md font-mono font-bold uppercase tracking-wider",
+              includeCheckedOut ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500 border border-stone-200"
+            )}>
+              {includeCheckedOut ? "AÇIK" : "KAPALI"}
+            </span>
+          </button>
         </div>
 
         {/* Metric Explanation & Action */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#FAF9F6] border border-stone-200/60 rounded-2xl gap-3 text-xs text-stone-600">
           <div className="flex gap-2.5 items-start">
             <Info className="w-4.5 h-4.5 text-[#7C8363] shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-stone-800 font-bold">{metricLabelMap[activeMetric]}</strong>:{" "}
-              {metricDescMap[activeMetric]}
+            <div className="space-y-1">
+              <div>
+                <strong className="text-stone-800 font-bold">{metricLabelMap[activeMetric]}</strong>:{" "}
+                {metricDescMap[activeMetric]}
+              </div>
+              <div className="text-[11px] font-medium text-stone-500 flex items-center gap-1.5">
+                <span className={cn(
+                  "w-2 h-2 rounded-full shrink-0",
+                  includeCheckedOut ? "bg-emerald-500" : "bg-amber-500"
+                )} />
+                {includeCheckedOut ? (
+                  <span>Görünüm Filtresi: <strong>Ayrılanlar Dahil</strong> (Dönem içinde çıkış yapmış/ayrılmış personeller metriklerde yer alır).</span>
+                ) : (
+                  <span>Görünüm Filtresi: <strong>Yalnızca Konaklaması Devam Edenler</strong> (Lojmandan çıkış yapmış/ayrılmış kişiler metriklerden hariç tutulur).</span>
+                )}
+              </div>
             </div>
           </div>
           <button
-            onClick={handleExportExcel}
+            onClick={() => handleExportExcel(includeCheckedOut)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl self-start sm:self-center transition-all shadow-sm shrink-0"
           >
             <FileSpreadsheet className="w-4 h-4" />

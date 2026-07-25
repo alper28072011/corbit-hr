@@ -438,7 +438,7 @@ export default function Reports() {
   }, [availableHotels, selectedHotelIds]);
 
   // Professional Excel Exporter
-  const handleExportExcel = () => {
+  const handleExportExcel = (includeCheckedOut: boolean = true) => {
     if (!can(currentUser?.role, 'export_excel', PAGE_KEYS.reports, rolesPermissions)) return;
 
     const wb = XLSX.utils.book_new();
@@ -452,9 +452,10 @@ export default function Reports() {
       ["DÖNEMSEL VE PERFORMANS RAPORLARI ÖZETİ", ""],
       ["Oluşturulma Tarihi", new Date().toLocaleString("tr-TR")],
       ["Filtre Tarih Aralığı", `${startDate} - ${endDate} (${daysCount} Gün)`],
+      ["Ayrılanları Dahil Et Filtresi", includeCheckedOut ? "AÇIK (Ayrılanlar dahil)" : "KAPALI (Yalnızca konaklaması devam edenler)"],
       [],
       ["Metrik Adı", "Hesaplanan Değer", "Açıklama"],
-      ["Toplam Kişi Geceleme (Person Nights)", personNights, "Seçili tarih aralüğında, yetkili olunan personellerin lojmanda geçirdiği toplam gece sayısı"],
+      ["Toplam Kişi Geceleme (Person Nights)", personNights, "Seçili tarih aralığında, yetkili olunan personellerin lojmanda geçirdiği toplam gece sayısı"],
       ["Toplam Oda Geceleme (Room Nights)", roomNights, "Seçili tarih aralığında, odaların en az 1 kişi tarafından işgal edildiği mükerrersiz gece sayısı"],
       ["Dönemlik Toplam Giriş (Check-In)", checkInsCount, "Seçilen tarih aralığında lojmana yerleştirilen personel sayısı"],
       ["Dönemlik Toplam Çıkış (Check-Out)", checkOutsCount, "Seçilen tarih aralığında lojmandan çıkış yapan personel sayısı"],
@@ -488,6 +489,10 @@ export default function Reports() {
       if (!excelMatrix[acc.facilityId]) return;
       const s = staff.find(st => st.id === acc.staffId);
       if (!s || !excelMatrix[acc.facilityId][s.hotelId]) return;
+
+      if (!includeCheckedOut) {
+        if (acc.status === 'checked_out' || s.status === 'left') return;
+      }
 
       const hId = s.hotelId;
       const fId = acc.facilityId;
