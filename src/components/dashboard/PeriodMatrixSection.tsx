@@ -6,7 +6,8 @@ import {
   FileSpreadsheet,
   Info,
   UserX,
-  UserCheck
+  UserCheck,
+  PieChart
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Accommodation, Staff, Hotel, Facility, Room } from "../../types";
@@ -23,7 +24,7 @@ interface PeriodMatrixSectionProps {
   todayStr: string;
   visibleFacilities: Facility[];
   visibleHotels: Hotel[];
-  handleExportExcel: (includeCheckedOut?: boolean) => void;
+  handleExportExcel: (includeCheckedOut?: boolean, proportionalRooms?: boolean) => void;
 }
 
 type MetricType = 'person_nights' | 'avg_occupants' | 'unique_staff' | 'room_nights' | 'avg_rooms' | 'unique_rooms';
@@ -44,6 +45,7 @@ export default function PeriodMatrixSection({
   // Usage Matrix Metric State
   const [activeMetric, setActiveMetric] = useState<MetricType>('person_nights');
   const [includeCheckedOut, setIncludeCheckedOut] = useState<boolean>(false);
+  const [proportionalRooms, setProportionalRooms] = useState<boolean>(false);
 
   // Date Helpers local implementation
   const parseDateString = (dateStr: string): Date => {
@@ -108,9 +110,11 @@ export default function PeriodMatrixSection({
     // Initialize nested records
     const matrix: Record<string, Record<string, {
       personNights: number;
-      roomNightsSet: Set<string>; // Set of "roomId_date"
+      roomNights: number;
+      roomNightsSet: Set<string>;
       uniqueStaffSet: Set<string>;
       uniqueRoomsSet: Set<string>;
+      uniqueRooms: number;
     }>> = {};
 
     visibleFacilities.forEach(f => {
@@ -118,14 +122,17 @@ export default function PeriodMatrixSection({
       visibleHotels.forEach(h => {
         matrix[f.id][h.id] = {
           personNights: 0,
+          roomNights: 0,
           roomNightsSet: new Set<string>(),
           uniqueStaffSet: new Set<string>(),
-          uniqueRoomsSet: new Set<string>()
+          uniqueRoomsSet: new Set<string>(),
+          uniqueRooms: 0
         };
       });
     });
 
     const staffMap = new Map(staff.map(st => [st.id, st]));
+    const dayRoomOccupants = new Map<string, Array<{ fId: string; hId: string; staffId: string; accId: string }>>();
 
     // Populate data
     accommodations.forEach(acc => {
@@ -149,14 +156,73 @@ export default function PeriodMatrixSection({
 
       // Accumulate
       matrix[fId][hId].personNights += overlapNights.length;
-      overlapNights.forEach(day => {
-        matrix[fId][hId].roomNightsSet.add(`${rId}_${day}`);
-      });
+
       if (overlapNights.length > 0) {
         matrix[fId][hId].uniqueStaffSet.add(s.id);
         matrix[fId][hId].uniqueRoomsSet.add(rId);
       }
+
+      overlapNights.forEach(day => {
+        matrix[fId][hId].roomNightsSet.add(`${rId}_${day}`);
+
+        const key = `${day}_${rId}`;
+        if (!dayRoomOccupants.has(key)) {
+          dayRoomOccupants.set(key, []);
+        }
+        dayRoomOccupants.get(key)!.push({ fId, hId, staffId: s.id, accId: acc.id });
+      });
     });
+
+    if (!proportionalRooms) {
+      // Standard mode
+      visibleFacilities.forEach(f => {
+        visibleHotels.forEach(h => {
+          const cell = matrix[f.id][h.id];
+          cell.roomNights = cell.roomNightsSet.size;
+          cell.uniqueRooms = cell.uniqueRoomsSet.size;
+        });
+      });
+    } else {
+      // Proportional mode
+      const roomHotelNights = new Map<string, Record<string, number>>();
+      const roomTotalNights = new Map<string, number>();
+
+      dayRoomOccupants.forEach((occupants, dayRoomKey) => {
+        if (occupants.length === 0) return;
+
+        const totalInRoomOnDay = occupants.length;
+        const weightPerOccupant = 1 / totalInRoomOnDay;
+
+        occupants.forEach(occ => {
+          const { fId, hId } = occ;
+          const rId = dayRoomKey.split('_')[1];
+
+          matrix[fId][hId].roomNights += weightPerOccupant;
+
+          const roomKey = `${fId}_${rId}`;
+          if (!roomHotelNights.has(roomKey)) {
+            roomHotelNights.set(roomKey, {});
+            roomTotalNights.set(roomKey, 0);
+          }
+          const hotelDict = roomHotelNights.get(roomKey)!;
+          hotelDict[hId] = (hotelDict[hId] || 0) + weightPerOccupant;
+          roomTotalNights.set(roomKey, roomTotalNights.get(roomKey)! + weightPerOccupant);
+        });
+      });
+
+      // Compute unique rooms proportionally
+      roomHotelNights.forEach((hotelDict, roomKey) => {
+        const [fId] = roomKey.split('_');
+        const totalRN = roomTotalNights.get(roomKey) || 0;
+        if (totalRN > 0) {
+          Object.entries(hotelDict).forEach(([hId, hotelRN]) => {
+            if (matrix[fId]?.[hId]) {
+              matrix[fId][hId].uniqueRooms += (hotelRN / totalRN);
+            }
+          });
+        }
+      });
+    }
 
     // Compute Lodging (Facility) Totals
     const facilityTotals: Record<string, {
@@ -167,14 +233,18 @@ export default function PeriodMatrixSection({
     }> = {};
 
     visibleFacilities.forEach(f => {
+      let fPersonNights = 0;
+      let fRoomNights = 0;
+      let fUniqueRooms = 0;
       const fRoomNightsSet = new Set<string>();
       const fStaffSet = new Set<string>();
       const fRoomsSet = new Set<string>();
-      let fPersonNights = 0;
 
       visibleHotels.forEach(h => {
         const cell = matrix[f.id][h.id];
         fPersonNights += cell.personNights;
+        fRoomNights += cell.roomNights;
+        fUniqueRooms += cell.uniqueRooms;
         cell.roomNightsSet.forEach(key => fRoomNightsSet.add(key));
         cell.uniqueStaffSet.forEach(id => fStaffSet.add(id));
         cell.uniqueRoomsSet.forEach(id => fRoomsSet.add(id));
@@ -182,9 +252,9 @@ export default function PeriodMatrixSection({
 
       facilityTotals[f.id] = {
         personNights: fPersonNights,
-        roomNightsCount: fRoomNightsSet.size,
+        roomNightsCount: proportionalRooms ? fRoomNights : fRoomNightsSet.size,
         uniqueStaffCount: fStaffSet.size,
-        uniqueRoomsCount: fRoomsSet.size
+        uniqueRoomsCount: proportionalRooms ? fUniqueRooms : fRoomsSet.size
       };
     });
 
@@ -197,14 +267,18 @@ export default function PeriodMatrixSection({
     }> = {};
 
     visibleHotels.forEach(h => {
+      let hPersonNights = 0;
+      let hRoomNights = 0;
+      let hUniqueRooms = 0;
       const hRoomNightsSet = new Set<string>();
       const hStaffSet = new Set<string>();
       const hRoomsSet = new Set<string>();
-      let hPersonNights = 0;
 
       visibleFacilities.forEach(f => {
         const cell = matrix[f.id][h.id];
         hPersonNights += cell.personNights;
+        hRoomNights += cell.roomNights;
+        hUniqueRooms += cell.uniqueRooms;
         cell.roomNightsSet.forEach(key => hRoomNightsSet.add(key));
         cell.uniqueStaffSet.forEach(id => hStaffSet.add(id));
         cell.uniqueRoomsSet.forEach(id => hRoomsSet.add(id));
@@ -212,22 +286,26 @@ export default function PeriodMatrixSection({
 
       hotelTotals[h.id] = {
         personNights: hPersonNights,
-        roomNightsCount: hRoomNightsSet.size,
+        roomNightsCount: proportionalRooms ? hRoomNights : hRoomNightsSet.size,
         uniqueStaffCount: hStaffSet.size,
-        uniqueRoomsCount: hRoomsSet.size
+        uniqueRoomsCount: proportionalRooms ? hUniqueRooms : hRoomsSet.size
       };
     });
 
     // Compute Grand Totals
+    let grandPersonNights = 0;
+    let grandRoomNights = 0;
+    let grandUniqueRooms = 0;
     const grandRoomNightsSet = new Set<string>();
     const grandStaffSet = new Set<string>();
     const grandRoomsSet = new Set<string>();
-    let grandPersonNights = 0;
 
     visibleFacilities.forEach(f => {
       visibleHotels.forEach(h => {
         const cell = matrix[f.id][h.id];
         grandPersonNights += cell.personNights;
+        grandRoomNights += cell.roomNights;
+        grandUniqueRooms += cell.uniqueRooms;
         cell.roomNightsSet.forEach(key => grandRoomNightsSet.add(key));
         cell.uniqueStaffSet.forEach(id => grandStaffSet.add(id));
         cell.uniqueRoomsSet.forEach(id => grandRoomsSet.add(id));
@@ -240,13 +318,13 @@ export default function PeriodMatrixSection({
       hotelTotals,
       grandTotals: {
         personNights: grandPersonNights,
-        roomNights: grandRoomNightsSet.size,
+        roomNights: proportionalRooms ? grandRoomNights : grandRoomNightsSet.size,
         uniqueStaffCount: grandStaffSet.size,
-        uniqueRoomsCount: grandRoomsSet.size
+        uniqueRoomsCount: proportionalRooms ? grandUniqueRooms : grandRoomsSet.size
       },
       daysCount
     };
-  }, [startDate, endDate, accommodations, staff, visibleFacilities, visibleHotels, todayStr, includeCheckedOut]);
+  }, [startDate, endDate, accommodations, staff, visibleFacilities, visibleHotels, todayStr, includeCheckedOut, proportionalRooms]);
 
   // Helper to extract metric value for a specific cell in the matrix
   const getCellMetricValue = (fId: string, hId: string, type: MetricType): number => {
@@ -261,11 +339,11 @@ export default function PeriodMatrixSection({
       case 'unique_staff':
         return cell.uniqueStaffSet.size;
       case 'room_nights':
-        return cell.roomNightsSet.size;
+        return cell.roomNights;
       case 'avg_rooms':
-        return cell.roomNightsSet.size / data.daysCount;
+        return cell.roomNights / data.daysCount;
       case 'unique_rooms':
-        return cell.uniqueRoomsSet.size;
+        return cell.uniqueRooms;
       default:
         return 0;
     }
@@ -346,6 +424,16 @@ export default function PeriodMatrixSection({
     if (type === 'avg_occupants' || type === 'avg_rooms') {
       return val.toFixed(1);
     }
+    if (proportionalRooms && (type === 'room_nights' || type === 'unique_rooms')) {
+      if (Number.isInteger(val) || Math.abs(val - Math.round(val)) < 0.001) {
+        return Math.round(val).toLocaleString("tr-TR");
+      }
+      const rounded1 = Math.round(val * 10) / 10;
+      if (Math.abs(val - rounded1) < 0.01) {
+        return rounded1.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      }
+      return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
     return Math.round(val).toLocaleString("tr-TR");
   };
 
@@ -362,9 +450,15 @@ export default function PeriodMatrixSection({
     'person_nights': 'Seçilen dönemde ilgili otel çalışanlarının bu lojmanda geçirdiği toplam gece sayısı.',
     'avg_occupants': 'Dönem boyunca lojmanda her gün ortalama kaç otel çalışanının barındığı.',
     'unique_staff': 'İlgili lojmanda dönem içinde en az 1 gece konaklamış benzersiz otel çalışanı sayısı.',
-    'room_nights': 'İlgili otel personeli tarafından işgal edilen odaların oda başına geceleme sayısı toplamı.',
-    'avg_rooms': 'Dönem boyunca lojmanda her gün ortalama kaç odanın ilgili otelce rezerve edildiği.',
-    'unique_rooms': 'Dönem boyunca ilgili otel çalışanlarının kullanımına sunulmuş benzersiz oda sayısı.'
+    'room_nights': proportionalRooms
+      ? 'Farklı otellerin ortak odaları kişi sayısına göre orantılanarak hesaplanan oda geceleme sayısı.'
+      : 'İlgili otel personeli tarafından işgal edilen odaların oda başına geceleme sayısı toplamı.',
+    'avg_rooms': proportionalRooms
+      ? 'Dönem boyunca her gün ortalama kullanılan orantılı oda miktarı.'
+      : 'Dönem boyunca lojmanda her gün ortalama kaç odanın ilgili otelce rezerve edildiği.',
+    'unique_rooms': proportionalRooms
+      ? 'Lojmanda kullanılan benzersiz odaların oteller arasındaki orantılı paylaşım toplamı.'
+      : 'Dönem boyunca ilgili otel çalışanlarının kullanımına sunulmuş benzersiz oda sayısı.'
   };
 
   return (
@@ -395,7 +489,7 @@ export default function PeriodMatrixSection({
         className="space-y-4"
       >
         {/* Metric Selector Buttons & Filter Toggle */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-stone-50 p-2.5 rounded-2xl border border-stone-200/50">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-stone-50 p-2.5 rounded-2xl border border-stone-200/50">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400 px-2">Görünüm Metriği:</span>
             {(Object.keys(metricLabelMap) as MetricType[]).map((mKey) => (
@@ -413,53 +507,91 @@ export default function PeriodMatrixSection({
             ))}
           </div>
 
-          {/* Ayrılanları Dahil Et Button */}
-          <button
-            type="button"
-            onClick={() => setIncludeCheckedOut(prev => !prev)}
-            className={cn(
-              "flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border self-start lg:self-center shrink-0 shadow-sm cursor-pointer",
-              includeCheckedOut
-                ? "bg-[#7C8363] text-white border-[#7C8363] hover:bg-[#6b7154]"
-                : "bg-white text-stone-700 border-stone-300 hover:bg-stone-100"
-            )}
-            title={includeCheckedOut ? "Lojmandan ayrılanlar rapora dahildir" : "Tıklayarak ayrılanları da rapora dahil edebilirsiniz"}
-          >
-            {includeCheckedOut ? <UserCheck className="w-4 h-4 text-white" /> : <UserX className="w-4 h-4 text-stone-500" />}
-            <span>Ayrılanları Dahil Et</span>
-            <span className={cn(
-              "text-[10px] px-2 py-0.5 rounded-md font-mono font-bold uppercase tracking-wider",
-              includeCheckedOut ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500 border border-stone-200"
-            )}>
-              {includeCheckedOut ? "AÇIK" : "KAPALI"}
-            </span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start xl:self-center">
+            {/* Paylaşımlı Odaları Orantıla Button */}
+            <button
+              type="button"
+              onClick={() => setProportionalRooms(prev => !prev)}
+              className={cn(
+                "flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border shrink-0 shadow-sm cursor-pointer",
+                proportionalRooms
+                  ? "bg-[#2D332D] text-white border-[#2D332D] hover:bg-[#1f241f]"
+                  : "bg-white text-stone-700 border-stone-300 hover:bg-stone-100"
+              )}
+              title={proportionalRooms ? "Paylaşımlı odalar kişi sayısına göre orantılanıyor (örn. 2 kişi paylaşıyorsa 0.5 oda/kişi)" : "Tıklayarak ortak kullanılan odaları oteller arasında orantılayabilirsiniz"}
+            >
+              <PieChart className={cn("w-4 h-4", proportionalRooms ? "text-amber-300" : "text-stone-500")} />
+              <span>Paylaşımlı Odaları Orantıla</span>
+              <span className={cn(
+                "text-[10px] px-2 py-0.5 rounded-md font-mono font-bold uppercase tracking-wider",
+                proportionalRooms ? "bg-amber-400/20 text-amber-200" : "bg-stone-100 text-stone-500 border border-stone-200"
+              )}>
+                {proportionalRooms ? "AÇIK" : "KAPALI"}
+              </span>
+            </button>
+
+            {/* Ayrılanları Dahil Et Button */}
+            <button
+              type="button"
+              onClick={() => setIncludeCheckedOut(prev => !prev)}
+              className={cn(
+                "flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border shrink-0 shadow-sm cursor-pointer",
+                includeCheckedOut
+                  ? "bg-[#7C8363] text-white border-[#7C8363] hover:bg-[#6b7154]"
+                  : "bg-white text-stone-700 border-stone-300 hover:bg-stone-100"
+              )}
+              title={includeCheckedOut ? "Lojmandan ayrılanlar rapora dahildir" : "Tıklayarak ayrılanları da rapora dahil edebilirsiniz"}
+            >
+              {includeCheckedOut ? <UserCheck className="w-4 h-4 text-white" /> : <UserX className="w-4 h-4 text-stone-500" />}
+              <span>Ayrılanları Dahil Et</span>
+              <span className={cn(
+                "text-[10px] px-2 py-0.5 rounded-md font-mono font-bold uppercase tracking-wider",
+                includeCheckedOut ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500 border border-stone-200"
+              )}>
+                {includeCheckedOut ? "AÇIK" : "KAPALI"}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Metric Explanation & Action */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#FAF9F6] border border-stone-200/60 rounded-2xl gap-3 text-xs text-stone-600">
           <div className="flex gap-2.5 items-start">
             <Info className="w-4.5 h-4.5 text-[#7C8363] shrink-0 mt-0.5" />
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div>
                 <strong className="text-stone-800 font-bold">{metricLabelMap[activeMetric]}</strong>:{" "}
                 {metricDescMap[activeMetric]}
               </div>
-              <div className="text-[11px] font-medium text-stone-500 flex items-center gap-1.5">
-                <span className={cn(
-                  "w-2 h-2 rounded-full shrink-0",
-                  includeCheckedOut ? "bg-emerald-500" : "bg-amber-500"
-                )} />
-                {includeCheckedOut ? (
-                  <span>Görünüm Filtresi: <strong>Ayrılanlar Dahil</strong> (Dönem içinde çıkış yapmış/ayrılmış personeller metriklerde yer alır).</span>
-                ) : (
-                  <span>Görünüm Filtresi: <strong>Yalnızca Konaklaması Devam Edenler</strong> (Lojmandan çıkış yapmış/ayrılmış kişiler metriklerden hariç tutulur).</span>
-                )}
+              <div className="text-[11px] font-medium text-stone-500 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="flex items-center gap-1.5">
+                  <span className={cn(
+                    "w-2 h-2 rounded-full shrink-0",
+                    includeCheckedOut ? "bg-emerald-500" : "bg-amber-500"
+                  )} />
+                  {includeCheckedOut ? (
+                    <span>Ayrılanlar: <strong>Dahil</strong></span>
+                  ) : (
+                    <span>Ayrılanlar: <strong>Hariç (Sadece Aktifler)</strong></span>
+                  )}
+                </span>
+
+                <span className="flex items-center gap-1.5">
+                  <span className={cn(
+                    "w-2 h-2 rounded-full shrink-0",
+                    proportionalRooms ? "bg-emerald-500" : "bg-stone-400"
+                  )} />
+                  {proportionalRooms ? (
+                    <span>Paylaşımlı Oda Hesabı: <strong>Orantılı (0.5, 0.33 vb.)</strong></span>
+                  ) : (
+                    <span>Paylaşımlı Oda Hesabı: <strong>Tam Sayı (Standart)</strong></span>
+                  )}
+                </span>
               </div>
             </div>
           </div>
           <button
-            onClick={() => handleExportExcel(includeCheckedOut)}
+            onClick={() => handleExportExcel(includeCheckedOut, proportionalRooms)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl self-start sm:self-center transition-all shadow-sm shrink-0"
           >
             <FileSpreadsheet className="w-4 h-4" />

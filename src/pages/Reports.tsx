@@ -438,7 +438,7 @@ export default function Reports() {
   }, [availableHotels, selectedHotelIds]);
 
   // Professional Excel Exporter
-  const handleExportExcel = (includeCheckedOut: boolean = true) => {
+  const handleExportExcel = (includeCheckedOut: boolean = false, proportionalRooms: boolean = false) => {
     if (!can(currentUser?.role, 'export_excel', PAGE_KEYS.reports, rolesPermissions)) return;
 
     const wb = XLSX.utils.book_new();
@@ -453,6 +453,7 @@ export default function Reports() {
       ["Oluşturulma Tarihi", new Date().toLocaleString("tr-TR")],
       ["Filtre Tarih Aralığı", `${startDate} - ${endDate} (${daysCount} Gün)`],
       ["Ayrılanları Dahil Et Filtresi", includeCheckedOut ? "AÇIK (Ayrılanlar dahil)" : "KAPALI (Yalnızca konaklaması devam edenler)"],
+      ["Paylaşımlı Oda Orantılama Filtresi", proportionalRooms ? "AÇIK (Ortak odalar kişi sayısına göre orantılı)" : "KAPALI (Standart 1 oda)"],
       [],
       ["Metrik Adı", "Hesaplanan Değer", "Açıklama"],
       ["Toplam Kişi Geceleme (Person Nights)", personNights, "Seçili tarih aralığında, yetkili olunan personellerin lojmanda geçirdiği toplam gece sayısı"],
@@ -468,9 +469,11 @@ export default function Reports() {
     // Compute detailed period matrices
     const excelMatrix: Record<string, Record<string, {
       personNights: number;
+      roomNights: number;
       roomNightsSet: Set<string>;
       uniqueStaffSet: Set<string>;
       uniqueRoomsSet: Set<string>;
+      uniqueRooms: number;
     }>> = {};
 
     visibleFacilities.forEach(f => {
@@ -478,12 +481,16 @@ export default function Reports() {
       visibleHotels.forEach(h => {
         excelMatrix[f.id][h.id] = {
           personNights: 0,
+          roomNights: 0,
           roomNightsSet: new Set<string>(),
           uniqueStaffSet: new Set<string>(),
-          uniqueRoomsSet: new Set<string>()
+          uniqueRoomsSet: new Set<string>(),
+          uniqueRooms: 0
         };
       });
     });
+
+    const dayRoomOccupants = new Map<string, Array<{ fId: string; hId: string; staffId: string; accId: string }>>();
 
     accommodations.forEach(acc => {
       if (!excelMatrix[acc.facilityId]) return;
@@ -502,14 +509,74 @@ export default function Reports() {
       const overlapNights = getOccupiedNightsForAcc(acc.checkInDate, endLimit, startDate, endDate);
 
       excelMatrix[fId][hId].personNights += overlapNights.length;
-      overlapNights.forEach(day => {
-        excelMatrix[fId][hId].roomNightsSet.add(`${rId}_${day}`);
-      });
+
       if (overlapNights.length > 0) {
         excelMatrix[fId][hId].uniqueStaffSet.add(s.id);
         excelMatrix[fId][hId].uniqueRoomsSet.add(rId);
       }
+
+      overlapNights.forEach(day => {
+        excelMatrix[fId][hId].roomNightsSet.add(`${rId}_${day}`);
+
+        const key = `${day}_${rId}`;
+        if (!dayRoomOccupants.has(key)) {
+          dayRoomOccupants.set(key, []);
+        }
+        dayRoomOccupants.get(key)!.push({ fId, hId, staffId: s.id, accId: acc.id });
+      });
     });
+
+    if (!proportionalRooms) {
+      visibleFacilities.forEach(f => {
+        visibleHotels.forEach(h => {
+          const cell = excelMatrix[f.id][h.id];
+          cell.roomNights = cell.roomNightsSet.size;
+          cell.uniqueRooms = cell.uniqueRoomsSet.size;
+        });
+      });
+    } else {
+      const roomHotelNights = new Map<string, Record<string, number>>();
+      const roomTotalNights = new Map<string, number>();
+
+      dayRoomOccupants.forEach((occupants, dayRoomKey) => {
+        if (occupants.length === 0) return;
+        const totalInRoomOnDay = occupants.length;
+        const weightPerOccupant = 1 / totalInRoomOnDay;
+
+        occupants.forEach(occ => {
+          const { fId, hId } = occ;
+          const rId = dayRoomKey.split('_')[1];
+
+          excelMatrix[fId][hId].roomNights += weightPerOccupant;
+
+          const roomKey = `${fId}_${rId}`;
+          if (!roomHotelNights.has(roomKey)) {
+            roomHotelNights.set(roomKey, {});
+            roomTotalNights.set(roomKey, 0);
+          }
+          const hotelDict = roomHotelNights.get(roomKey)!;
+          hotelDict[hId] = (hotelDict[hId] || 0) + weightPerOccupant;
+          roomTotalNights.set(roomKey, roomTotalNights.get(roomKey)! + weightPerOccupant);
+        });
+      });
+
+      roomHotelNights.forEach((hotelDict, roomKey) => {
+        const [fId] = roomKey.split('_');
+        const totalRN = roomTotalNights.get(roomKey) || 0;
+        if (totalRN > 0) {
+          Object.entries(hotelDict).forEach(([hId, hotelRN]) => {
+            if (excelMatrix[fId]?.[hId]) {
+              excelMatrix[fId][hId].uniqueRooms += (hotelRN / totalRN);
+            }
+          });
+        }
+      });
+    }
+
+    const formatExcelNum = (val: number) => {
+      if (Number.isInteger(val)) return val;
+      return Math.round(val * 100) / 100;
+    };
 
     // Helper to generate a matrix sheet
     const makeGridSheet = (title: string, metricGetter: (fId: string, hId: string) => number) => {
@@ -521,14 +588,14 @@ export default function Reports() {
           rowTotal += val;
           return val;
         });
-        return [f.name, ...cols, rowTotal];
+        return [f.name, ...cols, formatExcelNum(rowTotal)];
       });
 
       const colTotals = visibleHotels.map(h => {
         return visibleFacilities.reduce((sum, f) => sum + metricGetter(f.id, h.id), 0);
       });
       const grandTotal = colTotals.reduce((a, b) => a + b, 0);
-      const totalsRow = ["Genel Toplam", ...colTotals, grandTotal];
+      const totalsRow = ["Genel Toplam", ...colTotals.map(formatExcelNum), formatExcelNum(grandTotal)];
 
       return XLSX.utils.aoa_to_sheet([
         [title],
@@ -596,37 +663,47 @@ export default function Reports() {
     visibleHotels.forEach(h => { odaHotelTotalsCost[h.id] = 0; });
 
     visibleFacilities.forEach(f => {
-      const fRoomNightsSet = new Set<string>();
-      visibleHotels.forEach(h => {
-        excelMatrix[f.id][h.id].roomNightsSet.forEach(key => fRoomNightsSet.add(key));
-      });
-      const roomNightsTotal = fRoomNightsSet.size;
+      let roomNightsTotal = 0;
+      if (!proportionalRooms) {
+        const fRoomNightsSet = new Set<string>();
+        visibleHotels.forEach(h => {
+          excelMatrix[f.id][h.id].roomNightsSet.forEach(key => fRoomNightsSet.add(key));
+        });
+        roomNightsTotal = fRoomNightsSet.size;
+      } else {
+        roomNightsTotal = visibleHotels.reduce((sum, h) => sum + excelMatrix[f.id][h.id].roomNights, 0);
+      }
       const totalCost = roomNightsTotal * defaultRoomCost;
       totalOdaCostAll += totalCost;
 
       const hotelCosts = visibleHotels.map(h => {
-        const cost = excelMatrix[f.id][h.id].roomNightsSet.size * defaultRoomCost;
+        const nights = excelMatrix[f.id][h.id].roomNights;
+        const cost = nights * defaultRoomCost;
         odaHotelTotalsCost[h.id] += cost;
         return cost;
       });
 
       const hotelPercentages = visibleHotels.map(h => {
-        const nights = excelMatrix[f.id][h.id].roomNightsSet.size;
+        const nights = excelMatrix[f.id][h.id].roomNights;
         return roomNightsTotal > 0 ? `${((nights / roomNightsTotal) * 100).toFixed(1)}%` : "0.0%";
       });
 
-      costSheetData.push([f.name, defaultRoomCost, roomNightsTotal, totalCost, ...hotelCosts, ...hotelPercentages]);
+      costSheetData.push([f.name, defaultRoomCost, formatExcelNum(roomNightsTotal), totalCost, ...hotelCosts, ...hotelPercentages]);
     });
 
     costSheetData.push([
       "Genel Toplam",
       "-",
       visibleFacilities.reduce((sum, f) => {
-        const fRoomNightsSet = new Set<string>();
-        visibleHotels.forEach(h => {
-          excelMatrix[f.id][h.id].roomNightsSet.forEach(key => fRoomNightsSet.add(key));
-        });
-        return sum + fRoomNightsSet.size;
+        if (!proportionalRooms) {
+          const fRoomNightsSet = new Set<string>();
+          visibleHotels.forEach(h => {
+            excelMatrix[f.id][h.id].roomNightsSet.forEach(key => fRoomNightsSet.add(key));
+          });
+          return sum + fRoomNightsSet.size;
+        } else {
+          return sum + visibleHotels.reduce((s, h) => s + excelMatrix[f.id][h.id].roomNights, 0);
+        }
       }, 0),
       totalOdaCostAll,
       ...visibleHotels.map(h => odaHotelTotalsCost[h.id]),
@@ -640,13 +717,13 @@ export default function Reports() {
     const wsKisiGeceleme = makeGridSheet("LOJMAN - OTEL KİŞİ GECELEME MATRİSİ", (fId, hId) => excelMatrix[fId][hId].personNights);
     XLSX.utils.book_append_sheet(wb, wsKisiGeceleme, "Kişi Geceleme Matrisi");
 
-    const wsOdaGeceleme = makeGridSheet("LOJMAN - OTEL ODA GECELEME MATRİSİ", (fId, hId) => excelMatrix[fId][hId].roomNightsSet.size);
+    const wsOdaGeceleme = makeGridSheet("LOJMAN - OTEL ODA GECELEME MATRİSİ", (fId, hId) => excelMatrix[fId][hId].roomNights);
     XLSX.utils.book_append_sheet(wb, wsOdaGeceleme, "Oda Geceleme Matrisi");
 
     const wsToplamKisi = makeGridSheet("LOJMAN - OTEL BENZERSİZ KONAKLAYAN KİŞİ MATRİSİ", (fId, hId) => excelMatrix[fId][hId].uniqueStaffSet.size);
     XLSX.utils.book_append_sheet(wb, wsToplamKisi, "Benzersiz Kişi Matrisi");
 
-    const wsToplamOda = makeGridSheet("LOJMAN - OTEL BENZERSİZ KULLANILAN ODA MATRİSİ", (fId, hId) => excelMatrix[fId][hId].uniqueRoomsSet.size);
+    const wsToplamOda = makeGridSheet("LOJMAN - OTEL BENZERSİZ KULLANILAN ODA MATRİSİ", (fId, hId) => excelMatrix[fId][hId].uniqueRooms);
     XLSX.utils.book_append_sheet(wb, wsToplamOda, "Benzersiz Oda Matrisi");
 
     // Tab: Lojman Oda Detayları
