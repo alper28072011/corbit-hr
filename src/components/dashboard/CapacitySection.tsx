@@ -84,28 +84,33 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
     });
 
     const total = active + maintenance + passive;
-    const vacantRooms = filteredRooms.filter(r => {
-      if (r.status !== 'active') return false;
+    const activeRooms = filteredRooms.filter(r => r.status === 'active');
+
+    const occupiedRooms = activeRooms.filter(r => {
       const roomAccs = activeAccs.filter(a => a.roomId === r.id);
-      return roomAccs.length === 0;
+      return roomAccs.length > 0;
     }).length;
 
-    const fullRooms = filteredRooms.filter(r => {
-      if (r.status !== 'active') return false;
+    const vacantRooms = activeRooms.length - occupiedRooms;
+
+    const fullRooms = activeRooms.filter(r => {
       const roomAccs = activeAccs.filter(a => a.roomId === r.id);
       return roomAccs.length >= r.bedCount;
     }).length;
 
-    const partialRooms = Math.max(0, active - vacantRooms - fullRooms);
+    const partialRooms = Math.max(0, occupiedRooms - fullRooms);
+    const roomOccupancyRate = activeRooms.length > 0 ? (occupiedRooms / activeRooms.length) * 100 : 0;
 
     return {
       total,
       active,
       maintenance,
       passive,
+      occupied: occupiedRooms,
       vacant: vacantRooms,
       full: fullRooms,
-      partial: partialRooms
+      partial: partialRooms,
+      occupancyRate: roomOccupancyRate
     };
   }, [filteredRooms, activeAccs]);
 
@@ -117,7 +122,8 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
   ].filter(d => d.value > 0);
 
   const roomChartData = [
-    { name: 'Aktif Oda', value: roomStats.active, color: ROOM_COLORS.aktif },
+    { name: 'Dolu Oda', value: roomStats.occupied, color: ROOM_COLORS.aktif },
+    { name: 'Boş Oda', value: roomStats.vacant, color: '#D9D3C1' },
     { name: 'Bakımdaki Oda', value: roomStats.maintenance, color: ROOM_COLORS.bakimda },
     { name: 'Pasif Oda', value: roomStats.passive, color: ROOM_COLORS.pasif }
   ].filter(d => d.value > 0);
@@ -129,16 +135,37 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
       const name = facility ? facility.name : dormId;
       
       const dormRooms = rooms.filter(r => r.facilityId === dormId);
-      const activeBeds = dormRooms.filter(r => r.status === 'active').reduce((sum, r) => sum + r.bedCount, 0);
-      const filledBeds = accommodations.filter(a => a.status === 'active' && a.facilityId === dormId).length;
-      const occupancyRate = activeBeds > 0 ? Math.round((filledBeds / activeBeds) * 1000) / 10 : 0;
+      const activeDormRooms = dormRooms.filter(r => r.status === 'active');
+      const activeBeds = activeDormRooms.reduce((sum, r) => sum + r.bedCount, 0);
+      const dormActiveAccs = accommodations.filter(a => a.status === 'active' && a.facilityId === dormId);
+      const filledBeds = dormActiveAccs.length;
+      const bedOccupancyRate = activeBeds > 0 ? Math.round((filledBeds / activeBeds) * 1000) / 10 : 0;
       
+      // Room-level metrics for this dorm
+      const occupiedRoomsCount = activeDormRooms.filter(r => {
+        return dormActiveAccs.some(a => a.roomId === r.id);
+      }).length;
+      const vacantRoomsCount = activeDormRooms.length - occupiedRoomsCount;
+      const fullRoomsCount = activeDormRooms.filter(r => {
+        const count = dormActiveAccs.filter(a => a.roomId === r.id).length;
+        return count >= r.bedCount;
+      }).length;
+      const partialRoomsCount = occupiedRoomsCount - fullRoomsCount;
+      const roomOccupancyRate = activeDormRooms.length > 0 ? Math.round((occupiedRoomsCount / activeDormRooms.length) * 1000) / 10 : 0;
+
       return {
         id: dormId,
         name,
-        'Doluluk Oranı (%)': occupancyRate,
+        'Doluluk Oranı (%)': bedOccupancyRate,
         'Dolu Yatak': filledBeds,
-        'Aktif Kapasite': activeBeds
+        'Aktif Kapasite': activeBeds,
+        totalRooms: dormRooms.length,
+        activeRooms: activeDormRooms.length,
+        occupiedRooms: occupiedRoomsCount,
+        vacantRooms: vacantRoomsCount,
+        fullRooms: fullRoomsCount,
+        partialRooms: partialRoomsCount,
+        roomOccupancyRate
       };
     }).sort((a, b) => b['Doluluk Oranı (%)'] - a['Doluluk Oranı (%)']); // Sort descending by occupancy rate
   }, [allowedDormIds, facilities, rooms, accommodations]);
@@ -289,10 +316,10 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
             </h4>
             <span className="text-xs font-bold text-stone-400 bg-stone-50 px-2 py-1 rounded">Real-time</span>
           </div>
-          <p className="text-xs text-stone-500 mb-6">Toplam tanımlı odaların aktiflik ve bakım durumları</p>
+          <p className="text-xs text-stone-500 mb-6">Toplam tanımlı odaların doluluk, kullanım ve bakım durumları</p>
         </div>
 
-        <div className="h-56 relative flex items-center justify-center">
+        <div className="h-52 relative flex items-center justify-center">
           {roomChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -325,27 +352,46 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mt-6 pt-4 border-t border-stone-100">
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-stone-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#7C8363]" />
+        {/* Dolu ve Boş Oda Özet Kutusu */}
+        <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200/60 mt-2 mb-3 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#7C8363] shrink-0" />
+            <span className="text-stone-600 font-semibold">Dolu Oda:</span>
+            <span className="font-mono font-bold text-[#2D332D]">{roomStats.occupied}</span>
+          </div>
+          <span className="text-stone-300">|</span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#D9D3C1] shrink-0" />
+            <span className="text-stone-600 font-semibold">Boş Oda:</span>
+            <span className="font-mono font-bold text-stone-700">{roomStats.vacant}</span>
+          </div>
+          <span className="text-stone-300">|</span>
+          <div className="text-[11px] font-bold text-[#7C8363]">
+            %{roomStats.occupancyRate.toFixed(1)} Dolu
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-stone-100 text-center">
+          <div>
+            <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-stone-600">
+              <span className="w-2 h-2 rounded-full bg-[#7C8363]" />
               Aktif
             </div>
-            <div className="text-lg font-serif font-bold text-stone-800 mt-1">{roomStats.active}</div>
+            <div className="text-base font-serif font-bold text-stone-800 mt-0.5">{roomStats.active}</div>
           </div>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-stone-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
+          <div>
+            <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-stone-600">
+              <span className="w-2 h-2 rounded-full bg-[#F59E0B]" />
               Bakımda
             </div>
-            <div className="text-lg font-serif font-bold text-stone-800 mt-1">{roomStats.maintenance}</div>
+            <div className="text-base font-serif font-bold text-amber-600 mt-0.5">{roomStats.maintenance}</div>
           </div>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-stone-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#78716C]" />
+          <div>
+            <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-stone-600">
+              <span className="w-2 h-2 rounded-full bg-[#78716C]" />
               Pasif
             </div>
-            <div className="text-lg font-serif font-bold text-stone-800 mt-1">{roomStats.passive}</div>
+            <div className="text-base font-serif font-bold text-stone-500 mt-0.5">{roomStats.passive}</div>
           </div>
         </div>
       </div>
@@ -356,41 +402,51 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
           <h4 className="font-serif font-bold text-lg text-[#2D332D] mb-4 flex items-center gap-2">
             Konsolide Özet Raporu
           </h4>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-1.5">
               <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Aktif Yatak Kapasitesi</span>
-              <span className="font-mono font-bold text-[#2D332D]">{bedStats.active}</span>
+              <span className="font-mono font-bold text-[#2D332D]">{bedStats.active} Yatak</span>
             </div>
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Lojmandaki Personel (Dolu)</span>
-              <span className="font-mono font-bold text-[#7C8363]">{bedStats.filled}</span>
+            <div className="flex items-center justify-between border-b border-stone-100 pb-1.5">
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Lojmandaki Personel (Dolu Yatak)</span>
+              <span className="font-mono font-bold text-[#7C8363]">{bedStats.filled} Personel</span>
             </div>
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Anlık Doluluk Oranı</span>
-              <span className="font-mono font-bold text-[#7C8363]">{bedStats.occupancyRate.toFixed(1)}%</span>
+            <div className="flex items-center justify-between border-b border-stone-100 pb-1.5">
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Boş Yatak Sayısı</span>
+              <span className="font-mono font-bold text-stone-600">{bedStats.empty} Yatak</span>
             </div>
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Tamamen Boş Odalar</span>
-              <span className="font-mono font-bold text-stone-600">{roomStats.vacant}</span>
+            <div className="flex items-center justify-between border-b border-stone-100 pb-1.5">
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Anlık Yatak Doluluğu</span>
+              <span className="font-mono font-bold text-[#7C8363]">%{bedStats.occupancyRate.toFixed(1)}</span>
             </div>
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Tam Dolu Odalar</span>
-              <span className="font-mono font-bold text-stone-600">{roomStats.full}</span>
+            <div className="flex items-center justify-between border-b border-stone-100 pb-1.5">
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Aktif Oda Kapasitesi</span>
+              <span className="font-mono font-bold text-[#2D332D]">{roomStats.active} Oda <span className="text-[10px] text-stone-400 font-normal">(Toplam: {roomStats.total})</span></span>
+            </div>
+            <div className="flex items-center justify-between border-b border-stone-100 pb-1.5">
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Dolu Oda / Boş Oda</span>
+              <span className="font-mono font-bold">
+                <span className="text-[#7C8363]">{roomStats.occupied} Dolu</span> / <span className="text-stone-600">{roomStats.vacant} Boş</span>
+              </span>
+            </div>
+            <div className="flex items-center justify-between border-b border-stone-100 pb-1.5">
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Tam Dolu / Kısmi Dolu</span>
+              <span className="font-mono font-bold text-stone-600">{roomStats.full} Tam / {roomStats.partial} Kısmi</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Kısmi Dolu Odalar</span>
-              <span className="font-mono font-bold text-stone-600">{roomStats.partial}</span>
+              <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Oda Doluluk Oranı</span>
+              <span className="font-mono font-bold text-[#7C8363]">%{roomStats.occupancyRate.toFixed(1)}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-[#F5F2ED] border border-[#E8E6E1] p-4 rounded-xl flex items-start gap-3 mt-6">
+        <div className="bg-[#F5F2ED] border border-[#E8E6E1] p-3.5 rounded-xl flex items-start gap-3 mt-4">
           {bedStats.occupancyRate > 90 ? (
             <>
               <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-bold text-orange-800">Yüksek Doluluk Uyarısı</p>
-                <p className="text-[10px] text-stone-600 mt-1">Lojman yatak doluluk oranı %90 sınırını aşmıştır. Yeni yerleşim taleplerinde alternatif odaları gözden geçirin.</p>
+                <p className="text-[10px] text-stone-600 mt-0.5">Lojman yatak doluluk oranı %90 sınırını aşmıştır. Yeni yerleşim taleplerinde alternatif odaları gözden geçirin.</p>
               </div>
             </>
           ) : (
@@ -398,7 +454,7 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
               <CheckCircle className="w-5 h-5 text-[#7C8363] shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-bold text-[#2D332D]">Kapasite Durumu Kararlı</p>
-                <p className="text-[10px] text-stone-600 mt-1">Yatak atamaları için yeterli boş alan bulunmaktadır. Odalarda genel doluluk dengeli dağılmaktadır.</p>
+                <p className="text-[10px] text-stone-600 mt-0.5">Yatak atamaları için yeterli boş alan bulunmaktadır. Odalarda genel doluluk dengeli dağılmaktadır.</p>
               </div>
             </>
           )}
@@ -426,7 +482,7 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
               </span>
             </div>
             <p className="text-xs text-stone-500">
-              Her bir lojmanın aktif yatak kapasitesine göre güncel doluluk, boş yatak ve doluluk yüzdeleri
+              Her bir lojmanın aktif yatak ve oda kapasitelerine göre güncel doluluk, boş/dolu oda ve yatak oranları
             </p>
           </div>
 
@@ -463,35 +519,59 @@ export default function CapacitySection({ rooms, accommodations, staff, allowedD
 
                 return (
                   <div key={item.id} className="space-y-3 border-b border-stone-200/50 pb-5 last:border-0 last:pb-0">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-sm font-bold text-[#2D332D] truncate">{item.name}</span>
-                      <span className={`text-xs font-extrabold px-3 py-1 rounded-lg ${bgColor} ${textColor} shadow-sm`}>
-                        %{occupancy.toFixed(1)} Doluluk
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${bgColor} ${textColor} shadow-sm`}>
+                          %{occupancy.toFixed(1)} Yatak
+                        </span>
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 border border-stone-200/70 shadow-sm">
+                          %{item.roomOccupancyRate.toFixed(1)} Oda
+                        </span>
+                      </div>
                     </div>
 
                     {/* Custom Spacious Progress Bar */}
-                    <div className="w-full bg-stone-100 rounded-full h-5 overflow-hidden flex shadow-inner border border-stone-200/40 relative">
+                    <div className="w-full bg-stone-100 rounded-full h-4 overflow-hidden flex shadow-inner border border-stone-200/40 relative">
                       <div 
                         className={`${barColor} h-full rounded-full transition-all duration-500`}
                         style={{ width: `${Math.min(100, occupancy)}%` }}
                       />
                     </div>
 
-                    {/* Sub Info Row */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-stone-500 font-semibold gap-1">
-                      <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1 text-stone-800">
-                          <span className="w-2 h-2 rounded-full bg-[#7C8363] inline-block"></span>
-                          <strong>{filled}</strong> Dolu Yatak
-                        </span>
-                        <span className="text-stone-300">|</span>
-                        <span className="flex items-center gap-1 text-emerald-700">
-                          <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
-                          <strong>{empty}</strong> Boş Yatak
-                        </span>
+                    {/* Sub Info Rows: Yatak & Oda Kapasiteleri */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-stone-50/80 p-2.5 rounded-xl border border-stone-200/50">
+                      {/* Yatak Detayı */}
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Yatak Kapasitesi: {total}</span>
+                        <div className="flex items-center gap-2 font-semibold text-stone-600">
+                          <span className="flex items-center gap-1 text-stone-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#7C8363] inline-block"></span>
+                            <strong>{filled}</strong> Dolu
+                          </span>
+                          <span className="text-stone-300">|</span>
+                          <span className="flex items-center gap-1 text-emerald-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block"></span>
+                            <strong>{empty}</strong> Boş
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-stone-400 font-mono text-xs">Toplam Yatak Kapasitesi: {total}</span>
+
+                      {/* Oda Detayı */}
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Oda Kapasitesi: {item.activeRooms} Aktif</span>
+                        <div className="flex items-center gap-2 font-semibold text-stone-600">
+                          <span className="flex items-center gap-1 text-stone-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#7C8363] inline-block"></span>
+                            <strong>{item.occupiedRooms}</strong> Dolu Oda
+                          </span>
+                          <span className="text-stone-300">|</span>
+                          <span className="flex items-center gap-1 text-stone-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 inline-block"></span>
+                            <strong>{item.vacantRooms}</strong> Boş Oda
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
