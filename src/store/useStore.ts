@@ -1184,7 +1184,7 @@ export const useStore = create<AppState>()(
 
       updateAppVersion: async (version: string) => {
         try {
-          await setDoc(doc(db, "settings", "general"), { version }, { merge: true });
+          await setDoc(doc(db, "settings", "general"), { version: version || '1.0.0' }, { merge: true });
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, "settings/general");
         }
@@ -1194,18 +1194,34 @@ export const useStore = create<AppState>()(
         try {
           const state = get();
           const user = state.currentUser;
-          const payload = {
-            ...settings,
+
+          const cleanMaintenance: MaintenanceSettings = {
+            enabled: Boolean(settings.enabled),
+            title: (settings.title || "").trim() || "Planlı Sistem Bakım Çalışması",
+            message: (settings.message || "").trim(),
+            allowedRoles: Array.isArray(settings.allowedRoles) && settings.allowedRoles.length > 0
+              ? settings.allowedRoles
+              : ['super_admin'],
+            estimatedEndTime: settings.estimatedEndTime && typeof settings.estimatedEndTime === 'string' && settings.estimatedEndTime.trim()
+              ? settings.estimatedEndTime.trim()
+              : null,
+            contactEmail: settings.contactEmail && typeof settings.contactEmail === 'string' && settings.contactEmail.trim()
+              ? settings.contactEmail.trim()
+              : null,
+            contactPhone: settings.contactPhone && typeof settings.contactPhone === 'string' && settings.contactPhone.trim()
+              ? settings.contactPhone.trim()
+              : null,
             updatedAt: Date.now(),
             updatedBy: user?.fullName || user?.email || 'Süper Admin'
           };
-          await setDoc(doc(db, "settings", "general"), { maintenance: payload }, { merge: true });
+
+          await setDoc(doc(db, "settings", "general"), { maintenance: cleanMaintenance }, { merge: true });
 
           // Also immediately update local store so superadmin sees immediate UI state
           set((s) => ({
             appSettings: {
               ...s.appSettings,
-              maintenance: payload
+              maintenance: cleanMaintenance
             }
           }));
 
@@ -1215,7 +1231,7 @@ export const useStore = create<AppState>()(
               entityId: 'settings_maintenance',
               entityType: 'maintenance',
               action: 'update',
-              changes: `Bakım modu ${settings.enabled ? 'AKTİF HALE GETİRİLDİ' : 'DEVRE DIŞI BIRAKILDI'}. Başlık: "${settings.title || 'Belirtilmedi'}"`,
+              changes: `Bakım modu ${settings.enabled ? 'AKTİF HALE GETİRİLDİ' : 'DEVRE DIŞI BIRAKILDI'}. Başlık: "${cleanMaintenance.title}"`,
               performedBy: user?.fullName || user?.email || 'Süper Admin',
               timestamp: Date.now()
             });

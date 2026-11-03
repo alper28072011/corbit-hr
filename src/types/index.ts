@@ -183,9 +183,9 @@ export interface MaintenanceSettings {
   enabled: boolean;
   title: string;
   message: string;
-  estimatedEndTime?: string; // ISO date string or datetime-local string
-  contactEmail?: string;
-  contactPhone?: string;
+  estimatedEndTime?: string | null; // ISO date string or datetime-local string
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   allowedRoles?: string[]; // default ['super_admin']
   updatedAt?: number;
   updatedBy?: string;

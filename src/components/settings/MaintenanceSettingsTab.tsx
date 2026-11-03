@@ -36,11 +36,11 @@ export default function MaintenanceSettingsTab() {
   useEffect(() => {
     if (currentMaintenance) {
       setEnabled(Boolean(currentMaintenance.enabled));
-      if (currentMaintenance.title !== undefined) setTitle(currentMaintenance.title);
-      if (currentMaintenance.message !== undefined) setMessage(currentMaintenance.message);
-      if (currentMaintenance.estimatedEndTime !== undefined) setEstimatedEndTime(currentMaintenance.estimatedEndTime);
-      if (currentMaintenance.contactEmail !== undefined) setContactEmail(currentMaintenance.contactEmail);
-      if (currentMaintenance.contactPhone !== undefined) setContactPhone(currentMaintenance.contactPhone);
+      if (currentMaintenance.title !== undefined && currentMaintenance.title !== null) setTitle(currentMaintenance.title);
+      if (currentMaintenance.message !== undefined && currentMaintenance.message !== null) setMessage(currentMaintenance.message);
+      if (currentMaintenance.estimatedEndTime !== undefined) setEstimatedEndTime(currentMaintenance.estimatedEndTime || "");
+      if (currentMaintenance.contactEmail !== undefined) setContactEmail(currentMaintenance.contactEmail || "");
+      if (currentMaintenance.contactPhone !== undefined) setContactPhone(currentMaintenance.contactPhone || "");
     }
   }, [currentMaintenance]);
 
@@ -79,9 +79,9 @@ export default function MaintenanceSettingsTab() {
         enabled,
         title: title.trim(),
         message: message.trim(),
-        estimatedEndTime: estimatedEndTime.trim() || undefined,
-        contactEmail: contactEmail.trim() || undefined,
-        contactPhone: contactPhone.trim() || undefined,
+        estimatedEndTime: estimatedEndTime.trim() || null,
+        contactEmail: contactEmail.trim() || null,
+        contactPhone: contactPhone.trim() || null,
         allowedRoles: ['super_admin']
       });
 
@@ -108,9 +108,9 @@ export default function MaintenanceSettingsTab() {
         enabled: false,
         title: title.trim(),
         message: message.trim(),
-        estimatedEndTime: estimatedEndTime.trim() || undefined,
-        contactEmail: contactEmail.trim() || undefined,
-        contactPhone: contactPhone.trim() || undefined,
+        estimatedEndTime: estimatedEndTime.trim() || null,
+        contactEmail: contactEmail.trim() || null,
+        contactPhone: contactPhone.trim() || null,
         allowedRoles: ['super_admin']
       });
       setEnabled(false);
