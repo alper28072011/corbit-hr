@@ -4,6 +4,7 @@ import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../lib/utils";
+import MaintenanceBanner from "../maintenance/MaintenanceBanner";
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -36,6 +37,9 @@ export default function AppLayout() {
           isCollapsed ? "lg:ml-20" : "lg:ml-64"
         )}
       >
+        {/* Maintenance Banner for Super Admin */}
+        <MaintenanceBanner />
+
         {/* Navbar Component */}
         <Navbar onMenuClick={() => setSidebarOpen(true)} />
 

@@ -5,13 +5,16 @@ import { auth, db, handleFirestoreError, OperationType } from "../../lib/firebas
 import { useStore } from "../../store/useStore";
 import Login from "./Login";
 import { User } from "../../types";
-
 import DataSync from "./DataSync";
+import MaintenanceScreen from "../maintenance/MaintenanceScreen";
 
 export default function AuthProvider({ children }: { children: import('react').ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { currentUser, setCurrentUser } = useStore();
+  const { currentUser, setCurrentUser, appSettings } = useStore();
+
+  const isMaintenanceActive = Boolean(appSettings?.maintenance?.enabled);
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -115,6 +118,16 @@ export default function AuthProvider({ children }: { children: import('react').R
       );
     }
     return <Login />;
+  }
+
+  // If maintenance mode is active and user is not super_admin, block access and show MaintenanceScreen
+  if (isMaintenanceActive && !isSuperAdmin) {
+    return (
+      <>
+        <DataSync />
+        <MaintenanceScreen />
+      </>
+    );
   }
 
   return (

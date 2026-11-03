@@ -178,3 +178,21 @@ export interface SensitiveDataAccessRequest {
   approvedBy?: string;
   approvedAt?: number;
 }
+
+export interface MaintenanceSettings {
+  enabled: boolean;
+  title: string;
+  message: string;
+  estimatedEndTime?: string; // ISO date string or datetime-local string
+  contactEmail?: string;
+  contactPhone?: string;
+  allowedRoles?: string[]; // default ['super_admin']
+  updatedAt?: number;
+  updatedBy?: string;
+}
+
+export interface AppSettings {
+  version?: string;
+  maintenance?: MaintenanceSettings;
+  [key: string]: any;
+}

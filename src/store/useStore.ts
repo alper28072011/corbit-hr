@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions, SupportTicket, SensitiveDataAccessRequest } from '../types';
+import { Hotel, Facility, Room, Staff, Accommodation, MaintenanceTicket, User, RoleConfig, ActionLog, ApprovalRequest, RolePermissions, SupportTicket, SensitiveDataAccessRequest, MaintenanceSettings, AppSettings } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, addDoc, updateDoc, deleteDoc, writeBatch, query, where, getDocs, arrayUnion, deleteField, getDoc } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
@@ -113,9 +113,10 @@ interface AppState {
   setLogs: (logs: ActionLog[]) => void;
   addLog: (log: Omit<ActionLog, 'id'>) => Promise<void>;
   
-  appSettings: any;
-  setAppSettings: (settings: any) => void;
+  appSettings: AppSettings;
+  setAppSettings: (settings: AppSettings) => void;
   updateAppVersion: (version: string) => Promise<void>;
+  updateMaintenanceSettings: (settings: MaintenanceSettings) => Promise<void>;
 }
 
 export const useStore = create<AppState>()(
@@ -1189,6 +1190,44 @@ export const useStore = create<AppState>()(
         }
       },
 
+      updateMaintenanceSettings: async (settings: MaintenanceSettings) => {
+        try {
+          const state = get();
+          const user = state.currentUser;
+          const payload = {
+            ...settings,
+            updatedAt: Date.now(),
+            updatedBy: user?.fullName || user?.email || 'Süper Admin'
+          };
+          await setDoc(doc(db, "settings", "general"), { maintenance: payload }, { merge: true });
+
+          // Also immediately update local store so superadmin sees immediate UI state
+          set((s) => ({
+            appSettings: {
+              ...s.appSettings,
+              maintenance: payload
+            }
+          }));
+
+          // Log action
+          try {
+            await state.addLog({
+              entityId: 'settings_maintenance',
+              entityType: 'maintenance',
+              action: 'update',
+              changes: `Bakım modu ${settings.enabled ? 'AKTİF HALE GETİRİLDİ' : 'DEVRE DIŞI BIRAKILDI'}. Başlık: "${settings.title || 'Belirtilmedi'}"`,
+              performedBy: user?.fullName || user?.email || 'Süper Admin',
+              timestamp: Date.now()
+            });
+          } catch (logErr) {
+            console.error("Action log error:", logErr);
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, "settings/general");
+          throw error;
+        }
+      },
+
       updateRolePermissions: async (roleKey, allowedPages, allowedFeatures) => {
         try {
           const docRef = doc(db, "roles_permissions", roleKey);
@@ -1270,7 +1309,10 @@ export const useStore = create<AppState>()(
     {
       name: 'corbit-ui-storage',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ uiPreferences: state.uiPreferences }),
+      partialize: (state) => ({ 
+        uiPreferences: state.uiPreferences,
+        appSettings: state.appSettings 
+      }),
     }
   )
 );

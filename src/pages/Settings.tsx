@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, Edit2, Trash2, ShieldAlert, Check, X, Shield, Lock, LayoutGrid, Users, Wrench } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { PagePermission } from "../types";
@@ -7,11 +8,25 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { usePageRefresh } from "../hooks/usePageRefresh";
 import { cn } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
+import MaintenanceSettingsTab from "../components/settings/MaintenanceSettingsTab";
 
 export default function Settings() {
-  const { users, rolesPermissions, currentUser, addUser, updateUser, deleteUser, hotels, facilities, updateRolePermissions } = useStore();
+  const { users, rolesPermissions, currentUser, addUser, updateUser, deleteUser, hotels, facilities, updateRolePermissions, appSettings } = useStore();
   const refreshAction = usePageRefresh();
-  const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'maintenance'>(() => {
+    if (tabParam === 'maintenance') return 'maintenance';
+    if (tabParam === 'roles') return 'roles';
+    return 'users';
+  });
+
+  useEffect(() => {
+    if (tabParam === 'maintenance') setActiveTab('maintenance');
+    else if (tabParam === 'roles') setActiveTab('roles');
+    else if (tabParam === 'users') setActiveTab('users');
+  }, [tabParam]);
   
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<string | null>(null);
@@ -125,9 +140,9 @@ export default function Settings() {
         actions={[refreshAction]}
       />
 
-      <div className="flex gap-2 border-b border-[#E8E6E1]">
+      <div className="flex flex-wrap gap-2 border-b border-[#E8E6E1]">
         <button 
-          onClick={() => setActiveTab('users')}
+          onClick={() => { setActiveTab('users'); setSearchParams({ tab: 'users' }); }}
           className={cn(
             "px-6 py-3 font-semibold text-sm transition-colors relative",
             activeTab === 'users' ? "text-[#7C8363]" : "text-stone-500 hover:text-stone-700"
@@ -137,7 +152,7 @@ export default function Settings() {
           {activeTab === 'users' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#7C8363]" />}
         </button>
         <button 
-          onClick={() => setActiveTab('roles')}
+          onClick={() => { setActiveTab('roles'); setSearchParams({ tab: 'roles' }); }}
           className={cn(
             "px-6 py-3 font-semibold text-sm transition-colors relative",
             activeTab === 'roles' ? "text-[#7C8363]" : "text-stone-500 hover:text-stone-700"
@@ -145,6 +160,22 @@ export default function Settings() {
         >
           Rol ve Yetki Matrisi
           {activeTab === 'roles' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#7C8363]" />}
+        </button>
+        <button 
+          onClick={() => { setActiveTab('maintenance'); setSearchParams({ tab: 'maintenance' }); }}
+          className={cn(
+            "px-6 py-3 font-semibold text-sm transition-colors relative inline-flex items-center gap-2",
+            activeTab === 'maintenance' ? "text-[#7C8363]" : "text-stone-500 hover:text-stone-700"
+          )}
+        >
+          <Wrench className="w-4 h-4" />
+          <span>Bakım Modu & Sistem</span>
+          {appSettings?.maintenance?.enabled && (
+            <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-amber-500 text-white animate-pulse tracking-wider">
+              AKTİF
+            </span>
+          )}
+          {activeTab === 'maintenance' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#7C8363]" />}
         </button>
       </div>
 
@@ -305,6 +336,10 @@ export default function Settings() {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === 'maintenance' && (
+        <MaintenanceSettingsTab />
       )}
 
       {/* User Modal */}
